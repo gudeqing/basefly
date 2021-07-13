@@ -1,0 +1,9 @@
+{
+  "pipeline.salmon.docker": "combinelab/salmon:latest",
+  "pipeline.fastp.docker": "gudeqing/fastp:0.21.0",
+  "pipeline.read1": ["s1.R1.fastq", "s2.R1.fastq"],
+  "pipeline.read2": ["s1.R2.fastq", "s2.R2.fastq"],
+  "pipeline.names": ["s1", "s2"],
+  "pipeline.salmon.indexDir": "index/"
+}
+

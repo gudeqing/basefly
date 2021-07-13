@@ -118,7 +118,7 @@ class Command:
     def format_cmd(self):
         # 该函数应该在参数被具体赋值后才能调用
         if not self.args:
-            raise Exception(f'Command {self.name} has no args !')
+            raise Exception(f'Command {self.meta.name} has no args !')
         cmd = ''
         if self.runtime.tool_dir and not self.runtime.tool_dir.endswith('/'):
             self.runtime.tool_dir += '/'
@@ -159,7 +159,7 @@ class Command:
 
     def format_wdl_task(self, outfile=None, wdl_version='development'):
         if not outfile:
-            outfile = f'{self.name}.wdl'
+            outfile = f'{self.meta.name}.wdl'
         ToWdlTask(self, outfile, wdl_version)
 
 
@@ -395,7 +395,7 @@ class ToWdlTask(object):
 class ToWdlWorkflow(object):
     """
     workflow的group信息依据：是否可以在同一个循环中并发
-    如何知道task输入的依赖信息：要求写给参数赋值的时候使用wdl语法
+    如何知道task输入的依赖信息：要求写给参数加一个wdl属性，对应使用wdl语法
     """
     def __init__(self, wf: Workflow):
         self.wf = wf
@@ -454,6 +454,8 @@ class ToWdlWorkflow(object):
         all_cmds = []
         wdl = 'version development\n\n'
         wdl += 'workflow pipeline {\n'
+
+        # 这一部分是针对fastq数据特殊设计的
         wdl += " "*4 + "input {\n"
         wdl += ' '*4*2 + "Array[File] read1\n"
         wdl += ' '*4*2 + "Array[File] read2\n"
@@ -461,6 +463,7 @@ class ToWdlWorkflow(object):
         wdl += ' '*4 + '}\n\n'
         wdl += ' '*4*1 + "Array[Pair[File, File]] reads = zip(read1, read2)\n"
         wdl += ' '*4*1 + "Array[Pair[String, Pair[File, File]]] init_array = zip(names, reads)\n\n"
+
         for grp, tids in self.group_task().items():
             cmd_lst = self.get_group_cmd_lst(tids)
             wdl += self.format_call_cmds(cmd_lst, scatter=len(tids) > 1)

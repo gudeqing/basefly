@@ -1,9 +1,11 @@
-from nestcmd import Argument, Output, Command, Workflow
-
+from nestcmd.nestcmd import Argument, Output, Command, Workflow
 """
+pycharm里设置code completion 允许“suggest variable and parameter name”, 可以极大方便流程编写
 要想生成正确的wdl:
-1.一定要正确定义参数的类型，比如是否为”infile“ or "indir",
+1. 一定要正确定义参数的类型，比如是否为”infile“ or "indir",
  type is one of ['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix']
+ 其中‘fix'可以用于添加管道符等固定字符串
+2. 参数的添加顺序对于命令行的正确形成很重要，这里，字典是有序性得到利用
 """
 
 
@@ -17,7 +19,7 @@ def fastp():
     cmd.args.read2 = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
     # 当然，可以直接用字典的方式添加参数
     cmd.args['out1'] = Argument(prefix='-o ', type='str', desc='clean read1 output fastq file')
-    cmd.args['out2'] = Argument(prefix='-O ', type='str', level='clean read2 output fastq file')
+    cmd.args['out2'] = Argument(prefix='-O ', type='str', desc='clean read2 output fastq file')
     # 下面的outputs设置纯粹是为了能够生成wdl设置
     cmd.outputs['out1'] = Output(path="~{out1}")
     cmd.outputs['out2'] = Output(path="~{out2}")
@@ -37,10 +39,10 @@ def salmon():
     cmd.args['indexDir'] = Argument(prefix='-i ', type='indir', desc='transcript fasta index directory')
     cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 fastq file')
-    cmd.args['outDir'] = Argument(prefix='-o ', type='str', level='optional', default='quant', desc='output directory')
+    cmd.args['outDir'] = Argument(prefix='-o ', type='str', default='quant', desc='output directory')
     cmd.args['gcBias'] = Argument(prefix='--gcBias ', type='bool', default=True, desc='perform gc Bias correction')
     cmd.outputs['transcript'] = Output(path="~{outDir}" + "/quant.sf", locate='quant')
-    cmd.outputs['outDir'] = Output(path="~{outDir}", locate='quant', type='Directory')
+    cmd.outputs['outDir'] = Output(path="~{outDir}", type='Directory')
     return cmd
 
 
@@ -65,13 +67,13 @@ def pipeline():
     wf.meta.name = 'PipelineExample'
     wf.meta.desc = 'This is a simple pipeline for fast gene/transcript quantification. '
     wf.meta.desc += 'workflow = [fastq -> Fastp -> Salmon]'
-    indexDir = 'index/'
+    index_dir = 'testdata/index/'
 
     # init
     def init_func():
         samples = ['s1', 's2']
-        read1s = ['s1.R1.fastq', 's2.R1.fastq']
-        read2s = ['s1.R2.fastq', 's2.R2.fastq']
+        read1s = ['testdata/s1.R1.fastq', 'testdata/s2.R1.fastq']
+        read2s = ['testdata/s1.R2.fastq', 'testdata/s2.R2.fastq']
         return zip(samples, read1s, read2s)
 
     merge_depends = []
@@ -107,7 +109,7 @@ def pipeline():
         args['read1'].wdl = f"{depend_task.cmd.meta.name}.out1"
         args['read2'].value = depend_task.outputs["out2"].path
         args['read2'].wdl = f"{depend_task.cmd.meta.name}.out2"
-        args['indexDir'].value = indexDir
+        args['indexDir'].value = index_dir
         args['outDir'].value = sample
         args['outDir'].wdl = "each.left"
         task.outputs['outDir'] = Output(path=sample, type='Directory')
