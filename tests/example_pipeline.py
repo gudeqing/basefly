@@ -32,7 +32,7 @@ def salmon():
     cmd.meta.name = 'salmon'
     cmd.meta.desc = 'transcript expression quantification'
     cmd.runtime.image = "combinelab/salmon:latest"
-    cmd.runtime.memory = 1024
+    cmd.runtime.memory = 2*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quant'
     cmd.args.libType = Argument(prefix='--libType ', default='A')

@@ -86,7 +86,7 @@ task fastp{
         read1: {prefix: "-i ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "read1 fastq file"}
         read2: {prefix: "-I ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "read2 fastq file"}
         out1: {prefix: "-o ", type: "str", level: "required", default: "None", range: "None", array: "False", desc: "clean read1 output fastq file"}
-        out2: {prefix: "-O ", type: "str", level: "clean read2 output fastq file", default: "None", range: "None", array: "False", desc: "This is description of the argument."}
+        out2: {prefix: "-O ", type: "str", level: "required", default: "None", range: "None", array: "False", desc: "clean read2 output fastq file"}
     }
 
 }
@@ -97,10 +97,10 @@ task salmon{
         Directory indexDir
         File read1
         File read2
-        String? outDir = "quant"
+        String outDir = "quant"
         Boolean gcBias = true
         # for runtime
-        String memory = "1024"
+        String memory = "2147483648"
         Int cpu = 2
         String docker = "combinelab/salmon:latest"
     }
@@ -139,7 +139,7 @@ task salmon{
         indexDir: {prefix: "-i ", type: "indir", level: "required", default: "None", range: "None", array: "False", desc: "transcript fasta index directory"}
         read1: {prefix: "-1 ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "read1 fastq file"}
         read2: {prefix: "-2 ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "read2 fastq file"}
-        outDir: {prefix: "-o ", type: "str", level: "optional", default: "quant", range: "None", array: "False", desc: "output directory"}
+        outDir: {prefix: "-o ", type: "str", level: "required", default: "quant", range: "None", array: "False", desc: "output directory"}
         gcBias: {prefix: "--gcBias ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "perform gc Bias correction"}
     }
 
