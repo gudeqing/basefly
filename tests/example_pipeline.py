@@ -92,9 +92,9 @@ def pipeline():
         args['read2'].value = r2
         args['read2'].wdl = "each.right.right"
         args['out1'].value = f'{sample}.clean.R1.fq'
-        args['out1'].wdl = "~{each.right.left}.clean.R1.fq"
+        args['out1'].wdl = "~{each.left}.clean.R1.fq"
         args['out2'].value = f'{sample}.clean.R2.fq'
-        args['out2'].wdl = "~{each.right.right}.clean.R2.fq"
+        args['out2'].wdl = "~{each.left}.clean.R2.fq"
         # task的outputs对象不会用于wdl的生成,所以无需添加wdl属性
         task.outputs['out1'] = Output(path=f'{sample}.clean.R1.fq')
         task.outputs['out2'] = Output(path=f'{sample}.clean.R2.fq')

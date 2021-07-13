@@ -15,8 +15,8 @@ workflow pipeline {
             input: 
             read1 = each.right.left,
             read2 = each.right.right,
-            out1 = "~{each.right.left}.clean.R1.fq",
-            out2 = "~{each.right.right}.clean.R2.fq"
+            out1 = "~{each.left}.clean.R1.fq",
+            out2 = "~{each.left}.clean.R2.fq"
         }
 
         call salmon {
