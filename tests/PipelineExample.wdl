@@ -46,12 +46,12 @@ workflow pipeline {
     }
 
     output{
-        Array[File] out1 = fastp.out1
-        Array[File] out2 = fastp.out2
-        Array[File] transcript = salmon.transcript
-#        Array[Directory] outDir = salmon.outDir
-        File TPM = MergeTranscriptTPM.result
-        File Count = MergeTranscriptCount.result
+        Array[File] fastp_out1 = fastp.out1
+        Array[File] fastp_out2 = fastp.out2
+        Array[File] salmon_transcript = salmon.transcript
+        Array[Directory] salmon_outDir = salmon.outDir
+        File MergeTranscriptTPM_result = MergeTranscriptTPM.result
+        File MergeTranscriptCount_result = MergeTranscriptCount.result
     }
 
 }

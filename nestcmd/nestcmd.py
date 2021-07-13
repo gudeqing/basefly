@@ -487,9 +487,9 @@ class ToWdlWorkflow(object):
         output_lst = []
         for cmd, is_scattered in zip(all_cmds, scattered):
             if is_scattered:
-                output_lst += [f'Array[{v.type}] {k} = {cmd.meta.name}.{k}' for k, v in cmd.outputs.items()]
+                output_lst += [f'Array[{v.type}] {(cmd.meta.name+"_"+k).replace(".", "_")} = {cmd.meta.name}.{k}' for k, v in cmd.outputs.items()]
             else:
-                output_lst += [f'{v.type} {k} = {cmd.meta.name}.{k}' for k, v in cmd.outputs.items()]
+                output_lst += [f'{v.type} {(cmd.meta.name+"_"+k).replace(".", "_")} = {cmd.meta.name}.{k}' for k, v in cmd.outputs.items()]
         wdl += ' ' * 4 + 'output{\n'
         for line in output_lst:
             wdl += ' ' * 4*2 + line + '\n'
