@@ -45,6 +45,15 @@ workflow pipeline {
         source: "source URL for the tool"
     }
 
+    output{
+        Array[File] out1 = fastp.out1
+        Array[File] out2 = fastp.out2
+        Array[File] transcript = salmon.transcript
+#        Array[Directory] outDir = salmon.outDir
+        File TPM = MergeTranscriptTPM.result
+        File Count = MergeTranscriptCount.result
+    }
+
 }
 
 task fastp{

@@ -457,7 +457,6 @@ class ToWdlWorkflow(object):
         return lines
 
     def write_wdl(self, outfile):
-        all_cmds = []
         wdl = 'version development\n\n'
         wdl += 'workflow pipeline {\n'
 
@@ -470,15 +469,30 @@ class ToWdlWorkflow(object):
         wdl += ' '*4*1 + "Array[Pair[File, File]] reads = zip(read1, read2)\n"
         wdl += ' '*4*1 + "Array[Pair[String, Pair[File, File]]] init_array = zip(names, reads)\n\n"
 
+        all_cmds = []
+        scattered = []
         for grp, tids in self.group_task().items():
             cmd_lst = self.get_group_cmd_lst(tids)
             wdl += self.format_call_cmds(cmd_lst, scatter=len(tids) > 1)
             all_cmds += cmd_lst
+            scattered += [True]*len(cmd_lst) if len(tids) > 1 else [False]*len(cmd_lst)
 
         # add workflow meta
         wdl += ' '*4 + 'meta {\n'
         for k, v in self.wf.meta.__dict__.items():
             wdl += ' ' * 4*2 + f'{k}: "{v}"' + '\n'
+        wdl += ' ' * 4 + '}\n\n'
+
+        # add output section
+        output_lst = []
+        for cmd, is_scattered in zip(all_cmds, scattered):
+            if is_scattered:
+                output_lst += [f'Array[{v.type}] {k} = {cmd.meta.name}.{k}' for k, v in cmd.outputs.items()]
+            else:
+                output_lst += [f'{v.type} {k} = {cmd.meta.name}.{k}' for k, v in cmd.outputs.items()]
+        wdl += ' ' * 4 + 'output{\n'
+        for line in output_lst:
+            wdl += ' ' * 4*2 + line + '\n'
         wdl += ' ' * 4 + '}\n\n'
 
         # end of workflow
