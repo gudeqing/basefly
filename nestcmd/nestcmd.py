@@ -99,10 +99,13 @@ class Output:
     type: str = 'File'
     # 设计locate 参数用于整理结果目录
     locate: str = "report"
+    # 由command形成task之后，可以带入task_id
+    task_id: str = None
+    name: str = None
 
     def __post_init__(self):
-        if self.type not in ['File', 'Directory']:
-            raise Exception("output type should be one of ['File', 'Directory']")
+        if self.type not in ['File', 'Directory', 'String']:
+            raise Exception("output type should be one of ['File', 'Directory', String]")
 
 
 @dataclass()
@@ -121,7 +124,7 @@ class Command:
     # 下面支持用wdl的定义’~‘符号, 当前脚本要求所有命令行的输出皆为文件
     outputs: Dict[str, Output] = field(default_factory=dict)
 
-    def format_cmd(self):
+    def format_cmd(self, wf_tasks=None):
         # 该函数应该在参数被具体赋值后才能调用
         if not self.args:
             raise Exception(f'Command {self.meta.name} has no args !')
@@ -143,6 +146,18 @@ class Command:
                 else:
                     # 对于非必须参数，且没有赋值的参数，直接跳过，不参与命令行的形成
                     continue
+
+            # 当参数值为output类型时，需如下特殊处理
+            if type(arg_value) == Output:
+                value_dict = {k: v.value for k, v in wf_tasks[arg_value.task_id].cmd.args.items()}
+                arg_value = arg_value.path.replace('~', '').format(**value_dict)
+            elif type(arg_value) == list:
+                arg_value = arg_value.copy()
+                for ind, each in enumerate(arg_value):
+                    if type(each) == Output:
+                        value_dict = {k: v.value for k, v in wf_tasks[each.task_id].cmd.args.items()}
+                        arg_value[ind] = each.path.replace('~', '').format(**value_dict)
+
             # 对于可以接收多个值的参数
             if arg.array:
                 if not arg.multi_times:
@@ -175,7 +190,14 @@ class Task:
     name: str = None
     task_id: str = field(default_factory=uuid4)
     depends: List[str] = field(default_factory=list)
-    outputs: Dict[str, Output] = field(default_factory=dict)
+    # outputs: Dict[str, Output] = field(default_factory=dict)
+
+    def __post_init__(self):
+        # 为每一个output带入
+        for key in self.cmd.outputs.keys():
+            self.cmd.outputs[key].task_id = self.task_id
+            self.cmd.outputs[key].name = key
+        self.outputs = self.cmd.outputs
 
 
 @dataclass()
@@ -301,7 +323,11 @@ class ToWdlTask(object):
     def get_outputs(self):
         outputs = []
         for name, v in self.cmd.outputs.items():
-            outputs += [v.type + ' ' + name + ' = ' + f'"{v.path}"']
+            if '~' not in v.path:
+                value = v.path.replace('{', '~{')
+            else:
+                value = v.path
+            outputs += [v.type + ' ' + name + ' = ' + f'"{value}"']
         return outputs
 
     def format_wdl_task(self, outfile=None, wdl_version='development'):
@@ -426,8 +452,7 @@ class ToWdlWorkflow(object):
                 cmd_lst.append(t.cmd)
         return cmd_lst
 
-    @staticmethod
-    def format_call_cmds(cmds: List[Command], scatter=False):
+    def format_call_cmds(self, cmds: List[Command], scatter=False):
         cmd_used_times = dict()
         lines = ''
         if scatter:
@@ -450,6 +475,26 @@ class ToWdlWorkflow(object):
                         lines += ' '*4*(space_increase+1) + arg_name + ' = "' + detail.wdl + '"' + ',\n'
                     else:
                         lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.wdl + ',\n'
+                # 如果参数的value为output对象，则需要转换成wdl形式
+                elif type(detail.value) == Output:
+                    task_name = self.wf.tasks[detail.value.task_id].cmd.meta.name
+                    detail.wdl = task_name + '.' + detail.value.name
+                    lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.wdl + ',\n'
+                elif type(detail.value) == list:
+                    # print(detail.value)
+                    wdl_str_set = set()
+                    for each in detail.value:
+                        if type(each) == Output:
+                            task_name = self.wf.tasks[each.task_id].cmd.meta.name
+                            wdl_str = task_name + '.' + each.name
+                            wdl_str_set.add(wdl_str)
+                    # 如果wdl_str_set长度唯一，说明这个list里面存储的是并发结果
+                    if len(wdl_str_set) == 1:
+                        wdl_str_lst = wdl_str_set.pop()
+                    else:
+                        wdl_str_lst = list(wdl_str_set)
+                    lines += ' ' * 4 * (space_increase + 1) + arg_name + ' = ' + str(wdl_str_lst) + ',\n'
+
             lines = lines[:-2] + '\n'
             lines += ' '*4*space_increase + '}\n\n'
         if scatter:
