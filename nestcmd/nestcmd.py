@@ -206,8 +206,8 @@ class Workflow:
     tasks: Dict[str, Task] = field(default_factory=dict)
     outputs: Dict[str, Output] = field(default_factory=dict)
 
-    def add_task(self, cmd: Command):
-        task = Task(cmd=cmd)
+    def add_task(self, cmd: Command, depends: list = None):
+        task = Task(cmd=cmd, depends=depends)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
@@ -256,8 +256,11 @@ class ToWdlTask(object):
             # define type of arg
             if detail['type'] == 'fix':
                 if detail['value'] is False:
-                    continue
-                cmd += [detail['prefix'] + (detail['value'] or detail['default'])]
+                    pass
+                elif detail['value'] is True:
+                    cmd += [detail['prefix']]
+                else:
+                    cmd += [detail['prefix'] + (detail['value'] or detail['default'])]
                 continue
             elif detail['type'] == 'bool':
                 arg_info = 'Boolean'
@@ -271,6 +274,8 @@ class ToWdlTask(object):
                 arg_info = 'File'
             elif detail['type'] == 'indir':
                 arg_info = 'Directory'
+            else:
+                raise Exception(f'unexpected type {arg_info}')
 
             if detail['array']:
                 arg_info = f'Array[{arg_info}]'
