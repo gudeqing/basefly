@@ -149,13 +149,13 @@ class Command:
 
             # 当参数值为output类型时，需如下特殊处理
             if type(arg_value) == Output:
-                value_dict = {k: v.value for k, v in wf_tasks[arg_value.task_id].cmd.args.items()}
+                value_dict = {k: v.value or v.default for k, v in wf_tasks[arg_value.task_id].cmd.args.items()}
                 arg_value = arg_value.path.replace('~', '').format(**value_dict)
             elif type(arg_value) == list:
                 arg_value = arg_value.copy()
                 for ind, each in enumerate(arg_value):
                     if type(each) == Output:
-                        value_dict = {k: v.value for k, v in wf_tasks[each.task_id].cmd.args.items()}
+                        value_dict = {k: v.value or v.default for k, v in wf_tasks[each.task_id].cmd.args.items()}
                         arg_value[ind] = each.path.replace('~', '').format(**value_dict)
 
             # 对于可以接收多个值的参数
