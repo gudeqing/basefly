@@ -51,10 +51,10 @@ class Argument:
     def __post_init__(self):
         # type 类型检查
         if type(self.default) == int and self.type == 'str':
-            print(f'{self.name}: type of default value is not agree with type specified!')
+            # print(f'{self.name}: type of default value is not agree with type specified!')
             self.type = 'int'
         if type(self.default) == float and self.type == 'str':
-            print(f'{self.name}: type of default value is not agree with type specified!')
+            # print(f'{self.name}: type of default value is not agree with type specified!')
             self.type = 'float'
         if self.type == 'bool':
             # 对于布尔参数，其一定为必要参数类型,可选范围为True或False
