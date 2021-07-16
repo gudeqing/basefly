@@ -151,12 +151,16 @@ class Command:
             if type(arg_value) == Output:
                 value_dict = {k: v.value or v.default for k, v in wf_tasks[arg_value.task_id].cmd.args.items()}
                 arg_value = arg_value.path.replace('~', '').format(**value_dict)
+            elif type(arg_value) == TopVar:
+                arg_value = arg_value.value
             elif type(arg_value) == list:
                 arg_value = arg_value.copy()
                 for ind, each in enumerate(arg_value):
                     if type(each) == Output:
                         value_dict = {k: v.value or v.default for k, v in wf_tasks[each.task_id].cmd.args.items()}
                         arg_value[ind] = each.path.replace('~', '').format(**value_dict)
+                    elif type(each) == TopVar:
+                        arg_value[ind] = each.value
 
             # 对于可以接收多个值的参数
             if arg.array:
@@ -201,10 +205,22 @@ class Task:
 
 
 @dataclass()
+class TopVar:
+    value: Any
+    name: str = None
+    type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
+
+
+@dataclass()
 class Workflow:
     meta: Meta = field(default_factory=Meta)
     tasks: Dict[str, Task] = field(default_factory=dict)
     outputs: Dict[str, Output] = field(default_factory=dict)
+    top_vars: Dict[str, TopVar] = field(default_factory=dict)
+
+    def __post_init__(self):
+        for k, v in self.top_vars.items():
+            v.name = k
 
     def add_task(self, cmd: Command, depends: list = None):
         task = Task(cmd=cmd, depends=depends)
@@ -485,6 +501,8 @@ class ToWdlWorkflow(object):
                     task_name = self.wf.tasks[detail.value.task_id].cmd.meta.name
                     detail.wdl = task_name + '.' + detail.value.name
                     lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.wdl + ',\n'
+                elif type(detail.value) == TopVar:
+                    lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.value.name + ',\n'
                 elif type(detail.value) == list:
                     # print(detail.value)
                     wdl_str_set = set()
@@ -493,6 +511,8 @@ class ToWdlWorkflow(object):
                             task_name = self.wf.tasks[each.task_id].cmd.meta.name
                             wdl_str = task_name + '.' + each.name
                             wdl_str_set.add(wdl_str)
+                        if type(each) == TopVar:
+                            wdl_str_set.add(each.name)
                     # 如果wdl_str_set长度唯一，说明这个list里面存储的是并发结果
                     if len(wdl_str_set) == 1:
                         wdl_str_lst = wdl_str_set.pop()
@@ -512,6 +532,30 @@ class ToWdlWorkflow(object):
 
         # 这一部分是针对fastq数据特殊设计的
         wdl += " "*4 + "input {\n"
+        if self.wf.top_vars:
+            for k, v in self.wf.top_vars.items():
+                var_value = v.value
+                if v.type == 'infile':
+                    var_type = 'File'
+                    var_value = f'"{v.value}"'
+                elif v.type == 'int':
+                    var_type = 'Int'
+                elif v.type == 'float':
+                    var_type = 'Float'
+                elif v.type == 'bool':
+                    var_type = 'Boolean'
+                    var_value = str(v.value).lower()
+                elif v.type == 'indir':
+                    var_type = 'Directory'
+                    var_value = f'"{v.value}"'
+                elif v.type == 'str':
+                    var_type = 'String'
+                    var_value = f'"{v.value}"'
+                else:
+                    var_type = 'String'
+                    var_value = f'"{v.value}"'
+                wdl += ' '*4*2 + f'{var_type} {k} = {var_value}\n'
+
         wdl += ' '*4*2 + "Array[File] read1\n"
         wdl += ' '*4*2 + "Array[File] read2\n"
         wdl += ' '*4*2 + "Array[String] names\n"
