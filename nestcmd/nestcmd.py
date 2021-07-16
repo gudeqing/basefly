@@ -524,6 +524,11 @@ class ToWdlWorkflow(object):
         for grp, tids in self.group_task().items():
             cmd_lst = self.get_group_cmd_lst(tids)
             wdl += self.format_call_cmds(cmd_lst, scatter=len(tids) > 1)
+            repeat = set(x.meta.name for x in cmd_lst) & set(x.meta.name for x in all_cmds)
+            if repeat:
+                raise Exception(f'cmd {repeat} is duplicated, '
+                                f'did you forget to give a group name for cmd that called in the same loop? '
+                                f'Or, you should rename cmd for different tasks !')
             all_cmds += cmd_lst
             scattered += [True]*len(cmd_lst) if len(tids) > 1 else [False]*len(cmd_lst)
 
