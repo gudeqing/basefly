@@ -206,6 +206,26 @@ def TNfilter(tumor_sample):
     return cmd
 
 
+def snpEff(tumor_sample):
+    cmd = Command()
+    cmd.meta.name = 'snpEff'
+    cmd.runtime.image = '?'
+    cmd.runtime.tool = 'java -Xmx9g snpEff.jar ann'
+    cmd.args['genome_version'] = Argument(default='hg19', desc='human genome version')
+    cmd.args['data_dir'] = Argument(prefix='-dataDir ', type='indir',  desc='Override data_dir parameter from config file')
+    cmd.args['cancer'] = Argument(prefix='-cancer ', type='bool', default=True, desc='Perform cancer comparisons (Somatic vs Germline)')
+    cmd.args['cancerSamples'] = Argument(prefix='-cancerSamples ', level='optional', type='infile', desc="Two column TXT file defining 'oringinal derived' samples. If '-cancer' used and the file is missing, then the last sample will be assumed as tumor sample.")
+    cmd.args['canon'] = Argument(prefix='-canon ', type='bool', default=False, desc='Only use canonical transcripts')
+    cmd.args['interval'] = Argument(prefix='-interval ', type='infile', level='optional', multi_times=True, desc="Use a custom intervals in TXT/BED/BigBed/VCF/GFF file (you may use this option many times)")
+    cmd.args['other_args'] = Argument(level='optional', desc="other arguments that you want to input for the program, such as '-motif'")
+    cmd.args['in_vcf'] = Argument(desc='input variant file')
+    cmd.args['_x'] = Argument(type='fix', value='>')
+    cmd.args['out_vcf'] = Argument(desc='output annotated file', value=f'{tumor_sample}.final.annot.vcf')
+    cmd.args['out_vcf'].wdl = '~{tumor_sample}.final.annot.vcf'
+    cmd.outputs['out_vcf'] = Output(path='{out_vcf}')
+    return cmd
+
+
 def pipeline():
     top_vars = dict(
         thread_number=TopVar(value=16, type='int'),
@@ -214,11 +234,12 @@ def pipeline():
         known_indel=TopVar(value='1000G_phase1.indels.b37.vcf.gz', type='infile'),
         known_mills=TopVar(value='Mills_and_1000G_gold_standard.indels.b37.vcf.gz'),
         pon=TopVar(value='PanelOfNormal.vcf'),
-        germline_vcf=TopVar('germline.vcf')
+        germline_vcf=TopVar('germline.vcf'),
+        snpeff_databse=TopVar(value='data/', type='indir')
     )
     wf = Workflow(top_vars=top_vars)
-    wf.meta.name = 'PipelineExample'
-    wf.meta.desc = 'typical bioinformatics pipeline using sentieon TNSeq'
+    wf.meta.name = 'TN_pipeline'
+    wf.meta.desc = 'typical bioinformatics pipeline using sentieon TNSeq and snpEff'
 
     # init
     def init_func():
@@ -346,6 +367,12 @@ def pipeline():
     args['contamination'].value = depend_task.outputs['contamination_data']
     args['tumor_segments'].value = depend_task.outputs['tumor_segments']
     args['orientation_data'].value = depend_task.outputs['orientation_data']
+
+    # annot
+    depend_task = task
+    task, args = wf.add_task(snpEff(tumor_sample), depends=[depend_task.task_id])
+    args['data_dir'].value = top_vars['snpeff_databse']
+    args['in_vcf'].value = depend_task.outputs['out_vcf']
 
     # out
     for task_id, task in wf.tasks.items():
