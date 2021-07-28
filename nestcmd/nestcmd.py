@@ -4,8 +4,12 @@ import json
 from uuid import uuid4
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Literal
-# 导入Munch替代原生字典dict,这样可以通过属性访问数据
-from munch import Munch as dict
+try:
+    # 导入Munch替代原生字典dict,这样可以通过属性访问数据
+    from munch import Munch as dict
+except Exception as e:
+    pass
+
 __author__ = 'gdq'
 
 """
