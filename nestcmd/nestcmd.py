@@ -616,7 +616,7 @@ class ToWdlWorkflow(object):
 def organise_fastq(dir_lst: tuple, r1_name: str = "(.*).R1.fq.gz", r2_name: str = "(.*).R2.fq.gz",
                    link_data=False, out='fastq.info.txt', add_s_to_numeric_name=False, middle2underscore=False):
     """
-    :param dir_lst: directory list, all target fastq files should be these directories.
+    :param dir_lst: directory list, all target fastq files should be in these directories.
     :param r1_name: python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'
     :param r2_name: python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'
     :param link_data: bool to indicate if to make soft links for fastq files
