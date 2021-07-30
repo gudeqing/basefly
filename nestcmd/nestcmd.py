@@ -613,35 +613,38 @@ class ToWdlWorkflow(object):
 
 
 # ----tools------
-def organise_fastq(dir_lst: tuple, exp: str = "(.*).R1.fq.gz",
-                   r1_endswith='R1.fq.gz', link_rawdata=False, out='fastq.info.txt',
-                   add_s_to_numeric_name=False, middle2underscore=False):
+def organise_fastq(dir_lst: tuple, r1_name: str = "(.*).R1.fq.gz", r2_name: str = "(.*).R2.fq.gz",
+                   link_data=False, out='fastq.info.txt', add_s_to_numeric_name=False, middle2underscore=False):
     """
-    :param dir_lst: fastq 所在路径列表
-    :param exp: 匹配fastq名称的正则表达式, 正则表达式中必须有且只有一个小括号, 括号里面匹配到的字符串将作为样本名称，不能匹配的样本将被自动忽略。
-    :param r1_endswith: 指示read1的以什么字符结尾，用以判断哪个文件为read1还是read2
-    :param link_rawdata: 是否做软连接
-    :param out: 输出文件名，文件内容一般是三列，第一列为样本名称，第二列为read1的绝对路径，第二列为read2的绝对路径
-    :param add_s_to_numeric_name: 如果样本名以数字开头，可以指定该参数在样本名称前加上’S'
-    :param middle2underscore: 如果样本名称中有‘-’，可以指定该参数将‘-’替换为'_'
-    :return: result_dict： {sample:[[r1, r1'],[r2, r2']], ...}
+    :param dir_lst: directory list, all target fastq files should be these directories.
+    :param r1_name: python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'
+    :param r2_name: python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'
+    :param link_data: bool to indicate if to make soft links for fastq files
+    :param out: output file that contains three columns: [sample_name, read1_abs_path, read2_abs_path]
+    :param add_s_to_numeric_name: bool value to indicate if to add a 'S' letter at the head of the sample name that startswith numeric string.
+    :param middle2underscore: bool value to indicate if to transform '-' letter to '_' letter for a sample name.
+    :return: result_dict： {sample: [[r1, r1'], [r2, r2']], ...}
     """
-    # example: xxx._R1.fastq.gz
     result_dict = dict()
     for path in dir_lst:
         for root, dirs, files in os.walk(path):
             for each in files:
-                match = re.fullmatch(exp, each)
+                is_read1 = True
+                match = re.fullmatch(r1_name, each)
+                if not match:
+                    match = re.fullmatch(r2_name, each)
+                    is_read1 = False
                 if match:
+                    # first matched group is sample name
                     sample = match.groups()[0]
                     result_dict.setdefault(sample, [[], []])
-                    if each.endswith(r1_endswith):
+                    if is_read1:
                         result_dict[sample][0].append(os.path.join(root, each))
                     else:
                         result_dict[sample][1].append(os.path.join(root, each))
 
     with open(out, 'w') as f:
-        if link_rawdata:
+        if link_data:
             os.mkdir('rawdata')
             os.chdir('rawdata')
         for sample, lst in result_dict.items():
@@ -653,7 +656,8 @@ def organise_fastq(dir_lst: tuple, exp: str = "(.*).R1.fq.gz",
                 if sample.startswith(('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')):
                     sample = 'S' + sample
             f.write('{}\t{}\t{}\n'.format(sample, ';'.join(read1), ';'.join(read2)))
-            if link_rawdata:
+
+            if link_data:
                 # make link
                 os.mkdir(sample)
                 for each in read1:
