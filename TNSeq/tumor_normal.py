@@ -85,7 +85,7 @@ def locus_collector(sample):
 
 def dedup(sample):
     cmd = Command()
-    cmd.meta.name = 'LocusCollector'
+    cmd.meta.name = 'DeDup'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
     cmd.runtime.tool = 'sentieon driver'
     cmd.args['t'] = Argument(prefix='-t ', default=16, desc='number of threads to use in computation, set to number of cores in the server')
