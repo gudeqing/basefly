@@ -319,27 +319,35 @@ class ToWdlTask(object):
             inputs.append(arg_info)
 
             # format cmd
-            if not detail['array']:
-                if detail['prefix'] == '':
-                    cmd += ['~{' + arg_name + '}']
+            if detail['multi_times']:
+                if detail['array']:
+                    print('多值且可重复使用参数，wdl如何表示我也不知道！')
+                    cmd += ['多值且可重复使用参数，wdl如何表示我也不知道！']
                 else:
-                    if detail['type'] != 'bool':
-                        cmd += ['~{' + f'"{detail["prefix"]}"' + ' + ' + arg_name + '}']
-                    else:
-                        cmd += ['~{' + f'if {arg_name} then "{detail["prefix"]} " else ""' + '}']
+                    if not detail['prefix']:
+                        raise Exception(f'可重复使用参数必须要有前缀:{arg_info}')
+                    if detail['type'] == 'bool':
+                        raise Exception(f'可重复使用参数对应的值不能是bool类型:{arg_info}')
+                    cmd += ['~{' + 'prefix(' + f'"{detail["prefix"]} ", ' + arg_name + ')}']
             else:
-                delimiter = detail['delimiter']
-                if detail['prefix'] == '':
-                    cmd += ['~{sep=' + f'"{delimiter}" ' + arg_name + '}']
+                if not detail['array']:
+                    if detail['prefix'] == '':
+                        cmd += ['~{' + arg_name + '}']
+                    else:
+                        if detail['type'] != 'bool':
+                            cmd += ['~{' + f'"{detail["prefix"]}"' + ' + ' + arg_name + '}']
+                        else:
+                            cmd += ['~{' + f'if {arg_name} then "{detail["prefix"]} " else ""' + '}']
                 else:
-                    if detail['multi_times']:
-                        cmd += ['~{' + 'prefix(' + f'"{detail["prefix"]} ", ' + arg_name + ')}']
+                    delimiter = detail['delimiter']
+                    if detail['prefix'] == '':
+                        cmd += ['~{sep=' + f'"{delimiter}" ' + arg_name + '}']
                     else:
                         if detail['type'] != 'bool':
                             prefix = '~{' + f'if defined({arg_name}) then "{detail["prefix"]} " else ""' + '}'
                             cmd += [prefix + '~{sep=' + f'"{delimiter}" ' + arg_name + '}']
                         else:
-                            raise Exception('不支持Array[bool] !')
+                            raise Exception('多值参数对应的值不能是bool类型！')
         return inputs, cmd
 
     def get_outputs(self):
