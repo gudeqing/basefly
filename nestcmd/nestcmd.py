@@ -448,8 +448,8 @@ class ToWdlTask(object):
 
 class ToWdlWorkflow(object):
     """
-    workflow的group信息依据：是否可以在同一个循环中并发
-    如何知道task输入的依赖信息：要求写给参数加一个wdl属性，对应使用wdl语法
+    workflow的group信息的依据是：是否可以在同一个循环中并发
+    如何知道task输入的依赖信息：要求给参数加一个wdl属性，对应使用wdl语法
     """
     def __init__(self, wf: Workflow):
         self.wf = wf
@@ -458,8 +458,7 @@ class ToWdlWorkflow(object):
         group = dict()
         for tid, task in self.wf.tasks.items():
             if hasattr(task, 'group'):
-                grp = group.setdefault(task.group, [])
-                grp.append(tid)
+                group.setdefault(task.group, []).append(tid)
             else:
                 group[tid] = [tid]
         return group
