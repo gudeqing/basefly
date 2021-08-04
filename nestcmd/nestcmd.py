@@ -4,11 +4,8 @@ import json
 from uuid import uuid4
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Literal
-try:
-    # 导入Munch替代原生字典dict,这样可以通过属性访问数据
-    from munch import Munch as dict
-except Exception as e:
-    pass
+# shadow default dict
+from munch import Munch as dict
 
 __author__ = 'gdq'
 
@@ -17,7 +14,7 @@ __author__ = 'gdq'
 1. 定义argument,runtime,outputs,meta
 2. 由上述对象进一步定义Command对象
 3. 给Command的参数具体赋值后，加上depend和outputs信息，可以进一步定义task对象
-4. 由task对象可构成workflow对象，当然也可以给workflow对象添加outputs对象,task的outputs优先级高于Command的outputs
+4. 由task对象可构成workflow对象，当然也可以给workflow对象添加outputs对象,task的outputs继承自Command的outputs
 5. 定义方法将Command/Task对象转换成wdl脚本
 6. 定义方法依据Task对象生成具体的cmd信息,如此可以生成nestpipe格式的pipeline。
 7. 定义方法将workflow转换成wdl流程等
@@ -32,7 +29,7 @@ __author__ = 'gdq'
 
 @dataclass()
 class Argument:
-    name: str = 'name'
+    name: str = '?'
     value: Any = None
     # prefix 可以是如 ’-i '或 'i=', 对于前者, 空格一定要带上
     prefix: str = ''
@@ -44,6 +41,7 @@ class Argument:
     default: Any = None
     range: Any = None
     array: bool = False
+    # delimiter：当一个参数可以输入多个值，这几个值的分隔符由此指定
     delimiter: str = ' '
     # 指示一个参数是否可以多次使用
     multi_times: bool = False
@@ -198,7 +196,6 @@ class Task:
     name: str = None
     task_id: str = field(default_factory=uuid4)
     depends: List[str] = field(default_factory=list)
-    # outputs: Dict[str, Output] = field(default_factory=dict)
 
     def __post_init__(self):
         # 为每一个output带入
