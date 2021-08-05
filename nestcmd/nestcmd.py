@@ -294,7 +294,7 @@ class ToWdlTask(object):
             else:
                 raise Exception(f'unexpected type {arg_info}')
 
-            if detail['array']:
+            if detail['array'] or detail['multi_times']:
                 arg_info = f'Array[{arg_info}]'
 
             if detail['level'] == 'optional' and detail['type'] != 'bool':
