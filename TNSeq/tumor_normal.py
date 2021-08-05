@@ -22,7 +22,7 @@ def bwa_mem(sample, platform):
     cmd.args['ref2'] = Argument(prefix='-r ', type='infile', desc='reference fasta file')
     cmd.args['out'] = Argument(prefix='-o ', desc='output bam file', value=f'{sample}.sorted.bam')
     cmd.args['out'].wdl = '~{sample}.sorted.bam'
-    cmd.args['t2'] = Argument(prefix='-t ', default=16)
+    cmd.args['t2'] = Argument(prefix='-t ', default=16, desc='number of threads to use')
     cmd.args._x3 = Argument(type='fix', value='--sam2bam -i -')
     cmd.outputs['out'] = Output(path="{out}", type='File')
     return cmd
@@ -59,7 +59,7 @@ def get_metrics(sample):
 
 def plot_metrics(sample, method='GCBias'):
     cmd = Command()
-    cmd.meta.name = 'plot{method}'
+    cmd.meta.name = f'plot{method}'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
     cmd.runtime.tool = 'sentieon plot'
     cmd.args['method'] = Argument(desc='method of plot', default=method)
@@ -218,7 +218,7 @@ def snpEff(tumor_sample):
     cmd.args['canon'] = Argument(prefix='-canon ', type='bool', default=False, desc='Only use canonical transcripts')
     cmd.args['interval'] = Argument(prefix='-interval ', type='infile', level='optional', multi_times=True, desc="Use a custom intervals in TXT/BED/BigBed/VCF/GFF file (you may use this option many times)")
     cmd.args['other_args'] = Argument(level='optional', desc="other arguments that you want to input for the program, such as '-motif'")
-    cmd.args['in_vcf'] = Argument(desc='input variant file')
+    cmd.args['in_vcf'] = Argument(desc='input variant file', type='infile')
     cmd.args['_x'] = Argument(type='fix', value='>')
     cmd.args['out_vcf'] = Argument(desc='output annotated file', value=f'{tumor_sample}.final.annot.vcf')
     cmd.args['out_vcf'].wdl = '~{tumor_sample}.final.annot.vcf'
@@ -261,7 +261,9 @@ def pipeline():
         args['ref'].value = top_vars['ref']
         args['ref2'].value = top_vars['ref']
         args['read1'].value = read1
+        args['read1'].wdl = '~{read1}'
         args['read2'].value = read2
+        args['read2'].wdl = '~{read2}'
         args['t2'].value = top_vars['thread_number']
 
         # get_metrics
