@@ -9,16 +9,19 @@ workflow pipeline {
         File known_mills
         File? pon
         File? germline_vcf
-        String tumor_sample
-        String normal_sample
+#        String tumor_sample
+#        String normal_sample
         Array[File] snpeff_databse
         Int thread_number = 15
         String platform = "ILLUMINA"
+        # tumor normal pair info, two-column txt file, first columns is tumor sample name
+        File pair_info
     }
 
     call getFastqInfo{}
 
-    scatter (each in keys(getFastqInfo.fastq_info)) { 
+    Array[String] sample_array = keys(getFastqInfo.fastq_info)
+    scatter (each in sample_array) {
         String sample = each
         File read1 = getFastqInfo.fastq_info[each][0][0]
         File read2 = getFastqInfo.fastq_info[each][1][0]
@@ -116,43 +119,52 @@ workflow pipeline {
 
     }
 
-    call TNhaplotyper2 {
-        input: 
-        ref = ref,
-        t = thread_number,
-        bams = realign.realigned_bam,
-        recal_datas = recalibration.recal_data,
-        tumor_sample = "~{tumor_sample}",
-        normal_sample = "~{normal_sample}",
-        germline_vcf = germline_vcf,
-        pon = pon,
-        out_vcf = "~{tumor_sample}.TNhaplotyper2.vcf.gz",
-        orientation_sample = "~{tumor_sample}",
-        orientation_data = "~{tumor_sample}.orientation.data",
-        contamination_tumor = "~{tumor_sample}",
-        contamination_normal = "~{normal_sample}",
-        germline_vcf2 = germline_vcf,
-        tumor_segments = "~{tumor_sample}.contamination.segments",
-        contamination_data = "~{tumor_sample}.contamination.data"
-    }
+    Map[String, File] bam_dict = as_map(zip(sample_array, realign.realigned_bam))
+    Map[String, File] recal_dict = as_map(zip(sample_array, recalibration.recal_data))
+    Array[Array[String]] pair_array = read_tsv(pair_info)
 
-    call TNfilter {
-        input: 
-        ref = ref,
-        tumor_sample = "~{tumor_sample}",
-        normal_sample = "~{normal_sample}",
-        tmp_vcf = TNhaplotyper2.out_vcf,
-        contamination = TNhaplotyper2.contamination_data,
-        tumor_segments = TNhaplotyper2.tumor_segments,
-        orientation_data = TNhaplotyper2.orientation_data,
-        out_vcf = "~{tumor_sample}.final.vcf.gz"
-    }
+    scatter (each in pair_array) {
+        String tumor_sample = each[0]
+        String normal_sample = each[1]
 
-    call snpEff {
-        input: 
-        database_files = snpeff_databse,
-        in_vcf = TNfilter.out_vcf,
-        out_vcf = "~{tumor_sample}.final.annot.vcf"
+        call TNhaplotyper2 {
+            input:
+            ref = ref,
+            t = thread_number,
+            bams = [bam_dict[tumor_sample], bam_dict[normal_sample]],
+            recal_datas = [recal_dict[tumor_sample], recal_dict[normal_sample]],
+            tumor_sample = "~{tumor_sample}",
+            normal_sample = "~{normal_sample}",
+            germline_vcf = germline_vcf,
+            pon = pon,
+            out_vcf = "~{tumor_sample}.TNhaplotyper2.vcf.gz",
+            orientation_sample = "~{tumor_sample}",
+            orientation_data = "~{tumor_sample}.orientation.data",
+            contamination_tumor = "~{tumor_sample}",
+            contamination_normal = "~{normal_sample}",
+            germline_vcf2 = germline_vcf,
+            tumor_segments = "~{tumor_sample}.contamination.segments",
+            contamination_data = "~{tumor_sample}.contamination.data"
+        }
+
+        call TNfilter {
+            input:
+            ref = ref,
+            tumor_sample = "~{tumor_sample}",
+            normal_sample = "~{normal_sample}",
+            tmp_vcf = TNhaplotyper2.out_vcf,
+            contamination = TNhaplotyper2.contamination_data,
+            tumor_segments = TNhaplotyper2.tumor_segments,
+            orientation_data = TNhaplotyper2.orientation_data,
+            out_vcf = "~{tumor_sample}.final.vcf.gz"
+        }
+
+        call snpEff {
+            input:
+            database_files = snpeff_databse,
+            in_vcf = TNfilter.out_vcf,
+            out_vcf = "~{tumor_sample}.final.annot.vcf"
+        }
     }
 
     meta {
@@ -180,12 +192,12 @@ workflow pipeline {
         Array[File] CoverageMetrics_coverage_metrics = CoverageMetrics.coverage_metrics
         Array[File] realign_realigned_bam = realign.realigned_bam
         Array[File] recalibration_recal_data = recalibration.recal_data
-        File TNhaplotyper2_out_vcf = TNhaplotyper2.out_vcf
-        File TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
-        File TNhaplotyper2_tumor_segments = TNhaplotyper2.tumor_segments
-        File TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
-        File TNfilter_out_vcf = TNfilter.out_vcf
-        File snpEff_out_vcf = snpEff.out_vcf
+        Array[File] TNhaplotyper2_out_vcf = TNhaplotyper2.out_vcf
+        Array[File] TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
+        Array[File] TNhaplotyper2_tumor_segments = TNhaplotyper2.tumor_segments
+        Array[File] TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
+        Array[File] TNfilter_out_vcf = TNfilter.out_vcf
+        Array[File] snpEff_out_vcf = snpEff.out_vcf
     }
 
 }
@@ -262,7 +274,7 @@ task bwa_mem{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -325,7 +337,7 @@ task get_metrics{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -371,7 +383,7 @@ task plotGCBias{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -411,7 +423,7 @@ task plotMeanQualityByCycle{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -451,7 +463,7 @@ task plotQualDistribution{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -491,7 +503,7 @@ task plotInsertSize{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -531,7 +543,7 @@ task LocusCollector{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -577,7 +589,7 @@ task DeDup{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -621,7 +633,7 @@ task CoverageMetrics{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -667,7 +679,7 @@ task realign{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -714,7 +726,7 @@ task recalibration{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -786,7 +798,7 @@ task TNhaplotyper2{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
@@ -850,7 +862,7 @@ task TNfilter{
     }
 
     runtime {
-        docker: "514100582590.dkr.ecr.cn-northwest-1.amazonaws.com.cn/bb-yifang/pipelines/bioinfo_pipelines/sentieon:201911.01"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
     }
 
     meta {
