@@ -14,7 +14,7 @@ workflow pipeline {
         Array[File] snpeff_databse
         Int thread_number = 15
         String platform = "ILLUMINA"
-        # tumor normal pair info, two-column txt file, first columns is tumor sample name
+        # tumor normal pair info, two-column txt file, first column is tumor sample name
         File pair_info
     }
 

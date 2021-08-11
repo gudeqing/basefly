@@ -300,23 +300,27 @@ def pipeline():
         # locus
         locus_get, args = wf.add_task(locus_collector(sample), depends=[mapping.task_id])
         locus_get.group = batch
+        args['t'].value = top_vars['thread_number']
         args['bam'].value = mapping.outputs['out']
 
         # dedup
         dedup_task, args = wf.add_task(dedup(sample), depends=[mapping.task_id])
         dedup_task.group = batch
+        args['t'].value = top_vars['thread_number']
         args['bam'].value = mapping.outputs['out']
         args['score'].value = locus_get.outputs['score']
 
         # coverage
         cov_task, args = wf.add_task(coverage_metrics(sample), depends=[dedup_task.task_id])
         cov_task.group = batch
+        args['t'].value = top_vars['thread_number']
         args['bam'].value = dedup_task.outputs['deduped_bam']
         args['ref'].value = top_vars['ref']
 
         # realign
         realign_task, args = wf.add_task(realign(sample), depends=[dedup_task.task_id])
         realign_task.group = batch
+        args['t'].value = top_vars['thread_number']
         args['bam'].value = dedup_task.outputs['deduped_bam']
         args['ref'].value = top_vars['ref']
         args['database'].value = [top_vars['known_indel'], top_vars['known_mills']]
@@ -325,6 +329,7 @@ def pipeline():
         # recalibration
         recal_task, args = wf.add_task(recalibration(sample), depends=[realign_task.task_id])
         recal_task.group = batch
+        args['t'].value = top_vars['thread_number']
         args['bam'].value = realign_task.outputs['realigned_bam']
         args['ref'].value = top_vars['ref']
         args['database'].value = [top_vars['known_dbsnp'], top_vars['known_indel'], top_vars['known_mills']]
@@ -334,9 +339,10 @@ def pipeline():
     tumor_sample = 'tumor'
     normal_sample = 'normal'
     task, args = wf.add_task(TNhaplotyper2(tumor_sample=tumor_sample))
-    args['ref'].value = top_vars['ref']
     task.depends = [t.task_id for t in realign_tasks]
     task.depends += [t.task_id for t in recal_tasks]
+    args['ref'].value = top_vars['ref']
+    args['t'].value = top_vars['thread_number']
     args['bams'].value = [t.outputs['realigned_bam'] for t in realign_tasks]
     args['recal_datas'].value = [t.outputs['recal_data'] for t in recal_tasks]
     # pon and germline
