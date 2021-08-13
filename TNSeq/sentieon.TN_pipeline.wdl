@@ -1,12 +1,15 @@
 version development
 # 由tumor_normal.py生成草稿后修改完成
+# refer https://github.com/Sentieon/sentieon-scripts/blob/master/example_pipelines/somatic/TNseq/
 
 workflow pipeline {
     input {
         File ref
-        File known_dbsnp
-        File known_indel
-        File known_mills
+        Array[File] ref_idxes
+        Array[File] known_dbsnp
+        # known indels example [1000G_phase1.indels.b37.vcf.gz, Mills_and_1000G_gold_standard.indels.b37.vcf.gz]
+        Array[File] known_indels
+#        File known_mills
         File? pon
         File? germline_vcf
 #        String tumor_sample
@@ -16,6 +19,8 @@ workflow pipeline {
         String platform = "ILLUMINA"
         # tumor normal pair info, two-column txt file, first column is tumor sample name
         File pair_info
+        Array[File] intervals = []
+        Boolean skip_fastp = false
     }
 
     call getFastqInfo{}
@@ -26,13 +31,23 @@ workflow pipeline {
         File read1 = getFastqInfo.fastq_info[each][0][0]
         File read2 = getFastqInfo.fastq_info[each][1][0]
 
+        if (! skip_fastp) {
+            call fastp {
+                input:
+                    read1 = read1,
+                    read2 = read2,
+                    sample_name = sample
+            }
+        }
+
         call bwa_mem {
             input: 
             readgroup = "@RG\\tID:~{sample}\\tSM:~{sample}\\tPL:~{platform}",
             t = thread_number,
             ref = ref,
-            read1 = "~{read1}",
-            read2 = "~{read2}",
+            ref_idxes  = ref_idxes,
+            read1 = select_first([fastp.out_read1_file, read1]),
+            read2 = select_first([fastp.out_read2_file, read2]),
             ref2 = ref,
             out = "~{sample}.sorted.bam",
             t2 = thread_number
@@ -42,7 +57,9 @@ workflow pipeline {
             input: 
             t = thread_number,
             ref = ref,
-            bam = bwa_mem.out,
+            ref_idxes  = ref_idxes,
+            intervals = intervals,
+            bam = bwa_mem.out, bam_bai = bwa_mem.out_bai,
             mq_metrics = "~{sample}.mq_metrics.txt",
             qd_metrics = "~{sample}.qd_metrics.txt",
             gc_summary = "~{sample}.gc_summary.txt",
@@ -78,14 +95,16 @@ workflow pipeline {
         call LocusCollector {
             input:
             t = thread_number,
-            bam = bwa_mem.out,
+            intervals = intervals,
+            bam = bwa_mem.out, bam_bai = bwa_mem.out_bai,
             score = "~{sample}.score.txt"
         }
 
         call DeDup {
             input:
             t = thread_number,
-            bam = bwa_mem.out,
+            intervals = intervals,
+            bam = bwa_mem.out, bam_bai = bwa_mem.out_bai,
             score = LocusCollector.score,
             dedup_metrics = "~{sample}.dedup.metrics.txt",
             deduped_bam = "~{sample}.deduped.bam"
@@ -94,32 +113,39 @@ workflow pipeline {
         call CoverageMetrics {
             input:
             t = thread_number,
+            intervals = intervals,
             ref = ref,
-            bam = DeDup.deduped_bam,
+            ref_idxes  = ref_idxes,
+            bam = DeDup.deduped_bam, bam_bai = DeDup.deduped_bam_bai,
             coverage_metrics = "~{sample}.cov.metrics.txt"
         }
 
         call realign {
             input:
             t = thread_number,
+            intervals = intervals,
             ref = ref,
-            bam = DeDup.deduped_bam,
-            database = [known_mills, known_indel],
+            ref_idxes  = ref_idxes,
+            bam = DeDup.deduped_bam, bam_bai = DeDup.deduped_bam_bai,
+            database = known_indels,
             realigned_bam = "~{sample}.realigned.bam"
         }
 
         call recalibration {
             input: 
             ref = ref,
+            intervals = intervals,
+            ref_idxes  = ref_idxes,
             t = thread_number,
-            bam = realign.realigned_bam,
-            database = [known_dbsnp, known_mills, known_indel],
+            bam = realign.realigned_bam, bam_bai = realign.realigned_bam_bai,
+            database = flatten([known_dbsnp, known_indels]),
             recal_data = "~{sample}.recal_data.table"
         }
 
     }
 
     Map[String, File] bam_dict = as_map(zip(sample_array, realign.realigned_bam))
+    Map[String, File] bai_dict = as_map(zip(sample_array, realign.realigned_bam_bai))
     Map[String, File] recal_dict = as_map(zip(sample_array, recalibration.recal_data))
     Array[Array[String]] pair_array = read_tsv(pair_info)
 
@@ -130,8 +156,11 @@ workflow pipeline {
         call TNhaplotyper2 {
             input:
             ref = ref,
+            ref_idxes  = ref_idxes,
             t = thread_number,
+            intervals = intervals,
             bams = [bam_dict[tumor_sample], bam_dict[normal_sample]],
+            bam_bais = [bai_dict[tumor_sample], bai_dict[normal_sample]],
             recal_datas = [recal_dict[tumor_sample], recal_dict[normal_sample]],
             tumor_sample = "~{tumor_sample}",
             normal_sample = "~{normal_sample}",
@@ -150,6 +179,7 @@ workflow pipeline {
         call TNfilter {
             input:
             ref = ref,
+            ref_idxes  = ref_idxes,
             tumor_sample = "~{tumor_sample}",
             normal_sample = "~{normal_sample}",
             tmp_vcf = TNhaplotyper2.out_vcf,
@@ -189,8 +219,10 @@ workflow pipeline {
         Array[File] LocusCollector_score = LocusCollector.score
         Array[File] DeDup_dedup_metrics = DeDup.dedup_metrics
         Array[File] DeDup_deduped_bam = DeDup.deduped_bam
+        Array[File] DeDup_deduped_bam_bai = DeDup.deduped_bam_bai
         Array[File] CoverageMetrics_coverage_metrics = CoverageMetrics.coverage_metrics
         Array[File] realign_realigned_bam = realign.realigned_bam
+        Array[File] realign_realigned_bam_bai = realign.realigned_bam_bai
         Array[File] recalibration_recal_data = recalibration.recal_data
         Array[File] TNhaplotyper2_out_vcf = TNhaplotyper2.out_vcf
         Array[File] TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
@@ -237,6 +269,72 @@ task getFastqInfo{
     }
 }
 
+task fastp{
+    input {
+        String? other_parameters
+        Int threads = 4
+        File read1
+        File? read2
+        String sample_name
+        String? adapter_r1
+        String? adapter_r2
+        # for runtime
+        String docker = "gudeqing/fastp:0.21.0"
+        String memory = "5 GiB"
+        Int cpu = 4
+        String disks = "5 GiB"
+        Int time_minutes = 10080
+    }
+
+    command <<<
+        set -e
+        fastp \
+        ~{other_parameters} \
+        ~{"--thread " + threads} \
+        ~{"-i " + read1} \
+        ~{"-I " + read2} \
+        ~{"--adapter_sequence " + adapter_r1} \
+        ~{"--adapter_sequence_r2 " + adapter_r2} \
+        ~{"-o " + sample_name + ".clean.R1.fastq.gz"} \
+        ~{if defined(read2) then "-O " + sample_name + ".clean.R2.fastq.gz" else ""} \
+        ~{"-h " + sample_name + ".report.html"} \
+        ~{"-j " + sample_name + ".report.json"}
+    >>>
+
+    output {
+        File out_read1_file = sample_name + ".clean.R1.fastq.gz"
+        File? out_read2_file = sample_name + ".clean.R2.fastq.gz"
+        File html_report_file = sample_name + ".report.html"
+        File json_report_file = sample_name + ".report.json"
+    }
+
+    runtime {
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/fastp:0.21.0"
+        memory: memory
+        cpu: cpu
+        disks: disks
+        time_minutes: time_minutes
+    }
+
+    meta {
+        name: "fastp"
+        desc: "A tool designed to provide fast all-in-one preprocessing for FastQ files. This tool is developed in C++ with multithreading supported to afford high performance. For more detail please refer to https://github.com/OpenGene/fastp"
+        logo: "see fastp.png"
+        version: "0.21.0"
+        basecmd: "./fastp"
+    }
+
+    parameter_meta {
+        other_parameters: {desc: "其他参数，你可以通过该参数输入一个或多个任何其他当前软件支持的参数，例如'-i x -j y'", level: "optional", type: "str", range: "", default: ""}
+        threads: {desc: "Number of threads to use", level: "required", type: "int", range: "", default: "2"}
+        read1: {desc: "read1 fastq file", level: "required", type: "infile", range: "", default: "sample.R1.fastq.gz"}
+        read2: {desc: "read2 fastq file", level: "optional", type: "infile", range: "", default: "sample.R2.fastq.gz"}
+        sample_name: {desc: "sample name, will be used in output files' name", level: "required", type: "str", range: "", default: "sample_name"}
+        adapter_r1: {desc: "the adapter for read1. For SE data, if not specified, the adapter will be auto-detected. For PE data, this is used if R1/R2 are found not overlapped. (string [=auto])", level: "optional", type: "str", range: "", default: "auto"}
+        adapter_r2: {desc: "the adapter for read2 (PE data only). This is used if R1/R2 are found not overlapped. If not specified, it will be the same as <adapter_sequence> (string [=auto])", level: "optional", type: "str", range: "", default: "auto"}
+    }
+
+}
 
 task bwa_mem{
     input {
@@ -244,6 +342,7 @@ task bwa_mem{
         Int t = 16
         Int k = 10000000
         File ref
+        Array[File] ref_idxes
         File read1
         File read2
         File ref2
@@ -271,6 +370,7 @@ task bwa_mem{
 
     output {
         File out = "~{out}"
+        File out_bai = "~{out}.bai"
     }
 
     runtime {
@@ -302,7 +402,10 @@ task get_metrics{
     input {
         Int t = 16
         File ref
+        Array[File] ref_idxes
+        Array[File] intervals
         File bam
+        File bam_bai
         String mq_metrics
         String qd_metrics
         String gc_summary
@@ -316,6 +419,7 @@ task get_metrics{
     command <<<
         set -e 
         sentieon driver \
+        ~{prefix("--interval ", intervals)} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -525,6 +629,8 @@ task LocusCollector{
     input {
         Int t = 16
         File bam
+        File bam_bai
+        Array[File] intervals
         String score
         # for runtime
         String docker = "docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11"
@@ -533,6 +639,7 @@ task LocusCollector{
     command <<<
         set -e 
         sentieon driver \
+        ~{prefix("--interval ", intervals)} \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         ~{"--algo LocusCollector --fun score_info " + score} 
@@ -565,6 +672,8 @@ task DeDup{
     input {
         Int t = 16
         File bam
+        File bam_bai
+        Array[File] intervals
         File score
         String dedup_metrics
         String deduped_bam
@@ -575,6 +684,7 @@ task DeDup{
     command <<<
         set -e 
         sentieon driver \
+        ~{prefix("--interval ", intervals)} \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         --algo Dedup \
@@ -586,6 +696,7 @@ task DeDup{
     output {
         File dedup_metrics = "~{dedup_metrics}"
         File deduped_bam = "~{deduped_bam}"
+        File deduped_bam_bai = "~{deduped_bam}.bai"
     }
 
     runtime {
@@ -613,7 +724,10 @@ task CoverageMetrics{
     input {
         Int t = 16
         File ref
+        Array[File] ref_idxes
+        Array[File] intervals
         File bam
+        File bam_bai
         String coverage_metrics
         # for runtime
         String docker = "docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11"
@@ -622,6 +736,7 @@ task CoverageMetrics{
     command <<<
         set -e 
         sentieon driver \
+        ~{prefix("--interval ", intervals)} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -656,7 +771,10 @@ task realign{
     input {
         Int t = 16
         File ref
+        Array[File] ref_idxes
+        Array[File] intervals
         File bam
+        File bam_bai
         Array[File] database
         String realigned_bam
         # for runtime
@@ -666,16 +784,18 @@ task realign{
     command <<<
         set -e 
         sentieon driver \
+        ~{prefix("--interval ", intervals)} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
         --algo Realigner \
-        ~{prefix("-k  ", database)} \
+        ~{prefix("-k ", database)} \
         ~{realigned_bam} 
     >>>
 
     output {
         File realigned_bam = "~{realigned_bam}"
+        File realigned_bam_bai = "~{realigned_bam}.bai"
     }
 
     runtime {
@@ -703,7 +823,10 @@ task recalibration{
     input {
         Int t = 16
         File ref
+        Array[File] ref_idxes
+        Array[File] intervals
         File bam
+        File bam_bai
         Array[File] database
         String recal_data
         # for runtime
@@ -713,6 +836,7 @@ task recalibration{
     command <<<
         set -e 
         sentieon driver \
+        ~{prefix("--interval ", intervals)} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -750,7 +874,10 @@ task TNhaplotyper2{
     input {
         Int t = 16
         File ref
+        Array[File] ref_idxes
+        Array[File] intervals
         Array[File] bams
+        Array[File] bam_bais
         Array[File] recal_datas
         String tumor_sample = "tumor"
         String? normal_sample
@@ -771,6 +898,7 @@ task TNhaplotyper2{
     command <<<
         set -e 
         sentieon driver \
+        ~{prefix("--interval ", intervals)} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{prefix("-i  ", bams)} \
@@ -832,6 +960,7 @@ task TNhaplotyper2{
 task TNfilter{
     input {
         File ref
+        Array[File] ref_idxes
         String tumor_sample = "tumor"
         String? normal_sample
         File tmp_vcf
