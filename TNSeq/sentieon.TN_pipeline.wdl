@@ -106,6 +106,7 @@ workflow pipeline {
             intervals = intervals,
             bam = bwa_mem.out, bam_bai = bwa_mem.out_bai,
             score = LocusCollector.score,
+            score_idx = LocusCollector.score_idx,
             dedup_metrics = "~{sample}.dedup.metrics.txt",
             deduped_bam = "~{sample}.deduped.bam"
         }
@@ -647,6 +648,7 @@ task LocusCollector{
 
     output {
         File score = "~{score}"
+        File score_idx = "~{score}.idx"
     }
 
     runtime {
@@ -675,6 +677,7 @@ task DeDup{
         File bam_bai
         Array[File] intervals
         File score
+        File score_idx
         String dedup_metrics
         String deduped_bam
         # for runtime
