@@ -434,7 +434,7 @@ task get_metrics{
     command <<<
         set -e 
         sentieon driver \
-        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -654,7 +654,7 @@ task LocusCollector{
     command <<<
         set -e 
         sentieon driver \
-        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         ~{"--algo LocusCollector --fun score_info " + score} 
@@ -701,7 +701,7 @@ task DeDup{
     command <<<
         set -e 
         sentieon driver \
-        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         --algo Dedup \
@@ -753,7 +753,7 @@ task CoverageMetrics{
     command <<<
         set -e 
         sentieon driver \
-        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -802,12 +802,12 @@ task realign{
     command <<<
         set -e 
         sentieon driver \
-        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
         --algo Realigner \
-        ~{prefix("-k ", database)} \
+        ~{sep=' ' prefix("-k ", database)} \
         ~{realigned_bam} 
     >>>
 
@@ -855,12 +855,12 @@ task recalibration{
     command <<<
         set -e 
         sentieon driver \
-        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
         --algo QualCal \
-        ~{prefix("-k  ", database)} \
+        ~{sep=' ' prefix("-k  ", database)} \
         ~{recal_data} 
     >>>
 
@@ -919,11 +919,11 @@ task TNhaplotyper2{
     command <<<
         set -e 
         sentieon driver \
-        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
-        ~{prefix("-i  ", bams)} \
-        ~{prefix("-q  ", recal_datas)} \
+        ~{sep=' ' prefix("-i  ", bams)} \
+        ~{sep=' ' prefix("-q  ", recal_datas)} \
         --algo TNhaplotyper2 \
         ~{"--tumor_sample " + tumor_sample} \
         ~{"--normal_sample " + normal_sample} \
