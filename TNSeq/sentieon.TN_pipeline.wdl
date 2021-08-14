@@ -126,7 +126,6 @@ workflow pipeline {
         call realign {
             input:
             t = thread_number,
-            intervals = intervals,
             ref = ref,
             ref_idxes  = ref_idxes,
             bam = DeDup.deduped_bam, bam_bai = DeDup.deduped_bam_bai,
@@ -782,7 +781,6 @@ task realign{
         Int t = 16
         File ref
         Array[File] ref_idxes
-        Array[File] intervals
         File bam
         File bam_bai
         Array[File] database
@@ -795,7 +793,6 @@ task realign{
     command <<<
         set -e 
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \

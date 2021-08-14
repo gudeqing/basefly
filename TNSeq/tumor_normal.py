@@ -3,6 +3,7 @@ from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar
 """
 参考：https://github.com/Sentieon/sentieon-scripts/blob/master/example_pipelines/somatic/TNseq/tumor_normal.sh
 参考：https://support.sentieon.com/manual/TNseq_usage/tnseq/#
+# wdl长犯错误：隐性输入文件漏了，如bai，fai等索引文件 
 """
 
 
