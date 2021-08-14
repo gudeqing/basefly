@@ -7,11 +7,15 @@ workflow pipeline {
         File ref
         Array[File] ref_idxes
         Array[File] known_dbsnp
+        Array[File] known_dbsnp_idx
         # known indels example [1000G_phase1.indels.b37.vcf.gz, Mills_and_1000G_gold_standard.indels.b37.vcf.gz]
         Array[File] known_indels
+        Array[File] known_indels_idx
 #        File known_mills
         File? pon
+        File? pon_idx
         File? germline_vcf
+        File? germline_vcf_idx
 #        String tumor_sample
 #        String normal_sample
         Array[File] snpeff_databse
@@ -129,6 +133,7 @@ workflow pipeline {
             ref_idxes  = ref_idxes,
             bam = DeDup.deduped_bam, bam_bai = DeDup.deduped_bam_bai,
             database = known_indels,
+            database_idx = known_indels_idx,
             realigned_bam = "~{sample}.realigned.bam"
         }
 
@@ -140,6 +145,7 @@ workflow pipeline {
             t = thread_number,
             bam = realign.realigned_bam, bam_bai = realign.realigned_bam_bai,
             database = flatten([known_dbsnp, known_indels]),
+            database_idx = flatten([known_dbsnp_idx, known_indels_idx]),
             recal_data = "~{sample}.recal_data.table"
         }
 
@@ -166,7 +172,9 @@ workflow pipeline {
             tumor_sample = "~{tumor_sample}",
             normal_sample = "~{normal_sample}",
             germline_vcf = germline_vcf,
+            germline_vcf_idx = germline_vcf_idx,
             pon = pon,
+            pon_idx = pon_idx,
             out_vcf = "~{tumor_sample}.TNhaplotyper2.vcf.gz",
             orientation_sample = "~{tumor_sample}",
             orientation_data = "~{tumor_sample}.orientation.data",
@@ -184,6 +192,7 @@ workflow pipeline {
             tumor_sample = "~{tumor_sample}",
             normal_sample = "~{normal_sample}",
             tmp_vcf = TNhaplotyper2.out_vcf,
+            tmp_vcf_idx = TNhaplotyper2.out_vcf_idx,
             contamination = TNhaplotyper2.contamination_data,
             tumor_segments = TNhaplotyper2.tumor_segments,
             orientation_data = TNhaplotyper2.orientation_data,
@@ -194,6 +203,7 @@ workflow pipeline {
             input:
             database_files = snpeff_databse,
             in_vcf = TNfilter.out_vcf,
+            in_vcf_idx = TNfilter.out_vcf_idx,
             out_vcf = "~{tumor_sample}.final.annot.vcf"
         }
     }
@@ -226,10 +236,12 @@ workflow pipeline {
         Array[File] realign_realigned_bam_bai = realign.realigned_bam_bai
         Array[File] recalibration_recal_data = recalibration.recal_data
         Array[File] TNhaplotyper2_out_vcf = TNhaplotyper2.out_vcf
+        Array[File] TNhaplotyper2_out_vcf_idx = TNhaplotyper2.out_vcf_idx
         Array[File] TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
         Array[File] TNhaplotyper2_tumor_segments = TNhaplotyper2.tumor_segments
         Array[File] TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
         Array[File] TNfilter_out_vcf = TNfilter.out_vcf
+        Array[File] TNfilter_out_vcf_idx = TNfilter.out_vcf_idx
         Array[File] snpEff_out_vcf = snpEff.out_vcf
     }
 
@@ -420,7 +432,7 @@ task get_metrics{
     command <<<
         set -e 
         sentieon driver \
-        ~{prefix("--interval ", intervals)} \
+        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -640,7 +652,7 @@ task LocusCollector{
     command <<<
         set -e 
         sentieon driver \
-        ~{prefix("--interval ", intervals)} \
+        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         ~{"--algo LocusCollector --fun score_info " + score} 
@@ -687,7 +699,7 @@ task DeDup{
     command <<<
         set -e 
         sentieon driver \
-        ~{prefix("--interval ", intervals)} \
+        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         --algo Dedup \
@@ -739,7 +751,7 @@ task CoverageMetrics{
     command <<<
         set -e 
         sentieon driver \
-        ~{prefix("--interval ", intervals)} \
+        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -779,6 +791,7 @@ task realign{
         File bam
         File bam_bai
         Array[File] database
+        Array[File] database_idx
         String realigned_bam
         # for runtime
         String docker = "docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11"
@@ -787,7 +800,7 @@ task realign{
     command <<<
         set -e 
         sentieon driver \
-        ~{prefix("--interval ", intervals)} \
+        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -831,6 +844,7 @@ task recalibration{
         File bam
         File bam_bai
         Array[File] database
+        Array[File] database_idx
         String recal_data
         # for runtime
         String docker = "docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11"
@@ -839,7 +853,7 @@ task recalibration{
     command <<<
         set -e 
         sentieon driver \
-        ~{prefix("--interval ", intervals)} \
+        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -885,7 +899,9 @@ task TNhaplotyper2{
         String tumor_sample = "tumor"
         String? normal_sample
         File? germline_vcf
+        File? germline_vcf_idx
         File? pon
+        File? pon_idx
         String out_vcf
         String? orientation_sample
         String? orientation_data
@@ -901,7 +917,7 @@ task TNhaplotyper2{
     command <<<
         set -e 
         sentieon driver \
-        ~{prefix("--interval ", intervals)} \
+        ~{if length(intervals) > 0 then prefix("--interval ", intervals) else ""} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{prefix("-i  ", bams)} \
@@ -923,6 +939,7 @@ task TNhaplotyper2{
 
     output {
         File out_vcf = "~{out_vcf}"
+        File out_vcf_idx = "~{out_vcf}.tbi"
         File orientation_data = "~{orientation_data}"
         File tumor_segments = "~{tumor_segments}"
         File contamination_data = "~{contamination_data}"
@@ -967,6 +984,7 @@ task TNfilter{
         String tumor_sample = "tumor"
         String? normal_sample
         File tmp_vcf
+        File tmp_vcf_idx
         File? contamination
         File? tumor_segments
         File? orientation_data
@@ -991,6 +1009,7 @@ task TNfilter{
 
     output {
         File out_vcf = "~{out_vcf}"
+        File out_vcf_idx = "~{out_vcf}.tbi"
     }
 
     runtime {
@@ -1026,6 +1045,7 @@ task snpEff{
         Boolean canon = false
         String? other_args
         File in_vcf
+        File in_vcf_idx
         String out_vcf
         # for runtime
         String docker = "?"
