@@ -234,9 +234,9 @@ workflow pipeline {
         Array[File] recalibration_recal_data = recalibration.recal_data
         Array[File] TNhaplotyper2_out_vcf = TNhaplotyper2.out_vcf
         Array[File] TNhaplotyper2_out_vcf_idx = TNhaplotyper2.out_vcf_idx
-        Array[File] TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
-        Array[File] TNhaplotyper2_tumor_segments = TNhaplotyper2.tumor_segments
-        Array[File] TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
+        Array[File?] TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
+        Array[File?] TNhaplotyper2_tumor_segments = TNhaplotyper2.tumor_segments
+        Array[File?] TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
         Array[File] TNfilter_out_vcf = TNfilter.out_vcf
         Array[File] TNfilter_out_vcf_idx = TNfilter.out_vcf_idx
         Array[File] snpEff_out_vcf = snpEff.out_vcf
@@ -385,7 +385,7 @@ task bwa_mem{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -452,7 +452,7 @@ task get_metrics{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -498,7 +498,7 @@ task plotGCBias{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -538,7 +538,7 @@ task plotMeanQualityByCycle{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -578,7 +578,7 @@ task plotQualDistribution{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -618,7 +618,7 @@ task plotInsertSize{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -660,7 +660,7 @@ task LocusCollector{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -709,7 +709,7 @@ task DeDup{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -757,7 +757,7 @@ task CoverageMetrics{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -807,7 +807,7 @@ task realign{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -857,7 +857,7 @@ task recalibration{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -918,25 +918,20 @@ task TNhaplotyper2{
         ~{"--germline_vcf " + germline_vcf} \
         ~{"--pon " + pon} \
         ~{out_vcf} \
-        ~{"--algo OrientationBias --tumor_sample " + orientation_sample} \
-        ~{orientation_data} \
-        ~{"--algo ContaminationModel --tumor_sample " + contamination_tumor} \
-        ~{"--normal_sample " + contamination_normal} \
-        ~{"--vcf " + germline_vcf2} \
-        ~{"--tumor_segments " + tumor_segments} \
-        ~{contamination_data} 
+        ~{"--algo OrientationBias --tumor_sample " + orientation_sample + " " + orientation_data} \
+        ~{"--algo ContaminationModel --tumor_sample " + contamination_tumor + " --normal_sample " + contamination_normal + " --vcf " + germline_vcf2 + " --tumor_segments " + tumor_segments + " " + contamination_data}
     >>>
 
     output {
         File out_vcf = "~{out_vcf}"
         File out_vcf_idx = "~{out_vcf}.tbi"
         File orientation_data = "~{orientation_data}"
-        File tumor_segments = "~{tumor_segments}"
-        File contamination_data = "~{contamination_data}"
+        File? tumor_segments = "~{tumor_segments}"
+        File? contamination_data = "~{contamination_data}"
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
@@ -1003,7 +998,7 @@ task TNfilter{
     }
 
     runtime {
-        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon-joint-call:latest"
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
     }
 
     meta {
