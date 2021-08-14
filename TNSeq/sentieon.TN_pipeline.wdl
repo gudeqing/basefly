@@ -99,7 +99,6 @@ workflow pipeline {
         call LocusCollector {
             input:
             t = thread_number,
-            intervals = intervals,
             bam = bwa_mem.out, bam_bai = bwa_mem.out_bai,
             score = "~{sample}.score.txt"
         }
@@ -107,7 +106,6 @@ workflow pipeline {
         call DeDup {
             input:
             t = thread_number,
-            intervals = intervals,
             bam = bwa_mem.out, bam_bai = bwa_mem.out_bai,
             score = LocusCollector.score,
             score_idx = LocusCollector.score_idx,
@@ -140,7 +138,6 @@ workflow pipeline {
         call recalibration {
             input: 
             ref = ref,
-            intervals = intervals,
             ref_idxes  = ref_idxes,
             t = thread_number,
             bam = realign.realigned_bam, bam_bai = realign.realigned_bam_bai,
@@ -645,7 +642,6 @@ task LocusCollector{
         Int t = 16
         File bam
         File bam_bai
-        Array[File] intervals
         String score
         # for runtime
         String docker = "docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11"
@@ -654,7 +650,6 @@ task LocusCollector{
     command <<<
         set -e 
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         ~{"--algo LocusCollector --fun score_info " + score} 
@@ -689,7 +684,6 @@ task DeDup{
         Int t = 16
         File bam
         File bam_bai
-        Array[File] intervals
         File score
         File score_idx
         String dedup_metrics
@@ -701,7 +695,6 @@ task DeDup{
     command <<<
         set -e 
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         --algo Dedup \
@@ -842,7 +835,6 @@ task recalibration{
         Int t = 16
         File ref
         Array[File] ref_idxes
-        Array[File] intervals
         File bam
         File bam_bai
         Array[File] database
@@ -855,7 +847,6 @@ task recalibration{
     command <<<
         set -e 
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
