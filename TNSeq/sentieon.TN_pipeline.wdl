@@ -216,6 +216,7 @@ workflow pipeline {
     }
 
     output{
+        File fastq_info_json = getFastqInfo.fastq_info_json
         Array[File] bwa_mem_out = bwa_mem.out
         Array[File] get_metrics_mq_metrics = get_metrics.mq_metrics
         Array[File] get_metrics_qd_metrics = get_metrics.qd_metrics
@@ -268,6 +269,7 @@ task getFastqInfo{
 
     output {
         Map[String, Array[Array[File]]] fastq_info = read_json("fastq.info.json")
+        File fastq_info_json = "fastq.info.json"
     }
 
     runtime {
