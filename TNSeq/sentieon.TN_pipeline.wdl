@@ -19,13 +19,10 @@ workflow pipeline {
         # known indels example [1000G_phase1.indels.b37.vcf.gz, Mills_and_1000G_gold_standard.indels.b37.vcf.gz]
         Array[File] known_indels
         Array[File] known_indels_idx
-#        File known_mills
         File? pon
         File? pon_idx
         File? germline_vcf
         File? germline_vcf_idx
-#        String tumor_sample
-#        String normal_sample
         Array[File] snpeff_databse
         Int thread_number = 15
         String platform = "ILLUMINA"
