@@ -1,6 +1,15 @@
 version development
 # 由tumor_normal.py生成草稿后修改完成
 # refer https://github.com/Sentieon/sentieon-scripts/blob/master/example_pipelines/somatic/TNseq/
+# The following steps compose the typical bioinformatics pipeline:
+# 1. Map reads to reference: This step aligns the reads contained in the FASTQ files to map to a reference genome contained in the FASTA file. This step ensures that the data can be placed in context.
+# 2. Calculate data metrics: This step produces a statistical summary of the data quality and the pipeline data analysis quality.
+# 3. Remove or mark duplicates: This step detects reads indicative that the same DNA molecules were sequenced several times. These duplicates are not informative and should not be counted as additional evidence.
+# 4. (optional) Indel realignment: This step performs a local realignment around indels. This step is necessary as reads mapped on the edges of indels often get mapped with mismatching bases that are mapping artifacts. However, when using haplotype based callers such as Haplotyper or DNAscope, this step is not required, as the variant caller performs a local reassembly that provides most of the accuracy increase that results from Indel Realignment.
+# 5. Base quality score recalibration (BQSR): This step modifies the quality scores assigned to individual read bases of the sequence read data. This action removes experimental biases caused by the sequencing methodology.
+# 6. Variant calling: This step identifies the sites where your data displays variation relative to the reference genome, and calculates genotypes for each sample at that site.
+# 7. Varinat annotation
+
 
 workflow pipeline {
     input {
@@ -25,6 +34,8 @@ workflow pipeline {
         File pair_info
         Array[File] intervals = []
         Boolean skip_fastp = false
+        # 默认跳过indel realgin，因为大部分caller已经在
+        Boolean skip_indelRealign = true
     }
 
     call getFastqInfo{}
@@ -123,15 +134,17 @@ workflow pipeline {
             coverage_metrics = "~{sample}.cov.metrics.txt"
         }
 
-        call realign {
-            input:
-            t = thread_number,
-            ref = ref,
-            ref_idxes  = ref_idxes,
-            bam = DeDup.deduped_bam, bam_bai = DeDup.deduped_bam_bai,
-            database = known_indels,
-            database_idx = known_indels_idx,
-            realigned_bam = "~{sample}.realigned.bam"
+        if (! skip_indelRealign){
+            call realign {
+                input:
+                t = thread_number,
+                ref = ref,
+                ref_idxes  = ref_idxes,
+                bam = DeDup.deduped_bam, bam_bai = DeDup.deduped_bam_bai,
+                database = known_indels,
+                database_idx = known_indels_idx,
+                realigned_bam = "~{sample}.realigned.bam"
+            }
         }
 
         call recalibration {
@@ -140,7 +153,8 @@ workflow pipeline {
             ref_idxes  = ref_idxes,
             t = thread_number,
             intervals = intervals,
-            bam = realign.realigned_bam, bam_bai = realign.realigned_bam_bai,
+            bam = select_first([realign.realigned_bam, DeDup.deduped_bam]),
+            bam_bai = select_first([realign.realigned_bam_bai, DeDup.deduped_bam_bai]),
             database = flatten([known_dbsnp, known_indels]),
             database_idx = flatten([known_dbsnp_idx, known_indels_idx]),
             recal_data = "~{sample}.recal_data.table"
@@ -148,8 +162,8 @@ workflow pipeline {
 
     }
 
-    Map[String, File] bam_dict = as_map(zip(sample_array, realign.realigned_bam))
-    Map[String, File] bai_dict = as_map(zip(sample_array, realign.realigned_bam_bai))
+    Map[String, File] bam_dict = as_map(zip(sample_array, select_first([realign.realigned_bam, DeDup.deduped_bam])))
+    Map[String, File] bai_dict = as_map(zip(sample_array, select_first([realign.realigned_bam_bai, DeDup.deduped_bam_bai])))
     Map[String, File] recal_dict = as_map(zip(sample_array, recalibration.recal_data))
     Array[Array[String]] pair_array = read_tsv(pair_info)
 
