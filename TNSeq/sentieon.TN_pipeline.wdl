@@ -35,7 +35,6 @@ workflow pipeline {
         Array[File] intervals = []
         Boolean skip_fastp = false
         # 默认跳过indel realgin，因为大部分caller已经在
-        Boolean skip_indelRealign = true
     }
 
     call getFastqInfo{}
@@ -134,42 +133,28 @@ workflow pipeline {
             coverage_metrics = "~{sample}.cov.metrics.txt"
         }
 
-        if (! skip_indelRealign){
-            call realign {
-                input:
-                t = thread_number,
-                ref = ref,
-                ref_idxes  = ref_idxes,
-                bam = DeDup.deduped_bam, bam_bai = DeDup.deduped_bam_bai,
-                database = known_indels,
-                database_idx = known_indels_idx,
-                realigned_bam = "~{sample}.realigned.bam"
-            }
-        }
-
         call recalibration {
             input: 
             ref = ref,
-            ref_idxes  = ref_idxes,
+            ref_idxes = ref_idxes,
             t = thread_number,
             intervals = intervals,
-            bam = select_first([realign.realigned_bam, DeDup.deduped_bam]),
-            bam_bai = select_first([realign.realigned_bam_bai, DeDup.deduped_bam_bai]),
+            bam = DeDup.deduped_bam,
+            bam_bai = DeDup.deduped_bam_bai,
             database = flatten([known_dbsnp, known_indels]),
             database_idx = flatten([known_dbsnp_idx, known_indels_idx]),
             recal_data = "~{sample}.recal_data.table"
         }
-
     }
 
-    Map[String, File] bam_dict = as_map(zip(sample_array, select_first([realign.realigned_bam, DeDup.deduped_bam])))
-    Map[String, File] bai_dict = as_map(zip(sample_array, select_first([realign.realigned_bam_bai, DeDup.deduped_bam_bai])))
+    Map[String, File] bam_dict = as_map(zip(sample_array, DeDup.deduped_bam))
+    Map[String, File] bai_dict = as_map(zip(sample_array, DeDup.deduped_bam_bai))
     Map[String, File] recal_dict = as_map(zip(sample_array, recalibration.recal_data))
     Array[Array[String]] pair_array = read_tsv(pair_info)
 
     scatter (each in pair_array) {
         String tumor_sample = each[0]
-        String normal_sample = if length(each) > 1 then each[1] else "?"
+        String normal_sample = if length(each) > 1 then each[1] else '?'
 
         call TNhaplotyper2 {
             input:
@@ -181,20 +166,17 @@ workflow pipeline {
             bam_bais = if length(each) > 1 then [bai_dict[tumor_sample], bai_dict[normal_sample]] else [bai_dict[tumor_sample]],
             recal_datas = if length(each) > 1 then [recal_dict[tumor_sample], recal_dict[normal_sample]] else [recal_dict[tumor_sample]],
             tumor_sample = "~{tumor_sample}",
-            normal_sample = "~{normal_sample}",
+            normal_sample = if length(each) > 1 then each[1] else None,
             germline_vcf = germline_vcf,
             germline_vcf_idx = germline_vcf_idx,
             pon = pon,
             pon_idx = pon_idx,
             out_vcf = "~{tumor_sample}.TNhaplotyper2.vcf.gz",
-            orientation_sample = "~{tumor_sample}",
             orientation_data = "~{tumor_sample}.orientation.data",
-            contamination_tumor = "~{tumor_sample}",
-            contamination_normal = "~{normal_sample}",
-            germline_vcf2 = germline_vcf,
             tumor_segments = "~{tumor_sample}.contamination.segments",
             contamination_data = "~{tumor_sample}.contamination.data"
         }
+
         if (length(each) > 1) {
             call TNfilter {
                 input:
@@ -214,8 +196,8 @@ workflow pipeline {
         call snpEff {
             input:
             database_files = snpeff_databse,
-            in_vcf = TNfilter.out_vcf,
-            in_vcf_idx = TNfilter.out_vcf_idx,
+            in_vcf = select_first([TNhaplotyper2.out_vcf, TNfilter.out_vcf]),
+            in_vcf_idx = select_first([TNhaplotyper2.out_vcf_idx, TNfilter.out_vcf_idx]),
             out_vcf = "~{tumor_sample}.final.annot.vcf"
         }
     }
@@ -245,16 +227,14 @@ workflow pipeline {
         Array[File] DeDup_deduped_bam = DeDup.deduped_bam
         Array[File] DeDup_deduped_bam_bai = DeDup.deduped_bam_bai
         Array[File] CoverageMetrics_coverage_metrics = CoverageMetrics.coverage_metrics
-        Array[File] realign_realigned_bam = realign.realigned_bam
-        Array[File] realign_realigned_bam_bai = realign.realigned_bam_bai
         Array[File] recalibration_recal_data = recalibration.recal_data
         Array[File] TNhaplotyper2_out_vcf = TNhaplotyper2.out_vcf
         Array[File] TNhaplotyper2_out_vcf_idx = TNhaplotyper2.out_vcf_idx
         Array[File?] TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
         Array[File?] TNhaplotyper2_tumor_segments = TNhaplotyper2.tumor_segments
         Array[File?] TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
-        Array[File] TNfilter_out_vcf = TNfilter.out_vcf
-        Array[File] TNfilter_out_vcf_idx = TNfilter.out_vcf_idx
+        Array[File?] TNfilter_out_vcf = TNfilter.out_vcf
+        Array[File?] TNfilter_out_vcf_idx = TNfilter.out_vcf_idx
         Array[File] snpEff_out_vcf = snpEff.out_vcf
     }
 
@@ -910,11 +890,7 @@ task TNhaplotyper2{
         File? pon
         File? pon_idx
         String out_vcf
-        String? orientation_sample
         String? orientation_data
-        String? contamination_tumor = "tumor"
-        String? contamination_normal
-        File? germline_vcf2
         String? tumor_segments
         String? contamination_data
         # for runtime
@@ -935,8 +911,8 @@ task TNhaplotyper2{
         ~{"--germline_vcf " + germline_vcf} \
         ~{"--pon " + pon} \
         ~{out_vcf} \
-        ~{"--algo OrientationBias --tumor_sample " + orientation_sample + " " + orientation_data} \
-        ~{"--algo ContaminationModel --tumor_sample " + contamination_tumor + " --normal_sample " + contamination_normal + " --vcf " + germline_vcf2 + " --tumor_segments " + tumor_segments + " " + contamination_data}
+        ~{"--algo OrientationBias --tumor_sample " + tumor_sample + " " + orientation_data} \
+        ~{"--algo ContaminationModel --tumor_sample " + tumor_sample + " --normal_sample " + normal_sample + " --vcf " + germline_vcf + " --tumor_segments " + tumor_segments + " " + contamination_data}
     >>>
 
     output {
@@ -968,11 +944,7 @@ task TNhaplotyper2{
         germline_vcf: {prefix: "--germline_vcf ", type: "infile", level: "optional", default: "None", range: "None", array: "False", desc: "the location of the population germline resource"}
         pon: {prefix: "--pon ", type: "infile", level: "optional", default: "None", range: "None", array: "False", desc: "the location and name of panel of normal VCF file"}
         out_vcf: {prefix: "", type: "str", level: "required", default: "None", range: "None", array: "False", desc: "output vcf file of TNhaplotyper2, this will be used later for filtering"}
-        orientation_sample: {prefix: "--algo OrientationBias --tumor_sample ", type: "str", level: "optional", default: "None", range: "None", array: "False", desc: "tumor sample name"}
         orientation_data: {prefix: "", type: "str", level: "optional", default: "None", range: "None", array: "False", desc: "output orientation bias result file"}
-        contamination_tumor: {prefix: "--algo ContaminationModel --tumor_sample ", type: "str", level: "optional", default: "tumor", range: "None", array: "False", desc: "tumor sample name"}
-        contamination_normal: {prefix: "--normal_sample ", type: "str", level: "optional", default: "None", range: "None", array: "False", desc: "normal sample name"}
-        germline_vcf2: {prefix: "--vcf ", type: "infile", level: "optional", default: "None", range: "None", array: "False", desc: "the location of the population germline resource"}
         tumor_segments: {prefix: "--tumor_segments ", type: "str", level: "optional", default: "None", range: "None", array: "False", desc: "output file name of the file containing the tumor segments information produced by ContaminationModel"}
         contamination_data: {prefix: "", type: "str", level: "optional", default: "None", range: "None", array: "False", desc: "output file containing the contamination information produced by ContaminationModel"}
     }
