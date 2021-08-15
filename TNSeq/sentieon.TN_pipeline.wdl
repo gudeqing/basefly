@@ -139,6 +139,7 @@ workflow pipeline {
             ref = ref,
             ref_idxes  = ref_idxes,
             t = thread_number,
+            intervals = intervals,
             bam = realign.realigned_bam, bam_bai = realign.realigned_bam_bai,
             database = flatten([known_dbsnp, known_indels]),
             database_idx = flatten([known_dbsnp_idx, known_indels_idx]),
@@ -154,7 +155,7 @@ workflow pipeline {
 
     scatter (each in pair_array) {
         String tumor_sample = each[0]
-        String normal_sample = each[1]
+        String normal_sample = if length(each) > 1 then each[1] else "?"
 
         call TNhaplotyper2 {
             input:
@@ -162,9 +163,9 @@ workflow pipeline {
             ref_idxes  = ref_idxes,
             t = thread_number,
             intervals = intervals,
-            bams = [bam_dict[tumor_sample], bam_dict[normal_sample]],
-            bam_bais = [bai_dict[tumor_sample], bai_dict[normal_sample]],
-            recal_datas = [recal_dict[tumor_sample], recal_dict[normal_sample]],
+            bams = if length(each) > 1 then [bam_dict[tumor_sample], bam_dict[normal_sample]] else [bam_dict[tumor_sample]],
+            bam_bais = if length(each) > 1 then [bai_dict[tumor_sample], bai_dict[normal_sample]] else [bai_dict[tumor_sample]],
+            recal_datas = if length(each) > 1 then [recal_dict[tumor_sample], recal_dict[normal_sample]] else [recal_dict[tumor_sample]],
             tumor_sample = "~{tumor_sample}",
             normal_sample = "~{normal_sample}",
             germline_vcf = germline_vcf,
@@ -180,19 +181,20 @@ workflow pipeline {
             tumor_segments = "~{tumor_sample}.contamination.segments",
             contamination_data = "~{tumor_sample}.contamination.data"
         }
-
-        call TNfilter {
-            input:
-            ref = ref,
-            ref_idxes  = ref_idxes,
-            tumor_sample = "~{tumor_sample}",
-            normal_sample = "~{normal_sample}",
-            tmp_vcf = TNhaplotyper2.out_vcf,
-            tmp_vcf_idx = TNhaplotyper2.out_vcf_idx,
-            contamination = TNhaplotyper2.contamination_data,
-            tumor_segments = TNhaplotyper2.tumor_segments,
-            orientation_data = TNhaplotyper2.orientation_data,
-            out_vcf = "~{tumor_sample}.final.vcf.gz"
+        if (length(each) > 1) {
+            call TNfilter {
+                input:
+                ref = ref,
+                ref_idxes  = ref_idxes,
+                tumor_sample = "~{tumor_sample}",
+                normal_sample = "~{normal_sample}",
+                tmp_vcf = TNhaplotyper2.out_vcf,
+                tmp_vcf_idx = TNhaplotyper2.out_vcf_idx,
+                contamination = TNhaplotyper2.contamination_data,
+                tumor_segments = TNhaplotyper2.tumor_segments,
+                orientation_data = TNhaplotyper2.orientation_data,
+                out_vcf = "~{tumor_sample}.final.vcf.gz"
+            }
         }
 
         call snpEff {
@@ -436,8 +438,7 @@ task get_metrics{
         ~{"-i " + bam} \
         ~{"--algo MeanQualityByCycle " + mq_metrics} \
         ~{"--algo QualDistribution " + qd_metrics} \
-        ~{"--algo GCBias --summary " + gc_summary} \
-        ~{gc_metrics} \
+        ~{"--algo GCBias --summary " + gc_summary} ~{gc_metrics} \
         ~{"--algo AlignmentStat " + aln_metrics} \
         ~{"--algo InsertSizeMetricAlgo " + insert_metrics} 
     >>>
@@ -832,6 +833,7 @@ task recalibration{
         Int t = 16
         File ref
         Array[File] ref_idxes
+        Array[File] intervals
         File bam
         File bam_bai
         Array[File] database
@@ -844,6 +846,7 @@ task recalibration{
     command <<<
         set -e 
         sentieon driver \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
