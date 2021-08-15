@@ -10,7 +10,6 @@ version development
 # 6. Variant calling: This step identifies the sites where your data displays variation relative to the reference genome, and calculates genotypes for each sample at that site.
 # 7. Varinat annotation
 
-
 workflow pipeline {
     input {
         File ref
@@ -34,12 +33,12 @@ workflow pipeline {
         File pair_info
         Array[File] intervals = []
         Boolean skip_fastp = false
-        # 默认跳过indel realgin，因为大部分caller已经在
     }
 
     call getFastqInfo{}
 
     Array[String] sample_array = keys(getFastqInfo.fastq_info)
+
     scatter (each in sample_array) {
         String sample = each
         File read1 = getFastqInfo.fastq_info[each][0][0]
@@ -55,7 +54,7 @@ workflow pipeline {
         }
 
         call bwa_mem {
-            input: 
+            input:
             readgroup = "@RG\\tID:~{sample}\\tSM:~{sample}\\tPL:~{platform}",
             t = thread_number,
             ref = ref,
@@ -68,7 +67,7 @@ workflow pipeline {
         }
 
         call get_metrics {
-            input: 
+            input:
             t = thread_number,
             ref = ref,
             ref_idxes  = ref_idxes,
@@ -83,25 +82,25 @@ workflow pipeline {
         }
 
         call plotGCBias {
-            input: 
+            input:
             out = "~{sample}.GCBias.pdf",
             i = get_metrics.gc_metrics
         }
 
         call plotMeanQualityByCycle {
-            input: 
+            input:
             out = "~{sample}.MeanQualityByCycle.pdf",
             i = get_metrics.mq_metrics
         }
 
         call plotQualDistribution {
-            input: 
+            input:
             out = "~{sample}.QualDistribution.pdf",
             i = get_metrics.qd_metrics
         }
 
         call plotInsertSize {
-            input: 
+            input:
             out = "~{sample}.InsertSizeMetricAlgo.pdf",
             i = get_metrics.insert_metrics
         }
@@ -134,7 +133,7 @@ workflow pipeline {
         }
 
         call recalibration {
-            input: 
+            input:
             ref = ref,
             ref_idxes = ref_idxes,
             t = thread_number,
@@ -186,6 +185,7 @@ workflow pipeline {
                 normal_sample = "~{normal_sample}",
                 tmp_vcf = TNhaplotyper2.out_vcf,
                 tmp_vcf_idx = TNhaplotyper2.out_vcf_idx,
+                tmp_vcf_stats = TNhaplotyper2.out_vcf_stats,
                 contamination = TNhaplotyper2.contamination_data,
                 tumor_segments = TNhaplotyper2.tumor_segments,
                 orientation_data = TNhaplotyper2.orientation_data,
@@ -235,6 +235,7 @@ workflow pipeline {
         Array[File?] TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
         Array[File?] TNfilter_out_vcf = TNfilter.out_vcf
         Array[File?] TNfilter_out_vcf_idx = TNfilter.out_vcf_idx
+        Array[File?] TNfilter_out_vcf_stats = TNfilter.out_vcf_stats
         Array[File] snpEff_out_vcf = snpEff.out_vcf
     }
 
@@ -360,7 +361,7 @@ task bwa_mem{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon bwa mem -M \
         -R  '~{readgroup}' \
         ~{"-t " + t} \
@@ -372,7 +373,7 @@ task bwa_mem{
         ~{"-r " + ref2} \
         ~{"-o " + out} \
         ~{"-t " + t2} \
-        --sam2bam -i - 
+        --sam2bam -i -
     >>>
 
     output {
@@ -424,7 +425,7 @@ task get_metrics{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon driver \
         ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
@@ -434,7 +435,7 @@ task get_metrics{
         ~{"--algo QualDistribution " + qd_metrics} \
         ~{"--algo GCBias --summary " + gc_summary} ~{gc_metrics} \
         ~{"--algo AlignmentStat " + aln_metrics} \
-        ~{"--algo InsertSizeMetricAlgo " + insert_metrics} 
+        ~{"--algo InsertSizeMetricAlgo " + insert_metrics}
     >>>
 
     output {
@@ -481,11 +482,11 @@ task plotGCBias{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon plot \
         ~{method} \
         ~{"-o " + out} \
-        ~{i} 
+        ~{i}
     >>>
 
     output {
@@ -521,11 +522,11 @@ task plotMeanQualityByCycle{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon plot \
         ~{method} \
         ~{"-o " + out} \
-        ~{i} 
+        ~{i}
     >>>
 
     output {
@@ -561,11 +562,11 @@ task plotQualDistribution{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon plot \
         ~{method} \
         ~{"-o " + out} \
-        ~{i} 
+        ~{i}
     >>>
 
     output {
@@ -601,11 +602,11 @@ task plotInsertSize{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon plot \
         ~{method} \
         ~{"-o " + out} \
-        ~{i} 
+        ~{i}
     >>>
 
     output {
@@ -642,11 +643,11 @@ task LocusCollector{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon driver \
         ~{"-t " + t} \
         ~{"-i " + bam} \
-        ~{"--algo LocusCollector --fun score_info " + score} 
+        ~{"--algo LocusCollector --fun score_info " + score}
     >>>
 
     output {
@@ -687,14 +688,14 @@ task DeDup{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon driver \
         ~{"-t " + t} \
         ~{"-i " + bam} \
         --algo Dedup \
         ~{"--score_info " + score} \
         ~{"--metrics " + dedup_metrics} \
-        ~{deduped_bam} 
+        ~{deduped_bam}
     >>>
 
     output {
@@ -738,13 +739,13 @@ task CoverageMetrics{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon driver \
         ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
-        ~{"--algo CoverageMetrics " + coverage_metrics} 
+        ~{"--algo CoverageMetrics " + coverage_metrics}
     >>>
 
     output {
@@ -786,14 +787,14 @@ task realign{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon driver \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
         --algo Realigner \
         ~{sep=' ' prefix("-k ", database)} \
-        ~{realigned_bam} 
+        ~{realigned_bam}
     >>>
 
     output {
@@ -838,7 +839,7 @@ task recalibration{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon driver \
         ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
@@ -846,7 +847,7 @@ task recalibration{
         ~{"-i " + bam} \
         --algo QualCal \
         ~{sep=' ' prefix("-k  ", database)} \
-        ~{recal_data} 
+        ~{recal_data}
     >>>
 
     output {
@@ -898,7 +899,7 @@ task TNhaplotyper2{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon driver \
         ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
         ~{"-t " + t} \
@@ -918,6 +919,7 @@ task TNhaplotyper2{
     output {
         File out_vcf = "~{out_vcf}"
         File out_vcf_idx = "~{out_vcf}.tbi"
+        File out_vcf_stats = "~{out_vcf}.stats"
         File orientation_data = "~{orientation_data}"
         File? tumor_segments = "~{tumor_segments}"
         File? contamination_data = "~{contamination_data}"
@@ -959,6 +961,7 @@ task TNfilter{
         String? normal_sample
         File tmp_vcf
         File tmp_vcf_idx
+        File tmp_vcf_stats
         File? contamination
         File? tumor_segments
         File? orientation_data
@@ -968,7 +971,7 @@ task TNfilter{
     }
 
     command <<<
-        set -e 
+        set -e
         sentieon driver \
         ~{"-r " + ref} \
         --algo TNfilter \
@@ -978,7 +981,7 @@ task TNfilter{
         ~{"--contamination " + contamination} \
         ~{"--tumor_segments " + tumor_segments} \
         ~{"--orientation_priors " + orientation_data} \
-        ~{out_vcf} 
+        ~{out_vcf}
     >>>
 
     output {
@@ -1028,7 +1031,7 @@ task snpEff{
     String genome_version = basename(database_dir)
     String database_parent_dir = sub(database_dir, basename(database_dir), "")
     command <<<
-        set -e 
+        set -e
         java -Xmx9g snpEff.jar ann \
         ~{genome_version} \
         -dataDir  ~{database_parent_dir} \
@@ -1038,7 +1041,7 @@ task snpEff{
         ~{other_args} \
         ~{in_vcf} \
         > \
-        ~{out_vcf} 
+        ~{out_vcf}
     >>>
 
     output {
