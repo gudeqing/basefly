@@ -55,9 +55,12 @@ class Argument:
         if type(self.default) == int and self.type == 'str':
             # print(f'{self.name}: type of default value is not agree with type specified!')
             self.type = 'int'
-        if type(self.default) == float and self.type == 'str':
+        elif type(self.default) == float and self.type == 'str':
             # print(f'{self.name}: type of default value is not agree with type specified!')
             self.type = 'float'
+        elif type(self.default) == bool:
+            self.type = 'bool'
+
         if self.type == 'bool':
             # 对于布尔参数，其一定为必要参数类型,可选范围为True或False
             self.level = 'required'
