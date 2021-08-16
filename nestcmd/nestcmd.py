@@ -331,7 +331,7 @@ class ToWdlTask(object):
                         raise Exception(f'可重复使用参数必须要有前缀:{arg_info}')
                     if detail['type'] == 'bool':
                         raise Exception(f'可重复使用参数对应的值不能是bool类型:{arg_info}')
-                    cmd += ['~{' + 'prefix(' + f'"{detail["prefix"]} ", ' + arg_name + ')}']
+                    cmd += ['~{sep=" " ' + 'prefix(' + f'"{detail["prefix"]}", ' + arg_name + ')}']
             else:
                 if not detail['array']:
                     if detail['prefix'] == '':
