@@ -19,6 +19,8 @@ def get_fastq_info(fastq_files: tuple = None, fastq_dirs: tuple = None, out='fas
     """
     if not (fastq_dirs or fastq_files):
         raise Exception("At least one of 'fastq_files' or 'fastq_dirs' must be provided.")
+    if r1_name == r2_name:
+        raise Exception('read1 filename == read2 filename ?!')
 
     result_dict = dict()
 

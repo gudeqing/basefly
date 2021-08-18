@@ -23,13 +23,17 @@ workflow pipeline {
         File? pon_idx
         File? germline_vcf
         File? germline_vcf_idx
-        Array[File] snpeff_databse
+        # annotation database
+        File vep_cache
+        File vep_plugins_zip
+        Array[String] vep_plugin_names = ['Frameshift', 'Wildtype']
         Int thread_number = 15
         String platform = "ILLUMINA"
         # tumor normal pair info, two-column txt file, first column is tumor sample name
         File pair_info
         Array[File] intervals = []
         Boolean skip_fastp = false
+        Boolean skip_vep = false
     }
 
     call getFastqInfo{}
@@ -152,6 +156,29 @@ workflow pipeline {
         String tumor_sample = each[0]
         String normal_sample = if length(each) > 1 then each[1] else '?'
 
+        if (length(each) > 1) {
+            # germline variant calling
+            call Haplotyper {
+                input:
+                intervals = intervals,
+                bam = bam_dict[normal_sample],
+                recal_data = recal_dict[normal_sample],
+                ref = ref,
+                ref_indexes = ref_idxes,
+                out_vcf = "~{normal_sample}.g.vcf.gz"
+            }
+
+            call GVCFtyper {
+                input:
+                ref = ref,
+                ref_indexes = ref_idxes,
+                in_gvcf = [Haplotyper.out_vcf],
+                in_gvcf_idx = [Haplotyper.out_vcf_idx],
+                known_dbsnp = known_dbsnp[0],
+                out_vcf = "~{normal_sample}.vcf.gz"
+            }
+        }
+
         call TNhaplotyper2 {
             input:
             ref = ref,
@@ -190,12 +217,26 @@ workflow pipeline {
             }
         }
 
-        call snpEff {
-            input:
-            database_files = snpeff_databse,
-            in_vcf = select_first([TNhaplotyper2.out_vcf, TNfilter.out_vcf]),
-            in_vcf_idx = select_first([TNhaplotyper2.out_vcf_idx, TNfilter.out_vcf_idx]),
-            out_vcf = "~{tumor_sample}.final.annot.vcf"
+#        call snpEff {
+#            input:
+#            in_vcf = select_first([TNhaplotyper2.out_vcf, TNfilter.out_vcf]),
+#            in_vcf_idx = select_first([TNhaplotyper2.out_vcf_idx, TNfilter.out_vcf_idx]),
+#            out_vcf = "~{tumor_sample}.final.annot.vcf"
+#        }
+        if (! skip_vep) {
+            call VEP {
+                input:
+                    input_file = select_first([TNhaplotyper2.out_vcf, TNfilter.out_vcf]),
+                    input_file_idx = select_first([TNhaplotyper2.out_vcf_idx, TNfilter.out_vcf_idx]),
+                    cache_targz = vep_cache,
+                    plugins_zip= vep_plugins_zip,
+                    plugin_names = vep_plugin_names,
+                    output_file = "~{tumor_sample}.vep.vcf.gz",
+                    stats_file = "~{tumor_sample}.vep.summary.html",
+                    fasta = ref,
+                    fasta_idx = ref_idxes,
+                    fork = thread_number
+            }
         }
     }
 
@@ -225,15 +266,22 @@ workflow pipeline {
         Array[File] DeDup_deduped_bam_bai = DeDup.deduped_bam_bai
         Array[File] CoverageMetrics_coverage_metrics = CoverageMetrics.coverage_metrics
         Array[File] recalibration_recal_data = recalibration.recal_data
+        Array[File?] Haplotyper_gvcf = Haplotyper.out_vcf
+        Array[File?] Haplotyper_gvcf_idx = Haplotyper.out_vcf_idx
+        Array[File?] GVCFtyper_vcf = GVCFtyper.out_vcf
+        Array[File?] GVCFtyper_vcf_idx = GVCFtyper.out_vcf_idx
         Array[File] TNhaplotyper2_out_vcf = TNhaplotyper2.out_vcf
         Array[File] TNhaplotyper2_out_vcf_idx = TNhaplotyper2.out_vcf_idx
+        Array[File] TNhaplotyper2_out_vcf_stats = TNhaplotyper2.out_vcf_stats
         Array[File?] TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
         Array[File?] TNhaplotyper2_tumor_segments = TNhaplotyper2.tumor_segments
         Array[File?] TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
         Array[File?] TNfilter_out_vcf = TNfilter.out_vcf
         Array[File?] TNfilter_out_vcf_idx = TNfilter.out_vcf_idx
-        Array[File?] TNfilter_out_vcf_stats = TNfilter.out_vcf_stats
-        Array[File] snpEff_out_vcf = snpEff.out_vcf
+#        Array[File] snpEff_out_vcf = snpEff.out_vcf
+        Array[File?] vep_out_vcf = VEP.out_vcf
+        Array[File?] vep_out_vcf_idx = VEP.out_vcf_idx
+        Array[File?] vep_out_vcf_stats = VEP.stats_file
     }
 
 }
@@ -242,8 +290,8 @@ task getFastqInfo{
     input {
         Array[Directory]? fastq_dirs
         Array[File]? fastq_files
-        String r1_name = '(.*).read1.fastq.gz'
-        String r2_name = '(.*).read2.fastq.gz'
+        String r1_name = '(.*?)_.*R1_001.fastq.gz'
+        String r2_name = '(.*?)_.*R2_001.fastq.gz'
         String docker = 'gudeqing/getfastqinfo:1.0'
     }
 
@@ -1013,30 +1061,33 @@ task TNfilter{
 task snpEff{
     input {
 #        String genome_version = "hg19"
-        Array[File] database_files
+        File database
+        # genome_version为database解压后的文件夹名称
+        String genome_version = "GRCh37.75"
         Boolean cancer = true
         File? cancerSamples
         Boolean canon = false
-        String? other_args
+        String? other_args = ' '
         File in_vcf
         File in_vcf_idx
         String out_vcf
         # for runtime
-        String docker = "?"
+        String docker = "snpeff:5.0e"
     }
-    String database_dir = sub(database_files[0], basename(database_files[0]), "")
-    String genome_version = basename(database_dir)
-    String database_parent_dir = sub(database_dir, basename(database_dir), "")
+
     command <<<
         set -e
+        mkdir -p data
+        unzip database -d ./data
         java -Xmx9g snpEff.jar ann \
-        ~{genome_version} \
-        -dataDir  ~{database_parent_dir} \
+        -nodownload \
+        -dataDir ./data \
         ~{if cancer then "-cancer  " else ""} \
         ~{"-cancerSamples " + cancerSamples} \
         ~{if canon then "-canon  " else ""} \
         ~{other_args} \
         ~{in_vcf} \
+        ~{genome_version} \
         > \
         ~{out_vcf}
     >>>
@@ -1057,8 +1108,8 @@ task snpEff{
     }
 
     parameter_meta {
-#        genome_version: {prefix: "", type: "str", level: "required", default: "hg19", range: "None", array: "False", desc: "human genome version"}
-        database_files: {prefix: "-dataDir ", type: "indir", level: "required", default: "None", range: "None", array: "False", desc: "Override data_dir parameter from config file"}
+        genome_version: {prefix: "", type: "str", level: "required", default: "GRCh37.75", range: "None", array: "False", desc: "human genome version"}
+        database: {prefix: "-dataDir ", type: "indir", level: "required", default: "None", range: "None", array: "False", desc: "zipfile of database. unzip dir will be used to override data_dir parameter from config file"}
         cancer: {prefix: "-cancer ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Perform cancer comparisons (Somatic vs Germline)"}
         cancerSamples: {prefix: "-cancerSamples ", type: "infile", level: "optional", default: "None", range: "None", array: "False", desc: "Two column TXT file defining 'oringinal derived' samples. If '-cancer' used and the file is missing, then the last sample will be assumed as tumor sample."}
         canon: {prefix: "-canon ", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "Only use canonical transcripts"}
@@ -1069,3 +1120,264 @@ task snpEff{
 
 }
 
+task Haplotyper{
+    input {
+        Array[File] intervals
+        File bam
+        File recal_data
+        File ref
+        Array[File] ref_indexes
+        String emit_mode = "gvcf"
+        Int ploidy = 2
+        String out_vcf
+        # for runtime
+        String docker = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
+    }
+
+    command <<<
+        set -e
+        sentieon driver \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
+        ~{"-i " + bam} \
+        ~{"-q " + recal_data} \
+        ~{"-r " + ref} \
+        --algo Haplotyper \
+        ~{"--emit_mode " + emit_mode} \
+        ~{"--ploidy " + ploidy} \
+        ~{out_vcf}
+    >>>
+
+    output {
+        File out_vcf = "~{out_vcf}"
+        File out_vcf_idx = "~{out_vcf}.tbi"
+    }
+
+    runtime {
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
+    }
+
+    meta {
+        name: "Haplotyper"
+        desc: "This is description of the tool/workflow."
+        author: "unknown"
+        source: "source URL for the tool"
+    }
+
+    parameter_meta {
+        intervals: {prefix: "--interval ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "interval file, support bed file or picard interval or vcf format"}
+        bam: {prefix: "-i ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "reccaled tumor and normal bam list"}
+        recal_data: {prefix: "-q ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "tumor and normal recal data list"}
+        ref: {prefix: "-r ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "reference fasta file"}
+        emit_mode: {prefix: "--emit_mode ", type: "str", level: "required", default: "gvcf", range: "None", array: "False", desc: "determines what calls will be emitted. possible values:variant,confident,all,gvcf"}
+        ploidy: {prefix: "--ploidy ", type: "int", level: "required", default: "2", range: "None", array: "False", desc: "determines the ploidy number of the sample being processed. The default value is 2."}
+        out_vcf: {prefix: "", type: "str", level: "required", default: "None", range: "None", array: "False", desc: "output vcf file"}
+    }
+
+}
+
+task GVCFtyper{
+    input {
+        File ref
+        Array[File] ref_indexes
+        Array[File] in_gvcf
+        Array[File] in_gvcf_idx
+        File known_dbsnp
+        Int call_conf = 30
+        String genotype_model = "multinomial"
+        String out_vcf
+        # for runtime
+        String docker = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
+    }
+
+    command <<<
+        set -e
+        sentieon driver \
+        ~{"-r " + ref} \
+        --algo GVCFtyper \
+        ~{sep=" " prefix("-v ", in_gvcf)} \
+        ~{"-d " + known_dbsnp} \
+        ~{"--call_conf " + call_conf} \
+        ~{"--genotype_model " + genotype_model} \
+        ~{out_vcf}
+    >>>
+
+    output {
+        File out_vcf = "~{out_vcf}"
+        File out_vcf_idx = "~{out_vcf}.tbi"
+    }
+
+    runtime {
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02"
+    }
+
+    meta {
+        name: "GVCFtyper"
+        desc: "This is description of the tool/workflow."
+        author: "unknown"
+        source: "source URL for the tool"
+    }
+
+    parameter_meta {
+        ref: {prefix: "-r ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "reference fasta file"}
+        in_gvcf: {prefix: "-v ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "input gvcf file"}
+        known_dbsnp: {prefix: "-d ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "dbsnp file"}
+        call_conf: {prefix: "--call_conf ", type: "int", level: "required", default: "30", range: "None", array: "False", desc: "determine the threshold of variant quality to emit a variant. Variants with quality less than CONFIDENCE will be not be added to the output VCF file."}
+        genotype_model: {prefix: "--genotype_model ", type: "str", level: "required", default: "multinomial", range: "{'multinomial', 'coalescent'}", array: "False", desc: "determines which model to use for genotyping and QUAL calculation"}
+        out_vcf: {prefix: "", type: "str", level: "required", default: "None", range: "None", array: "False", desc: "output vcf file"}
+    }
+
+}
+
+task VEP{
+    input {
+        File input_file
+        File input_file_idx
+        File fasta
+        Array[File] fasta_idx
+        String output_file = "tumor.vep.vcf.gz"
+        String output_format = "vcf"
+        String compress_output = "bgzip"
+        Boolean force_overwrite = true
+        Int fork = 4
+        # 解压缩需要很多时间，但没有办法
+        File cache_targz
+        File plugins_zip
+        Array[String] plugin_names = ['Frameshift', 'Wildtype']
+        String species = "homo_sapiens"
+        String assembly_version = "GRCh37"
+        String stats_file = "tumor.vep.summary.html"
+        Boolean cache = true
+        Boolean offline = true
+        Boolean merged = false
+        Boolean variant_class = true
+        String sift = "b"
+        String polyphen = "b"
+        String nearest = "transcript"
+        Boolean gene_phenotype = true
+        Boolean regulatory = true
+        Boolean phased = true
+        Boolean numbers = true
+        Boolean hgvs = true
+        Boolean transcript_version = true
+        Boolean symbol = true
+        Boolean tsl = true
+        Boolean canonical = true
+        Boolean biotype = true
+        Boolean mane = true
+        Boolean max_af = true
+        Boolean af_1kg = true
+        Boolean af_gnomad = true
+        Boolean af_esp = false
+        Boolean coding_only = false
+        Boolean pick = false
+        Boolean flag_pick = true
+        Boolean filter_common = true
+        # for runtime
+        String docker = "ensemblorg/ensembl-vep:release_104.3"
+    }
+
+    command <<<
+        set -e
+        tar zxf cache_targz
+        unzip plugins_zip -d Plugins
+        vep \
+        ~{"-i " + input_file} \
+        ~{"--fasta " + fasta} \
+        ~{"-o " + output_file} \
+        ~{"--" + output_format} \
+        ~{"--compress_output " + compress_output} \
+        ~{if force_overwrite then "--force_overwrite  " else ""} \
+        ~{"--fork " + fork} \
+        ~{"--species " + species} \
+        ~{"--assembly " + assembly_version} \
+        "--dir_cache ./ " \
+        --dir_plugins ./Plugins \
+        ~{"--stats_file " + stats_file} \
+        ~{if cache then "--cache  " else ""} \
+        ~{if offline then "--offline  " else ""} \
+        ~{if merged then "--merged  " else ""} \
+        ~{sep=" " prefix("--plugin ", plugin_names)} \
+        ~{if variant_class then "--variant_class  " else ""} \
+        ~{"--sift " + sift} \
+        ~{"--polyphen " + polyphen} \
+        ~{"--nearest " + nearest} \
+        ~{if gene_phenotype then "--gene_phenotype  " else ""} \
+        ~{if regulatory then "--regulatory  " else ""} \
+        ~{if phased then "--phased  " else ""} \
+        ~{if numbers then "--numbers  " else ""} \
+        ~{if hgvs then "--hgvs  " else ""} \
+        ~{if transcript_version then "--transcript_version  " else ""} \
+        ~{if symbol then "--symbol  " else ""} \
+        ~{if tsl then "--tsl  " else ""} \
+        ~{if canonical then "--canonical  " else ""} \
+        ~{if biotype then "--biotype  " else ""} \
+        ~{if mane then "--mane " else ""} \
+        ~{if max_af then "--max_af  " else ""} \
+        ~{if af_1kg then "--af_1kg  " else ""} \
+        ~{if af_gnomad then "--af_gnomad  " else ""} \
+        ~{if af_esp then "--af_esp  " else ""} \
+        ~{if coding_only then "--af_esp  " else ""} \
+        ~{if pick then "--pick " else ""} \
+        ~{if flag_pick then "--flag_pick  " else ""} \
+        ~{if filter_common then "--filter_common  " else ""}
+    >>>
+
+    output {
+        File out_vcf = "~{output_file}"
+        File out_vcf_idx = "~{output_file}.tbi"
+        File stats_file = "~{stats_file}"
+    }
+
+    runtime {
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/vep:release_104.3"
+    }
+
+    meta {
+        name: "VEP"
+        desc: "This is description of the tool/workflow."
+        author: "unknown"
+        source: "source URL for the tool"
+    }
+
+    parameter_meta {
+        input_file: {prefix: "-i ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "input file"}
+        fasta: {prefix: "--fasta ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache)."}
+        output_file: {prefix: "-o ", type: "str", level: "required", default: "tumor.vep.vcf.gz", range: "None", array: "False", desc: "output file"}
+        output_format: {prefix: "--", type: "str", level: "required", default: "vcf", range: "{'vcf', 'json', 'tab'}", array: "False", desc: "If we choose to write output in VCF format. Consequences are added in the INFO field of the VCF file, using the key 'CSQ'. Data fields are encoded separated by '|'; the order of fields is written in the VCF header. Output fields in the 'CSQ' INFO field can be selected by using --fields."}
+        compress_output: {prefix: "--compress_output ", type: "str", level: "required", default: "bgzip", range: "None", array: "False", desc: "Writes output compressed using either gzip or bgzip"}
+        force_overwrite: {prefix: "--force_overwrite ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Force overwriting of output file"}
+        fork: {prefix: "--fork ", type: "int", level: "required", default: "4", range: "None", array: "False", desc: "Use forking(multi-cpu/threads) to improve script runtime"}
+        species: {prefix: "--species ", type: "str", level: "required", default: "homo_sapiens", range: "None", array: "False", desc: "Species for your data. This can be the latin name e.g. homo_sapiens or any Ensembl alias e.g. mouse."}
+        assembly_version: {prefix: "--assembly ", type: "str", level: "required", default: "GRCh37", range: "None", array: "False", desc: "Select the assembly version to use if more than one available."}
+        cache_targz: {prefix: "--dir_cache ", type: "indir", level: "required", default: "None", range: "None", array: "False", desc: "Specify the cache files of VEP to use"}
+        plugins_zip: {prefix: "--dir_plugins ", type: "indir", level: "required", default: "None", range: "None", array: "False", desc: "Specify the plugin files to use"}
+        stats_file: {prefix: "--stats_file ", type: "str", level: "required", default: "tumor.vep.summary.html", range: "None", array: "False", desc: "Summary stats file name. This is an HTML file containing a summary of the VEP run - the file name must end with <.html>."}
+        cache: {prefix: "--cache ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Enables use of cache"}
+        offline: {prefix: "--offline ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Enables offline mode. No database connections, and a cache file or GFF/GTF file is required for annotation"}
+        merged: {prefix: "--merged ", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "Use the merged Ensembl and RefSeq cache. Consequences are flagged with the SOURCE of each transcript used."}
+        plugin_names: {prefix: "--plugin ", type: "str", level: "required", default: "['Frameshift', 'Wildtype']", range: "None", array: "False", desc: "Use named plugin. Plugin modules should be installed in the Plugins subdirectory of the VEP cache directory.Multiple plugins can be used by supplying the --plugin flag multiple times"}
+        variant_class: {prefix: "--variant_class ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Output the Sequence Ontology variant class."}
+        sift: {prefix: "--sift ", type: "str", level: "required", default: "b", range: "{'b', 's', 'p'}", array: "False", desc: "Species limited SIFT predicts whether an amino acid substitution affects protein function based on sequence homology and the physical properties of amino acids. VEP can output the prediction term, score or both."}
+        polyphen: {prefix: "--polyphen ", type: "str", level: "required", default: "b", range: "{'b', 's', 'p'}", array: "False", desc: "Human only PolyPhen is a tool which predicts possible impact of an amino acid substitution on the structure and function of a human protein using straightforward physical and comparative considerations. VEP can output the prediction term, score or both."}
+        nearest: {prefix: "--nearest ", type: "str", level: "required", default: "transcript", range: "{'gene', 'transcript', 'symbol'}", array: "False", desc: "Retrieve the transcript or gene with the nearest protein-coding transcription start site (TSS) to each input variant. Use transcript to retrieve the transcript stable ID, gene to retrieve the gene stable ID, or symbol to retrieve the gene symbol. Note that the nearest TSS may not belong to a transcript that overlaps the input variant, and more than one may be reported in the case where two are equidistant from the input coordinates."}
+        gene_phenotype: {prefix: "--gene_phenotype ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Indicates if the overlapped gene is associated with a phenotype, disease or trait."}
+        regulatory: {prefix: "--regulatory ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Look for overlaps with regulatory regions. VEP can also report if a variant falls in a high information position within a transcription factor binding site. Output lines have a Feature type of RegulatoryFeature or MotifFeature."}
+        phased: {prefix: "--phased ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Force VCF genotypes to be interpreted as phased. For use with plugins that depend on phased data."}
+        numbers: {prefix: "--numbers ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds affected exon and intron numbering to to output. Format is Number/Total"}
+        hgvs: {prefix: "--hgvs ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Add HGVS nomenclature based on Ensembl stable identifiers to the output. Both coding and protein sequence names are added where appropriate."}
+        transcript_version: {prefix: "--transcript_version ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Add version numbers to Ensembl transcript identifiers"}
+        symbol: {prefix: "--symbol ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds the gene symbol (e.g. HGNC) (where available) to the output."}
+        tsl: {prefix: "--tsl ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds the transcript support level for this transcript to the output."}
+        canonical: {prefix: "--canonical ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds a flag indicating if the transcript is the canonical transcript for the gene"}
+        biotype: {prefix: "--biotype ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds the biotype of the transcript or regulatory feature."}
+        max_af: {prefix: "--max_af ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Report the highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD"}
+        af_1kg: {prefix: "--af_1kg ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Add allele frequency from continental populations (AFR,AMR,EAS,EUR,SAS) of 1000 Genomes Phase 3 to the output."}
+        af_gnomad: {prefix: "--af_gnomad ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Include allele frequency from Genome Aggregation Database (gnomAD) exome populations. Note only data from the gnomAD exomes are included"}
+        af_esp: {prefix: "--af_esp ", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "Include allele frequency from NHLBI-ESP populations."}
+        coding_only: {prefix: "--af_esp ", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "Only return consequences that fall in the coding regions of transcripts. Not used by default"}
+        pick: {prefix: "--pick", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "Pick one line or block of consequence data per variant, including transcript-specific columns. This is the best method to use if you are interested only in one consequence per variant"}
+        flag_pick: {prefix: "--flag_pick ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "As per --pick, but adds the PICK flag to the chosen block of consequence data and retains others."}
+        filter_common: {prefix: "--filter_common ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters."}
+    }
+
+}
