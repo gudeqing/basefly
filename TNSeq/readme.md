@@ -24,9 +24,11 @@ The workflow has the following main steps:
 * Somatic variant discovery, with the following stages:
     1. (Optional) Estimate the cross-sample contamination and tumor segmentation.
     2. (Optional) Estimate any possible orientation bias present in the sequencing.
-    3. Somatic candidate variant calling on the two individual BAM files: this step identifies the potential sites where the cancer genome data displays somatic variations relative to the normal genome, and calculates genotypes at that site.
+    3. Somatic variant calling on the two individual BAM files: this step identifies the potential sites where the cancer genome data displays somatic variations relative to the normal genome, and calculates genotypes at that site.
     4. Filter the variants.
 * Annotate variants with the SnpEff software
+* HLA-I typing with optiType software
+* Phasing somatic variant with germline variant and annotate phased vcf with VEP
 
 ## Install
 
@@ -35,6 +37,8 @@ This workflow is developed to be run on XDP without any installation.
 ## Tools
 * sentieon
 * snpEff:5.0ef
+* optiType:1.3.1
+* GATK3:3.8-1
 
 ## Usage
 
@@ -55,14 +59,16 @@ In this bioinformatics pipeline you will need the following inputs:
     * Panel of normal VCF: list of common errors that appear as variants from multiple unrelated normal samples. The contents of this file will be used to identify variants that are more likely to be germline variants, and filter them as such.
     * Population resource VCF: list of population allele specific frequencies that will be used for filtering possible germline variants and to annotate the results.
 - snpEff database, you may download corresponding annotation database according to the manual of snpEff 
+- VEP-cache, please refer to http://asia.ensembl.org/info/docs/tools/vep/script/vep_cache.html#cache.
+```gitignore
+curl -O http://ftp.ensembl.org/pub/release-104/variation/indexed_vep_cache/homo_sapiens_vep_104_GRCh38.tar.gz
+```
+- VEP-plugins, Wildtype and Frameshift plugins is needed for pvacseq (https://pvactools.readthedocs.io/en/latest/pvacseq.html)
 
 
 
 ## To do list
-- support multiple paired samples
-- support tumor only mode
 - support CNV detection
-- support VEP annotation
 
 ## Maintainers
 
