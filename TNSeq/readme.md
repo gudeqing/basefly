@@ -35,7 +35,7 @@ The workflow has the following main steps:
 This workflow is developed to be run on XDP without any installation.
 
 ## Tools
-* sentieon
+* sentieon, TNhaplotyper2 is used for in-del calling, TNhaplotyper2 matches the latest (currently 4.1.9) Mutect2’s result with faster speed.
 * snpEff:5.0ef
 * optiType:1.3.1
 * GATK3:3.8-1
@@ -69,6 +69,7 @@ curl -O http://ftp.ensembl.org/pub/release-104/variation/indexed_vep_cache/homo_
 
 ## To do list
 - support CNV detection
+- support TNscope,TNscope pipeline uses Sentieon’s proprietary algorithm to reach the fast speed and the highest accuracy, especially for clinical samples
 
 ## Maintainers
 

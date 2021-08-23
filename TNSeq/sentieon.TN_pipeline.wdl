@@ -536,7 +536,7 @@ task get_metrics{
     command <<<
         set -e
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else [' ']} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -850,7 +850,7 @@ task CoverageMetrics{
     command <<<
         set -e
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else [' ']} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -950,7 +950,7 @@ task recalibration{
     command <<<
         set -e
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else [' ']} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{"-i " + bam} \
@@ -1010,7 +1010,7 @@ task TNhaplotyper2{
     command <<<
         set -e
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else [' ']} \
         ~{"-t " + t} \
         ~{"-r " + ref} \
         ~{sep=' ' prefix("-i  ", bams)} \
@@ -1202,7 +1202,7 @@ task Haplotyper{
     command <<<
         set -e
         sentieon driver \
-        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else []} \
+        ~{sep=' ' if length(intervals) > 0 then prefix("--interval ", intervals) else [' ']} \
         ~{"-i " + bam} \
         ~{"-q " + recal_data} \
         ~{"-r " + ref} \
