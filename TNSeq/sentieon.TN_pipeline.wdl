@@ -8,12 +8,15 @@ version development
 # 4. (optional) Indel realignment: This step performs a local realignment around indels. This step is necessary as reads mapped on the edges of indels often get mapped with mismatching bases that are mapping artifacts. However, when using haplotype based callers such as Haplotyper or DNAscope, this step is not required, as the variant caller performs a local reassembly that provides most of the accuracy increase that results from Indel Realignment.
 # 5. Base quality score recalibration (BQSR): This step modifies the quality scores assigned to individual read bases of the sequence read data. This action removes experimental biases caused by the sequencing methodology.
 # 6. Variant calling: This step identifies the sites where your data displays variation relative to the reference genome, and calculates genotypes for each sample at that site.
-# 7. Varinat annotation
+# 7. Somatic variant annotation with VEP
+# 8. Phasing somatic variant with germline variant and annotate phased vcf with VEP
+# 9. HLA-I typing with OptiType
 
 workflow pipeline {
     input {
         File ref
         Array[File] ref_idxes
+        Array[File] bwa_idxes
         Array[File] known_dbsnp
         Array[File] known_dbsnp_idx
         # known indels example [1000G_phase1.indels.b37.vcf.gz, Mills_and_1000G_gold_standard.indels.b37.vcf.gz]
@@ -34,6 +37,7 @@ workflow pipeline {
         Array[File] intervals = []
         Boolean skip_fastp = false
         Boolean skip_vep = false
+        Boolean skip_optiType = false
     }
 
     call getFastqInfo{}
@@ -54,12 +58,22 @@ workflow pipeline {
             }
         }
 
+        if (!skip_optiType){
+            call OptiType {
+                input:
+                reads = [select_first([fastp.out_read1_file, read1]), select_first([fastp.out_read2_file, read2])],
+                prefix = "~{sample}",
+                threads = thread_number - 1
+            }
+        }
+
         call bwa_mem {
             input:
             readgroup = "@RG\\tID:~{sample}\\tSM:~{sample}\\tPL:~{platform}",
             t = thread_number,
             ref = ref,
-            ref_idxes  = ref_idxes,
+            ref_idxes = ref_idxes,
+            bwa_idxes = bwa_idxes,
             read1 = select_first([fastp.out_read1_file, read1]),
             read2 = select_first([fastp.out_read2_file, read2]),
             ref2 = ref,
@@ -156,29 +170,6 @@ workflow pipeline {
         String tumor_sample = each[0]
         String normal_sample = if length(each) > 1 then each[1] else '?'
 
-        if (length(each) > 1) {
-            # germline variant calling
-            call Haplotyper {
-                input:
-                intervals = intervals,
-                bam = bam_dict[normal_sample],
-                recal_data = recal_dict[normal_sample],
-                ref = ref,
-                ref_indexes = ref_idxes,
-                out_vcf = "~{normal_sample}.g.vcf.gz"
-            }
-
-            call GVCFtyper {
-                input:
-                ref = ref,
-                ref_indexes = ref_idxes,
-                in_gvcf = [Haplotyper.out_vcf],
-                in_gvcf_idx = [Haplotyper.out_vcf_idx],
-                known_dbsnp = known_dbsnp[0],
-                out_vcf = "~{normal_sample}.vcf.gz"
-            }
-        }
-
         call TNhaplotyper2 {
             input:
             ref = ref,
@@ -214,6 +205,73 @@ workflow pipeline {
                 tumor_segments = TNhaplotyper2.tumor_segments,
                 orientation_data = TNhaplotyper2.orientation_data,
                 out_vcf = "~{tumor_sample}.final.vcf.gz"
+            }
+
+            # germline variant calling
+            call Haplotyper {
+                input:
+                intervals = intervals,
+                bam = bam_dict[normal_sample],
+                bam_bai = bai_dict[normal_sample],
+                recal_data = recal_dict[normal_sample],
+                ref = ref,
+                ref_idxes = ref_idxes,
+                out_vcf = "~{normal_sample}.g.vcf.gz"
+            }
+
+            call GVCFtyper {
+                input:
+                ref = ref,
+                ref_idxes = ref_idxes,
+                in_gvcf = [Haplotyper.out_vcf],
+                in_gvcf_idx = [Haplotyper.out_vcf_idx],
+                known_dbsnp = known_dbsnp[0],
+                out_vcf = "~{normal_sample}.vcf.gz"
+            }
+
+            # phasing vcf
+            call CombineVariants {
+                input:
+                ref = ref,
+                ref_idxes  = ref_idxes,
+                variant = [TNfilter.out_vcf, GVCFtyper.out_vcf],
+                out_vcf = '~{tumor_sample}.combined_germline.vcf'
+            }
+
+            call SortVcf {
+                input:
+                in_vcf = CombineVariants.combined_vcf,
+                out_vcf = '~{tumor_sample}.combined_germline.sorted.vcf.gz',
+                ref = ref,
+                ref_idxes = ref_idxes
+            }
+
+            call ReadBackedPhasing {
+                input:
+                ref = ref,
+                ref_idxes  = ref_idxes,
+                bam = bam_dict[normal_sample],
+                bam_bai = bai_dict[normal_sample],
+                variant = SortVcf.sorted_vcf,
+                variant_idx = SortVcf.sorted_vcf_idx,
+                interval = SortVcf.sorted_vcf,
+                out_vcf = '~{tumor_sample}.phased.vcf'
+            }
+
+            if (! skip_vep) {
+                call VEP as VEP_phased {
+                    input:
+                    input_file = ReadBackedPhasing.phased_vcf,
+                    input_file_idx = ReadBackedPhasing.phased_vcf_idx,
+                    fasta = ref,
+                    fasta_idx = ref_idxes,
+                    cache_targz = vep_cache,
+                    plugins_zip= vep_plugins_zip,
+                    plugin_names = vep_plugin_names,
+                    fork = thread_number,
+                    output_file = "~{tumor_sample}.vep.phased.vcf.gz",
+                    stats_file = "~{tumor_sample}.vep.phased.summary.html",
+                }
             }
         }
 
@@ -280,8 +338,13 @@ workflow pipeline {
         Array[File?] TNfilter_out_vcf_idx = TNfilter.out_vcf_idx
 #        Array[File] snpEff_out_vcf = snpEff.out_vcf
         Array[File?] vep_out_vcf = VEP.out_vcf
+        Array[File?] phased_vcf = ReadBackedPhasing.phased_vcf
+        Array[File?] vep_out_phased_vcf = VEP_phased.out_vcf
         Array[File?] vep_out_vcf_idx = VEP.out_vcf_idx
+        Array[File?] vep_out_phased_vcf_idx = VEP_phased.out_vcf_idx
         Array[File?] vep_out_vcf_stats = VEP.stats_file
+        Array[File?] HLA_ABC = OptiType.result_tsv
+        Array[File?] HLA_ABC_coverage = OptiType.result_pdf
     }
 
 }
@@ -324,7 +387,7 @@ task getFastqInfo{
 
 task fastp{
     input {
-        String? other_parameters
+        String? other_parameters = ' '
         Int threads = 4
         File read1
         File? read2
@@ -396,6 +459,7 @@ task bwa_mem{
         Int k = 10000000
         File ref
         Array[File] ref_idxes
+        Array[File] bwa_idxes
         File read1
         File read2
         File ref2
@@ -1124,9 +1188,10 @@ task Haplotyper{
     input {
         Array[File] intervals
         File bam
+        File bam_bai
         File recal_data
         File ref
-        Array[File] ref_indexes
+        Array[File] ref_idxes
         String emit_mode = "gvcf"
         Int ploidy = 2
         String out_vcf
@@ -1178,7 +1243,7 @@ task Haplotyper{
 task GVCFtyper{
     input {
         File ref
-        Array[File] ref_indexes
+        Array[File] ref_idxes
         Array[File] in_gvcf
         Array[File] in_gvcf_idx
         File known_dbsnp
@@ -1231,7 +1296,7 @@ task GVCFtyper{
 task VEP{
     input {
         File input_file
-        File input_file_idx
+        File? input_file_idx
         File fasta
         Array[File] fasta_idx
         String output_file = "tumor.vep.vcf.gz"
@@ -1368,9 +1433,10 @@ task VEP{
         transcript_version: {prefix: "--transcript_version ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Add version numbers to Ensembl transcript identifiers"}
         symbol: {prefix: "--symbol ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds the gene symbol (e.g. HGNC) (where available) to the output."}
         tsl: {prefix: "--tsl ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds the transcript support level for this transcript to the output."}
-        canonical: {prefix: "--canonical ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds a flag indicating if the transcript is the canonical transcript for the gene"}
+        canonical: {prefix: "--canonical ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds a flag indicating if the transcript is the canonical transcript for the gene."}
         biotype: {prefix: "--biotype ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds the biotype of the transcript or regulatory feature."}
-        max_af: {prefix: "--max_af ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Report the highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD"}
+        mane: {prefix: "--mane ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Adds a flag indicating if the transcript is the MANE Select or MANE Plus Clinical transcript for the gene."}
+        max_af: {prefix: "--max_af ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Report the highest allele frequency observed in any population from 1000 genomes, ESP or gnomAD."}
         af_1kg: {prefix: "--af_1kg ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Add allele frequency from continental populations (AFR,AMR,EAS,EUR,SAS) of 1000 Genomes Phase 3 to the output."}
         af_gnomad: {prefix: "--af_gnomad ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Include allele frequency from Genome Aggregation Database (gnomAD) exome populations. Note only data from the gnomAD exomes are included"}
         af_esp: {prefix: "--af_esp ", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "Include allele frequency from NHLBI-ESP populations."}
@@ -1378,6 +1444,195 @@ task VEP{
         pick: {prefix: "--pick", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "Pick one line or block of consequence data per variant, including transcript-specific columns. This is the best method to use if you are interested only in one consequence per variant"}
         flag_pick: {prefix: "--flag_pick ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "As per --pick, but adds the PICK flag to the chosen block of consequence data and retains others."}
         filter_common: {prefix: "--filter_common ", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters."}
+    }
+
+}
+
+task OptiType{
+    input {
+        Array[File] reads
+        Boolean is_dna = true
+        Boolean is_rna = false
+        Int threads = 5
+        Int enumerate = 1
+        String outdir = "."
+        String prefix
+        # for runtime
+        String docker = "fred2/optitype:1.3.1"
+    }
+
+    command <<<
+        set -e
+        cp /usr/local/bin/OptiType/config.ini .
+        sed -i 's/threads=1/threads=~{threads}/g' config.ini
+        OptiTypePipeline.py \
+        ~{if defined(reads) then "--input  " else ""}~{sep=" " reads} \
+        ~{if is_dna then "--dna " else ""} \
+        ~{if is_rna then "--rna " else ""} \
+        ~{"--enumerate " + enumerate} \
+        ~{"--outdir " + outdir} \
+        ~{"--prefix " + prefix} \
+        --config config.ini
+    >>>
+
+    output {
+        File result_tsv = "~{prefix}_result.tsv"
+        File result_pdf = "~{prefix}_coverage_plot.pdf"
+    }
+
+    runtime {
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/optitype:1.3.1"
+    }
+
+    meta {
+        name: "OptiType"
+        desc: "OptiType: 4-digit HLA typer"
+        author: "unknown"
+        source: "source URL for the tool"
+    }
+
+    parameter_meta {
+        reads: {prefix: "--input ", type: "infile", level: "required", default: "None", range: "None", array: "True", desc: "fastq file(s) (fished or raw) or .bam files stored for re-use, generated by an earlier OptiType run."}
+        is_dna: {prefix: "--dna", type: "bool", level: "required", default: "True", range: "{False, True}", array: "False", desc: "use with DNA sequencing data"}
+        is_rna: {prefix: "--rna", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "use with RNA sequencing data"}
+        enumerate: {prefix: "--enumerate ", type: "int", level: "required", default: "1", range: "None", array: "False", desc: "Number of enumerations. OptiType will output the optimal solution and the top N-1 suboptimal solutions in the results CSV."}
+        outdir: {prefix: "--outdir ", type: "str", level: "required", default: ".", range: "None", array: "False", desc: "Specifies the out directory to which all files should be written."}
+        prefix: {prefix: "--prefix ", type: "str", level: "required", default: "None", range: "None", array: "False", desc: "prefix of output files"}
+    }
+
+}
+
+task CombineVariants{
+    input {
+        File ref
+        Array[File] ref_idxes
+        Array[File] variant
+        String out_vcf
+        Boolean assumeIdenticalSamples = false
+        # for runtime
+        String docker = "broadinstitute/gatk3:3.8-1"
+    }
+
+    command <<<
+        set -e
+        java -Xmx10g -jar GenomeAnalysisTK.jar -T CombineVariants \
+        ~{"-R " + ref} \
+        ~{sep=" " prefix("--variant ", variant)} \
+        ~{"-o " + out_vcf} \
+        ~{if assumeIdenticalSamples then "--assumeIdenticalSamples " else ""}
+    >>>
+
+    output {
+        File combined_vcf = "~{out_vcf}"
+    }
+
+    runtime {
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk3:3.8-1"
+    }
+
+    meta {
+        name: "CombineVariants"
+        desc: "Combine variants"
+        author: "unknown"
+        source: "source URL for the tool"
+    }
+
+    parameter_meta {
+        ref: {prefix: "-R ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "reference fasta file"}
+        variant: {prefix: "--variant ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "variant vcf file array"}
+        out_vcf: {prefix: "-o ", type: "str", level: "required", default: "None", range: "None", array: "False", desc: "This is description of the argument."}
+        assumeIdenticalSamples: {prefix: "--assumeIdenticalSamples", type: "bool", level: "required", default: "False", range: "{False, True}", array: "False", desc: "If true, assume input VCFs have identical sample sets and disjoint calls. This option allows the user to perform a simple merge (concatenation) to combine the VCFs."}
+    }
+
+}
+
+task SortVcf{
+    input {
+        File in_vcf
+        File out_vcf
+        File ref
+        Array[File] ref_idxes
+        # for runtime
+        String docker = "broadinstitute/picard:latest"
+    }
+
+    command <<<
+        set -e
+        java -jar /usr/picard/picard.jar SortVcf \
+        ~{"-I " + in_vcf} \
+        ~{"-O " + out_vcf} \
+        ~{"-R" + ref}
+    >>>
+
+    output {
+        File sorted_vcf = "~{out_vcf}"
+        File sorted_vcf_idx = "~{out_vcf}.tbi"
+    }
+
+    runtime {
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/picard:latest"
+    }
+
+    meta {
+        name: "SortVcf"
+        desc: "sort vcf"
+        author: "unknown"
+        source: "source URL for the tool"
+    }
+
+    parameter_meta {
+        in_vcf: {prefix: "I=", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "input vcf to sort"}
+        out_vcf: {prefix: "O=", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "output sorted vcf"}
+    }
+
+}
+
+task ReadBackedPhasing{
+    input {
+        File ref
+        Array[File] ref_idxes
+        File bam
+        File bam_bai
+        File variant
+        File variant_idx
+        File interval
+        String out_vcf
+        # for runtime
+        String docker = "broadinstitute/gatk3:3.8-1"
+    }
+
+    command <<<
+        set -e
+        java -Xmx10g -jar GenomeAnalysisTK.jar -T ReadBackedPhasing \
+        ~{"-R " + ref} \
+        ~{"-I " + bam} \
+        ~{"--variant " + variant} \
+        ~{"-L " + interval} \
+        ~{"-o " + out_vcf}
+    >>>
+
+    output {
+        File phased_vcf = "~{out_vcf}"
+        File phased_vcf_idx = "~{out_vcf}.idx"
+    }
+
+    runtime {
+        docker: "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk3:3.8-1"
+    }
+
+    meta {
+        name: "ReadBackedPhasing"
+        desc: "ReadBackedPhasing"
+        author: "unknown"
+        source: "source URL for the tool"
+    }
+
+    parameter_meta {
+        ref: {prefix: "-R ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "reference fasta file"}
+        bam: {prefix: "-I ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "tumor bam file"}
+        variant: {prefix: "--variant ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "input vcf file"}
+        interval: {prefix: "-L ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "input vcf file"}
+        out_vcf: {prefix: "-o ", type: "str", level: "required", default: "None", range: "None", array: "False", desc: "output vcf file"}
     }
 
 }
