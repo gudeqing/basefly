@@ -226,6 +226,7 @@ workflow pipeline {
                 in_gvcf = [Haplotyper.out_vcf],
                 in_gvcf_idx = [Haplotyper.out_vcf_idx],
                 known_dbsnp = known_dbsnp[0],
+                known_dbsnp_idx = known_dbsnp_idx[0],
                 out_vcf = "~{normal_sample}.vcf.gz"
             }
 
@@ -1247,6 +1248,7 @@ task GVCFtyper{
         Array[File] in_gvcf
         Array[File] in_gvcf_idx
         File known_dbsnp
+        File known_dbsnp_idx
         Int call_conf = 30
         String genotype_model = "multinomial"
         String out_vcf
