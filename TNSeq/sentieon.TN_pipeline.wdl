@@ -1345,8 +1345,8 @@ task VEP{
 
     command <<<
         set -e
-        tar zxf cache_targz
-        unzip plugins_zip -d Plugins
+        tar zxf ~{cache_targz}
+        unzip ~{plugins_zip} -d Plugins
         vep \
         ~{"-i " + input_file} \
         ~{"--fasta " + fasta} \
@@ -1517,7 +1517,7 @@ task CombineVariants{
 
     command <<<
         set -e
-        java -Xmx10g -jar GenomeAnalysisTK.jar -T CombineVariants \
+        java -Xmx10g -jar /usr/GenomeAnalysisTK.jar -T CombineVariants \
         ~{"-R " + ref} \
         ~{sep=" " prefix("--variant ", variant)} \
         ~{"-o " + out_vcf} \
@@ -1605,7 +1605,7 @@ task ReadBackedPhasing{
 
     command <<<
         set -e
-        java -Xmx10g -jar GenomeAnalysisTK.jar -T ReadBackedPhasing \
+        java -Xmx10g -jar /usr/GenomeAnalysisTK.jar -T ReadBackedPhasing \
         ~{"-R " + ref} \
         ~{"-I " + bam} \
         ~{"--variant " + variant} \
