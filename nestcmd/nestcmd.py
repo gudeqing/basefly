@@ -100,7 +100,6 @@ class RunTime:
 class Output:
     path: str
     # out_id: str = field(default_factory=uuid4)
-    # type should be one of ['File', 'Directory']
     type: str = 'File'
     # 设计locate 参数用于整理结果目录
     locate: str = "report"
