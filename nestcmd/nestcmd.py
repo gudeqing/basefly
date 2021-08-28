@@ -459,7 +459,7 @@ class ToWdlTask(object):
 class ToWdlWorkflow(object):
     """
     workflow的group信息的依据是：是否可以在同一个循环中并发
-    如何知道task输入的依赖信息：要求给参数加一个wdl属性，对应使用wdl语法
+    如何知道task输入的依赖信息：要求给参数加一个wdl属性，对应使用wdl语法, 或者根据output对象推断
     """
     def __init__(self, wf: Workflow):
         self.wf = wf
@@ -643,10 +643,11 @@ task getFastqInfo{
 
     output {
         Map[String, Array[Array[File]]] fastq_info = read_json("fastq.info.json")
+        File fastq_info_json = "fastq.info.json"
     }
 
     runtime {
-        docker: "registry-xdp-v3-pre-yifang.basebit.me/basebitai/getfastqinfo:1.0"
+        docker: docker
     }
 
     parameter_meta {
