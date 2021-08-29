@@ -200,17 +200,51 @@ class Task:
     depends: List[str] = field(default_factory=list)
 
     def __post_init__(self):
+        # task name
+        if self.name is None:
+            self.name = self.cmd.meta.name + '_' + str(self.task_id)
         # 为每一个output带入
         for key in self.cmd.outputs.keys():
             self.cmd.outputs[key].task_id = self.task_id
             self.cmd.outputs[key].name = key
         self.outputs = self.cmd.outputs
 
+    def argo_template(self, wf_tasks):
+        # 仅输入文件需要作处理，其他参数如数字或字符串已经在command中硬编码好了
+        # 输入文件需要处理，是因为需要申明有这样一个文件存在
+        lines = [f'- name: {self.name or self.task_id}']
+        artifacts = [k for k, v in self.cmd.args.items() if (v.type == 'infile' or v.type == 'indir')]
+        if artifacts:
+            lines += [' ' * 2 + 'inputs:']
+            lines += [' ' * 4 + 'artifacts:']
+            for each in artifacts:
+                if type(self.cmd.args[each].value) != list:
+                    lines += [' ' * 6 + f'- name: {each}']
+                else:
+                    for i in range(len(self.cmd.args[each].value)):
+                        lines += [' ' * 6 + f'- name: {each}_{i}']
+
+        # container info
+        lines += [' '*2 + 'container:']
+        lines += [' '*4 + f'image: {self.cmd.runtime.image}']
+        lines += [' '*4 + 'command: [sh, -c]']
+        lines += [' '*4 + f'args: ["{self.cmd.format_cmd(wf_tasks=wf_tasks)}"]']
+
+        # outputs
+        if self.cmd.outputs:
+            value_dict = {k: v.value or v.default for k, v in self.cmd.args.items()}
+            lines += [' '*2 + 'outputs:']
+            lines += [' '*4 + 'artifacts:']
+            for k, v in self.cmd.outputs.items():
+                lines += [' ' * 6 + f'- name: {k}']
+                lines += [' ' * 8 + f'path: {v.path.format(**value_dict)}']
+        return [' '*2+x for x in lines]
+
 
 @dataclass()
 class TopVar:
     value: Any
-    name: str = None
+    name: str = 'notNamed'
     type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
 
 
@@ -225,13 +259,85 @@ class Workflow:
         for k, v in self.top_vars.items():
             v.name = k
 
-    def add_task(self, cmd: Command, depends: list = None):
-        task = Task(cmd=cmd, depends=depends)
+    def add_task(self, cmd: Command, depends: list = None, name: str = None):
+        task = Task(cmd=cmd, depends=depends, name=name)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
     def to_wdl(self, outfile):
         ToWdlWorkflow(self).write_wdl(outfile)
+
+    def to_argo_worflow(self, outfile):
+        lines = ['apiVersion: argoproj.io/v1alpha1']
+        lines += ['kind: Workflow']
+        lines += ['metadata:']
+        lines += [' ' * 2 + f'generateName: {self.meta.name}']
+        lines += ['spec:']
+        # entry point
+        lines += [' '*2 + 'entrypoint: main']
+        lines += [' '*2 + 'arguments:']
+        artifacts = [k for k, v in self.top_vars.items() if v.type in ['infile', 'indir']]
+        if artifacts:
+            lines += [' ' * 4 + 'artifacts:']
+            for each in artifacts:
+                if type(self.top_vars[each].value) != list:
+                    lines += [' ' * 4 + f'- name: {each}']
+                    lines += [' ' * 6 + f'path: {self.top_vars[each].value}']
+                else:
+                    for i, v in enumerate(self.top_vars[each].value):
+                        lines += [' ' * 4 + f'- name: {each}_{i}']
+                        lines += [' ' * 6 + f'path: {v}']
+
+        # DAG templates
+        lines += ['']
+        lines += [' '*2 + 'templates:']
+        lines += [' '*2 + '- name: main']
+        lines += [' '*4 + 'dag:']
+        lines += [' '*6 + 'tasks:']
+        for task_id, task in self.tasks.items():
+            lines += [' '*6 + f'- name: {task.name}']
+            if task.depends:
+                lines += [' '*8 + 'dependencies: ' + str([self.tasks[x].name for x in task.depends]).replace("'", '')]
+            lines += [' '*8 + f'template: {task.name}']
+            args = task.cmd.args
+            # 通过TopVar或者Output传递的文件参数
+            artifacts = [k for k, v in args.items() if (v.type == 'infile' or v.type == 'indir')]
+            if artifacts:
+                lines += [' '*8 + f'arguments:']
+                lines += [' '*10 + f'artifacts:']
+                for each in artifacts:
+                    if type(args[each].value) != list:
+                        lines += [' ' * 10 + f'- name: {each}']
+                        if type(args[each].value) == TopVar:
+                            lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{args[each].value.name}}}}}"']
+                        elif type(args[each].value) == Output:
+                            depend_task = self.tasks[args[each].value.task_id].name
+                            depend_name = args[each].value.name
+                            lines += [' ' * 12 + f'from: "{{{{tasks.{depend_task}.outputs.artifacts.{depend_name}}}}}"']
+                        else:
+                            # 只能假设来自topVar了
+                            lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{each}}}}}"']
+                    else:
+                        for i, v in enumerate(args[each].value):
+                            lines += [' ' * 10 + f'- name: {each}_{i}']
+                            if type(v) == TopVar:
+                                lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{v.name}}}}}"']
+                            elif type(v) == Output:
+                                depend_task = self.tasks[v.task_id].name
+                                depend_name = v.name
+                                lines += [' ' * 12 + f'from: "{{{{tasks.{depend_task}.outputs.artifacts.{depend_name}}}}}"']
+                            else:
+                                # 只能假设来自topVar了
+                                lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{each}_{i}}}}}"']
+
+        for task_id, task in self.tasks.items():
+            lines += ['']
+            lines += task.argo_template(self.tasks)
+
+        # write argo workflow
+        with open(outfile, 'w') as f:
+            for line in lines:
+                f.write(line+'\n')
 
 
 class ToWdlTask(object):
@@ -633,11 +739,11 @@ task getFastqInfo{
 
     command <<<
         set -e
-        python /get_fastq_info.py \
-            ~{if defined(fastq_dirs) then "-fastq_dirs " else ""}~{sep=" " fastq_dirs} \
-            ~{if defined(fastq_files) then "-fastq_files " else ""}~{sep=" " fastq_files} \
-            -r1_name '~{r1_name}' \
-            -r2_name '~{r2_name}' \
+        python /get_fastq_info.py \\
+            ~{if defined(fastq_dirs) then "-fastq_dirs " else ""}~{sep=" " fastq_dirs} \\
+            ~{if defined(fastq_files) then "-fastq_files " else ""}~{sep=" " fastq_files} \\
+            -r1_name '~{r1_name}' \\
+            -r2_name '~{r2_name}' \\
             -out fastq.info.json
     >>>
 

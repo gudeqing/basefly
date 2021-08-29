@@ -1,4 +1,4 @@
-from nestcmd.nestcmd import Argument, Output, Command, Workflow
+from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, get_fastq_info
 """
 pycharm里设置code completion 允许“suggest variable and parameter name”, 可以极大方便流程编写
 
@@ -65,24 +65,27 @@ def quant_merge():
 
 
 def pipeline():
-    wf = Workflow()
+    fastq_info = get_fastq_info(fastq_dirs=('testdata/',), r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq')
+    top_vars = dict(
+        index_dir=TopVar(value='testdata/index/', type='indir'),
+    )
+    final_fastq_info = dict()
+    for k, v in fastq_info.items():
+        r1 = TopVar(value=v[0][0], type='infile')
+        r2 = TopVar(value=v[1][0], type='infile')
+        top_vars[k+'_r1'] = r1
+        top_vars[k+'_r2'] = r2
+        final_fastq_info[k] = [r1, r2]
+
+    wf = Workflow(top_vars=top_vars)
     wf.meta.name = 'PipelineExample'
     wf.meta.desc = 'This is a simple pipeline for fast gene/transcript quantification. '
     wf.meta.desc += 'workflow = [fastq -> Fastp -> Salmon]'
-    index_dir = 'testdata/index/'
-
-    # init
-    def init_func():
-        samples = ['s1', 's2']
-        read1s = ['testdata/s1.R1.fastq', 'testdata/s2.R1.fastq']
-        read2s = ['testdata/s1.R2.fastq', 'testdata/s2.R2.fastq']
-        return zip(samples, read1s, read2s)
 
     merge_depends = []
-    for init_array in init_func():
-        sample, r1, r2 = init_array
+    for sample, (r1, r2) in final_fastq_info.items():
         # 向流程中添加task
-        task, args = wf.add_task(fastp())
+        task, args = wf.add_task(fastp(), name='fastp_'+sample)
         # 可随意带入任何信息，如样本信息
         task.sample = sample
         # 给task分组信息，同一批次循环中的task属于同一组，这对于wdl的scatter转换非常重要
@@ -101,13 +104,13 @@ def pipeline():
         args['out2'].wdl = "~{each.left}.clean.R2.fq"
 
         depend_task = task
-        task, args = wf.add_task(salmon())
+        task, args = wf.add_task(salmon(), name='salmon_'+sample)
         task.depends = [task_id]
         task.sample = sample
         task.group = 'batch1'
         args['read1'].value = depend_task.outputs["out1"]
         args['read2'].value = depend_task.outputs["out2"]
-        args['indexDir'].value = index_dir
+        args['indexDir'].value = top_vars['index_dir']
         args['outDir'].value = sample
         # 上面的sample只是一个普通的字符串，所以必须添加wdl属性用以辅助wdl生成
         args['outDir'].wdl = "each.left"
@@ -142,8 +145,11 @@ def pipeline():
         # print(task.task_id)
         # print(task.outputs)
         print(task.cmd.format_cmd(wf.tasks))
+        # for line in task.argo_template(wf.tasks):
+        #     print(line)
 
     wf.to_wdl(f'{wf.meta.name}.wdl')
+    wf.to_argo_worflow(f'{wf.meta.name}.yaml')
 
 
 if __name__ == '__main__':
