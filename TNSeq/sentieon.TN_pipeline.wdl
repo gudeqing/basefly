@@ -236,12 +236,14 @@ workflow pipeline {
                 ref = ref,
                 ref_idxes  = ref_idxes,
                 variant = [TNfilter.out_vcf, GVCFtyper.out_vcf],
-                out_vcf = '~{tumor_sample}.combined_germline.vcf'
+                variant_idx = [TNfilter.out_vcf_idx,  GVCFtyper.out_vcf_idx],
+                out_vcf = '~{tumor_sample}.combined_germline.vcf.gz'
             }
 
             call SortVcf {
                 input:
                 in_vcf = CombineVariants.combined_vcf,
+                in_vcf_idx = CombineVariants.combined_vcf_idx,
                 out_vcf = '~{tumor_sample}.combined_germline.sorted.vcf.gz',
                 ref = ref,
                 ref_idxes = ref_idxes
@@ -256,7 +258,7 @@ workflow pipeline {
                 variant = SortVcf.sorted_vcf,
                 variant_idx = SortVcf.sorted_vcf_idx,
                 interval = SortVcf.sorted_vcf,
-                out_vcf = '~{tumor_sample}.phased.vcf'
+                out_vcf = '~{tumor_sample}.phased.vcf.gz'
             }
 
             if (! skip_vep) {
@@ -1306,7 +1308,7 @@ task VEP{
         String compress_output = "bgzip"
         Boolean force_overwrite = true
         Int fork = 4
-        # 解压缩需要很多时间，但没有办法
+        # 解压缩需要7min左右的时间，但没有更好的办法
         File cache_targz
         File plugins_zip
         Array[String] plugin_names = ['Frameshift', 'Wildtype']
@@ -1509,8 +1511,9 @@ task CombineVariants{
         File ref
         Array[File] ref_idxes
         Array[File] variant
+        Array[File] variant_idx
         String out_vcf
-        Boolean assumeIdenticalSamples = false
+        Boolean assumeIdenticalSamples = true
         # for runtime
         String docker = "broadinstitute/gatk3:3.8-1"
     }
@@ -1526,6 +1529,7 @@ task CombineVariants{
 
     output {
         File combined_vcf = "~{out_vcf}"
+        File combined_vcf_idx = "~{out_vcf}.tbi"
     }
 
     runtime {
@@ -1551,7 +1555,8 @@ task CombineVariants{
 task SortVcf{
     input {
         File in_vcf
-        File out_vcf
+        File in_vcf_idx
+        String out_vcf
         File ref
         Array[File] ref_idxes
         # for runtime
@@ -1563,7 +1568,7 @@ task SortVcf{
         java -jar /usr/picard/picard.jar SortVcf \
         ~{"-I " + in_vcf} \
         ~{"-O " + out_vcf} \
-        ~{"-R" + ref}
+        ~{"-R " + ref}
     >>>
 
     output {
@@ -1615,7 +1620,7 @@ task ReadBackedPhasing{
 
     output {
         File phased_vcf = "~{out_vcf}"
-        File phased_vcf_idx = "~{out_vcf}.idx"
+        File phased_vcf_idx = "~{out_vcf}.tbi"
     }
 
     runtime {
