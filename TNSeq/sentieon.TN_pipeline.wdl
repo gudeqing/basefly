@@ -1359,7 +1359,7 @@ task VEP{
         ~{"--fork " + fork} \
         ~{"--species " + species} \
         ~{"--assembly " + assembly_version} \
-        "--dir_cache ./ " \
+        --dir_cache ./ \
         --dir_plugins ./Plugins \
         ~{"--stats_file " + stats_file} \
         ~{if cache then "--cache  " else ""} \
