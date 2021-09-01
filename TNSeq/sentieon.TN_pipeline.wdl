@@ -235,8 +235,8 @@ workflow pipeline {
                 input:
                 ref = ref,
                 ref_idxes  = ref_idxes,
-                variant = [TNfilter.out_vcf, GVCFtyper.out_vcf],
-                variant_idx = [TNfilter.out_vcf_idx,  GVCFtyper.out_vcf_idx],
+                variant = [GVCFtyper.out_vcf, TNfilter.out_vcf],
+                variant_idx = [GVCFtyper.out_vcf_idx, TNfilter.out_vcf_idx],
                 out_vcf = '~{tumor_sample}.combined_germline.vcf.gz'
             }
 
