@@ -395,8 +395,8 @@ task fastp{
         File read1
         File? read2
         String sample_name
-        String? adapter_r1
-        String? adapter_r2
+        String? adapter_r1 = "auto"
+        String? adapter_r2 = "auto"
         # for runtime
         String docker = "gudeqing/fastp:0.21.0"
         String memory = "5 GiB"
