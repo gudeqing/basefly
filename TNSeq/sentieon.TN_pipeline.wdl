@@ -38,6 +38,7 @@ workflow pipeline {
         Boolean skip_fastp = false
         Boolean skip_vep = false
         Boolean skip_optiType = false
+        Boolean skip_phasing = true
     }
 
     call getFastqInfo{}
@@ -231,49 +232,51 @@ workflow pipeline {
             }
 
             # phasing vcf
-            call CombineVariants {
-                input:
-                ref = ref,
-                ref_idxes  = ref_idxes,
-                variant = [GVCFtyper.out_vcf, TNfilter.out_vcf],
-                variant_idx = [GVCFtyper.out_vcf_idx, TNfilter.out_vcf_idx],
-                out_vcf = '~{tumor_sample}.combined_germline.vcf.gz'
-            }
-
-            call SortVcf {
-                input:
-                in_vcf = CombineVariants.combined_vcf,
-                in_vcf_idx = CombineVariants.combined_vcf_idx,
-                out_vcf = '~{tumor_sample}.combined_germline.sorted.vcf.gz',
-                ref = ref,
-                ref_idxes = ref_idxes
-            }
-
-            call ReadBackedPhasing {
-                input:
-                ref = ref,
-                ref_idxes  = ref_idxes,
-                bam = bam_dict[normal_sample],
-                bam_bai = bai_dict[normal_sample],
-                variant = SortVcf.sorted_vcf,
-                variant_idx = SortVcf.sorted_vcf_idx,
-                interval = SortVcf.sorted_vcf,
-                out_vcf = '~{tumor_sample}.phased.vcf.gz'
-            }
-
-            if (! skip_vep) {
-                call VEP as VEP_phased {
+            if (! skip_phasing) {
+                call CombineVariants {
                     input:
-                    input_file = ReadBackedPhasing.phased_vcf,
-                    input_file_idx = ReadBackedPhasing.phased_vcf_idx,
-                    fasta = ref,
-                    fasta_idx = ref_idxes,
-                    cache_targz = vep_cache,
-                    plugins_zip= vep_plugins_zip,
-                    plugin_names = vep_plugin_names,
-                    fork = thread_number,
-                    output_file = "~{tumor_sample}.vep.phased.vcf.gz",
-                    stats_file = "~{tumor_sample}.vep.phased.summary.html",
+                    ref = ref,
+                    ref_idxes  = ref_idxes,
+                    variant = [GVCFtyper.out_vcf, TNfilter.out_vcf],
+                    variant_idx = [GVCFtyper.out_vcf_idx, TNfilter.out_vcf_idx],
+                    out_vcf = '~{tumor_sample}.combined_germline.vcf.gz'
+                }
+
+                call SortVcf {
+                    input:
+                    in_vcf = CombineVariants.combined_vcf,
+                    in_vcf_idx = CombineVariants.combined_vcf_idx,
+                    out_vcf = '~{tumor_sample}.combined_germline.sorted.vcf.gz',
+                    ref = ref,
+                    ref_idxes = ref_idxes
+                }
+
+                call ReadBackedPhasing {
+                    input:
+                    ref = ref,
+                    ref_idxes  = ref_idxes,
+                    bam = bam_dict[normal_sample],
+                    bam_bai = bai_dict[normal_sample],
+                    variant = SortVcf.sorted_vcf,
+                    variant_idx = SortVcf.sorted_vcf_idx,
+                    interval = SortVcf.sorted_vcf,
+                    out_vcf = '~{tumor_sample}.phased.vcf.gz'
+                }
+
+                if (! skip_vep) {
+                    call VEP as VEP_phased {
+                        input:
+                        input_file = ReadBackedPhasing.phased_vcf,
+                        input_file_idx = ReadBackedPhasing.phased_vcf_idx,
+                        fasta = ref,
+                        fasta_idx = ref_idxes,
+                        cache_targz = vep_cache,
+                        plugins_zip= vep_plugins_zip,
+                        plugin_names = vep_plugin_names,
+                        fork = thread_number,
+                        output_file = "~{tumor_sample}.vep.phased.vcf.gz",
+                        stats_file = "~{tumor_sample}.vep.phased.summary.html",
+                    }
                 }
             }
         }
