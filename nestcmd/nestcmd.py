@@ -99,6 +99,7 @@ class RunTime:
 @dataclass()
 class Output:
     path: str
+    value: Any = None
     # out_id: str = field(default_factory=uuid4)
     type: str = 'File'
     # 设计locate 参数用于整理结果目录
@@ -108,6 +109,9 @@ class Output:
     name: str = None
 
     def __post_init__(self):
+        if self.value is None:
+            # value属性是后来修改增加的，本来用来替代path，为了向前兼容，保留path属性
+            self.value = self.path
         if self.type not in ['File', 'Directory', 'String']:
             raise Exception("output type should be one of ['File', 'Directory', String]")
 
@@ -202,7 +206,10 @@ class Task:
     def __post_init__(self):
         # task name
         if self.name is None:
-            self.name = self.cmd.meta.name + '_' + str(self.task_id)
+            self.name = self.cmd.meta.name + '-' + str(self.task_id)
+        else:
+            if '_' in self.name or '+' in self.name or '@' in self.name:
+                raise Exception("name must consist of alpha-numeric characters or '-', and must start with an alpha-numeric character (e.g. My-name1-2, 123-NAME)")
         # 为每一个output带入
         for key in self.cmd.outputs.keys():
             self.cmd.outputs[key].task_id = self.task_id
@@ -212,7 +219,8 @@ class Task:
     def argo_template(self, wf_tasks):
         # 仅输入文件需要作处理，其他参数如数字或字符串已经在command中硬编码好了
         # 输入文件需要处理，是因为需要申明有这样一个文件存在
-        lines = [f'- name: {self.name or self.task_id}']
+        template_name = self.name or self.task_id
+        lines = [f'- name: {template_name.replace("_", "-")}']
         artifacts = [k for k, v in self.cmd.args.items() if (v.type == 'infile' or v.type == 'indir')]
         if artifacts:
             lines += [' ' * 2 + 'inputs:']
@@ -220,9 +228,11 @@ class Task:
             for each in artifacts:
                 if type(self.cmd.args[each].value) != list:
                     lines += [' ' * 6 + f'- name: {each}']
+                    lines += [' ' * 8 + f'path: {self.cmd.args[each].value.value}']
                 else:
-                    for i in range(len(self.cmd.args[each].value)):
+                    for i, v in enumerate(self.cmd.args[each].value):
                         lines += [' ' * 6 + f'- name: {each}_{i}']
+                        lines += [' ' * 8 + f'path: {v.value}']
 
         # container info
         lines += [' '*2 + 'container:']
@@ -271,13 +281,13 @@ class Workflow:
         lines = ['apiVersion: argoproj.io/v1alpha1']
         lines += ['kind: Workflow']
         lines += ['metadata:']
-        lines += [' ' * 2 + f'generateName: {self.meta.name}']
+        lines += [' ' * 2 + f'generateName: {self.meta.name.lower()}']
         lines += ['spec:']
         # entry point
         lines += [' '*2 + 'entrypoint: main']
-        lines += [' '*2 + 'arguments:']
         artifacts = [k for k, v in self.top_vars.items() if v.type in ['infile', 'indir']]
         if artifacts:
+            lines += [' ' * 2 + 'arguments:']
             lines += [' ' * 4 + 'artifacts:']
             for each in artifacts:
                 if type(self.top_vars[each].value) != list:
