@@ -205,7 +205,7 @@ workflow pipeline {
                 contamination = TNhaplotyper2.contamination_data,
                 tumor_segments = TNhaplotyper2.tumor_segments,
                 orientation_data = TNhaplotyper2.orientation_data,
-                out_vcf = "~{tumor_sample}.final.vcf.gz"
+                out_vcf = "~{tumor_sample}.somatic.vcf.gz"
             }
 
             # germline variant calling
@@ -228,7 +228,23 @@ workflow pipeline {
                 in_gvcf_idx = [Haplotyper.out_vcf_idx],
                 known_dbsnp = known_dbsnp[0],
                 known_dbsnp_idx = known_dbsnp_idx[0],
-                out_vcf = "~{normal_sample}.vcf.gz"
+                out_vcf = "~{normal_sample}.germline.vcf.gz"
+            }
+
+            if (! skip_vep) {
+                call VEP as VEP_germline {
+                    input:
+                    input_file = GVCFtyper.out_vcf,
+                    input_file_idx = GVCFtyper.out_vcf_idx,
+                    fasta = ref,
+                    fasta_idx = ref_idxes,
+                    cache_targz = vep_cache,
+                    plugins_zip= vep_plugins_zip,
+                    plugin_names = vep_plugin_names,
+                    fork = thread_number,
+                    output_file = "~{normal_sample}.germline.vep.vcf.gz",
+                    stats_file = "~{normal_sample}.germline.vep.summary.html",
+                }
             }
 
             # phasing vcf
@@ -295,8 +311,8 @@ workflow pipeline {
                     cache_targz = vep_cache,
                     plugins_zip= vep_plugins_zip,
                     plugin_names = vep_plugin_names,
-                    output_file = "~{tumor_sample}.vep.vcf.gz",
-                    stats_file = "~{tumor_sample}.vep.summary.html",
+                    output_file = "~{tumor_sample}.somatic.vep.vcf.gz",
+                    stats_file = "~{tumor_sample}.somatic.vep.summary.html",
                     fasta = ref,
                     fasta_idx = ref_idxes,
                     fork = thread_number
@@ -330,25 +346,39 @@ workflow pipeline {
         Array[File] DeDup_deduped_bam_bai = DeDup.deduped_bam_bai
         Array[File] CoverageMetrics_coverage_metrics = CoverageMetrics.coverage_metrics
         Array[File] recalibration_recal_data = recalibration.recal_data
+
         Array[File?] Haplotyper_gvcf = Haplotyper.out_vcf
         Array[File?] Haplotyper_gvcf_idx = Haplotyper.out_vcf_idx
+
         Array[File?] GVCFtyper_vcf = GVCFtyper.out_vcf
         Array[File?] GVCFtyper_vcf_idx = GVCFtyper.out_vcf_idx
+
         Array[File] TNhaplotyper2_out_vcf = TNhaplotyper2.out_vcf
         Array[File] TNhaplotyper2_out_vcf_idx = TNhaplotyper2.out_vcf_idx
         Array[File] TNhaplotyper2_out_vcf_stats = TNhaplotyper2.out_vcf_stats
         Array[File?] TNhaplotyper2_orientation_data = TNhaplotyper2.orientation_data
         Array[File?] TNhaplotyper2_tumor_segments = TNhaplotyper2.tumor_segments
         Array[File?] TNhaplotyper2_contamination_data = TNhaplotyper2.contamination_data
+
         Array[File?] TNfilter_out_vcf = TNfilter.out_vcf
         Array[File?] TNfilter_out_vcf_idx = TNfilter.out_vcf_idx
+
 #        Array[File] snpEff_out_vcf = snpEff.out_vcf
-        Array[File?] vep_out_vcf = VEP.out_vcf
+
         Array[File?] phased_vcf = ReadBackedPhasing.phased_vcf
+        Array[File?] phased_vcf_idx = ReadBackedPhasing.phased_vcf_idx
         Array[File?] vep_out_phased_vcf = VEP_phased.out_vcf
-        Array[File?] vep_out_vcf_idx = VEP.out_vcf_idx
         Array[File?] vep_out_phased_vcf_idx = VEP_phased.out_vcf_idx
-        Array[File?] vep_out_vcf_stats = VEP.stats_file
+        Array[File?] vep_out_phased_vcf_stats = VEP_phased.stats_file
+
+        Array[File?] vep_out_vcf_somatic = VEP.out_vcf
+        Array[File?] vep_out_vcf_somatic_idx = VEP.out_vcf_idx
+        Array[File?] vep_out_vcf_somatic_stats = VEP.stats_file
+
+        Array[File?] vep_out_vcf_germline = VEP_germline.out_vcf
+        Array[File?] vep_out_vcf_germline_idx = VEP_germline.out_vcf_idx
+        Array[File?] vep_out_vcf_germline_stats = VEP_germline.stats_file
+
         Array[File?] HLA_ABC = OptiType.result_tsv
         Array[File?] HLA_ABC_coverage = OptiType.result_pdf
     }
@@ -1392,6 +1422,7 @@ task VEP{
         ~{if pick then "--pick " else ""} \
         ~{if flag_pick then "--flag_pick  " else ""} \
         ~{if filter_common then "--filter_common  " else ""}
+        rm -fr homo_sapiens Plugins
     >>>
 
     output {
