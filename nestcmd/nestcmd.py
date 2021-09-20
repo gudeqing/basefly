@@ -98,7 +98,7 @@ class RunTime:
 
 @dataclass()
 class Output:
-    path: str
+    path: str = None  # will be deprecated, replace with value
     value: Any = None
     # out_id: str = field(default_factory=uuid4)
     type: str = 'File'
@@ -348,6 +348,20 @@ class Workflow:
         with open(outfile, 'w') as f:
             for line in lines:
                 f.write(line+'\n')
+
+    def to_nestcmd(self, outfile, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+        import configparser
+        wf = configparser.ConfigParser()
+        wf.optionxform = str
+        wf['mode'] = dict(
+            threads=threads,
+            retry=retry,
+            monitor_resource=not no_monitor_resource,
+            monitor_time_step=2,
+            check_resource_before_run=not no_check_resource,
+        )
+        for task_id, task in self.tasks.items():
+            wf[task.name] =
 
 
 class ToWdlTask(object):

@@ -161,23 +161,23 @@ $SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA -t $NT -i tumor_deduped.bam 
 # ******************************************
 $SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA -t $NT -i tumor_deduped.bam \
     --algo QualCal -k $KNOWN_DBSNP -k $KNOWN_MILLS -k $KNOWN_INDELS tumor_recal_data.table
-$SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA -t $NT -i tumor_deduped.bam \
-    -q tumor_recal_data.table --algo QualCal -k $KNOWN_DBSNP -k $KNOWN_MILLS \
-    -k $KNOWN_INDELS tumor_recal_data.table.post
-$SENTIEON_INSTALL_DIR/bin/sentieon driver -t $NT --algo QualCal --plot \
-    --before tumor_recal_data.table --after tumor_recal_data.table.post tumor_recal.csv
-$SENTIEON_INSTALL_DIR/bin/sentieon plot QualCal -o tumor_recal_plots.pdf tumor_recal.csv
+#$SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA -t $NT -i tumor_deduped.bam \
+#    -q tumor_recal_data.table --algo QualCal -k $KNOWN_DBSNP -k $KNOWN_MILLS \
+#    -k $KNOWN_INDELS tumor_recal_data.table.post
+#$SENTIEON_INSTALL_DIR/bin/sentieon driver -t $NT --algo QualCal --plot \
+#    --before tumor_recal_data.table --after tumor_recal_data.table.post tumor_recal.csv
+#$SENTIEON_INSTALL_DIR/bin/sentieon plot QualCal -o tumor_recal_plots.pdf tumor_recal.csv
 # ******************************************
 # 4b. Base recalibration for normal sample
 # ******************************************
 $SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA -t $NT -i normal_deduped.bam \
     --algo QualCal -k $KNOWN_DBSNP -k $KNOWN_MILLS -k $KNOWN_INDELS normal_recal_data.table
-$SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA -t $NT -i normal_deduped.bam \
-    -q normal_recal_data.table --algo QualCal -k $KNOWN_DBSNP -k $KNOWN_MILLS \
-    -k $KNOWN_INDELS normal_recal_data.table.post
-$SENTIEON_INSTALL_DIR/bin/sentieon driver -t $NT --algo QualCal --plot \
-    --before normal_recal_data.table --after normal_recal_data.table.post normal_recal.csv
-$SENTIEON_INSTALL_DIR/bin/sentieon plot QualCal -o normal_recal_plots.pdf normal_recal.csv
+#$SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA -t $NT -i normal_deduped.bam \
+#    -q normal_recal_data.table --algo QualCal -k $KNOWN_DBSNP -k $KNOWN_MILLS \
+#    -k $KNOWN_INDELS normal_recal_data.table.post
+#$SENTIEON_INSTALL_DIR/bin/sentieon driver -t $NT --algo QualCal --plot \
+#    --before normal_recal_data.table --after normal_recal_data.table.post normal_recal.csv
+#$SENTIEON_INSTALL_DIR/bin/sentieon plot QualCal -o normal_recal_plots.pdf normal_recal.csv
 
 # ******************************************
 # 5. Somatic Variant Calling
@@ -194,6 +194,6 @@ $SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA -t $NT -i tumor_deduped.bam 
 
 $SENTIEON_INSTALL_DIR/bin/sentieon driver -r $FASTA --algo TNfilter \
     -v output-tnhap2-tmp.vcf.gz --tumor_sample $TUMOR_SM --normal_sample $NORMAL_SM \
-    --contamination output-contamination --tumor_segments output-contamination-segments \
+#    --contamination output-contamination --tumor_segments output-contamination-segments \
     --orientation_priors output-orientation output-tnhap2.vcf.gz || \
     { echo "TNfilter failed"; exit 1; }
