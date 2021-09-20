@@ -90,8 +90,8 @@ class Argument:
 @dataclass()
 class RunTime:
     image: str = None
-    memory: int = None
-    cpu: int = None
+    memory: int = 1000
+    cpu: int = 2
     tool_dir: str = ''
     tool: str = ''
 
@@ -158,7 +158,7 @@ class Command:
             # 当参数值为output类型时，需如下特殊处理
             if type(arg_value) == Output:
                 value_dict = {k: v.value or v.default for k, v in wf_tasks[arg_value.task_id].cmd.args.items()}
-                arg_value = arg_value.path.replace('~', '').format(**value_dict)
+                arg_value = arg_value.value.replace('~', '').format(**value_dict)
             elif type(arg_value) == TopVar:
                 arg_value = arg_value.value
             elif type(arg_value) == list:
@@ -166,7 +166,7 @@ class Command:
                 for ind, each in enumerate(arg_value):
                     if type(each) == Output:
                         value_dict = {k: v.value or v.default for k, v in wf_tasks[each.task_id].cmd.args.items()}
-                        arg_value[ind] = each.path.replace('~', '').format(**value_dict)
+                        arg_value[ind] = each.value.replace('~', '').format(**value_dict)
                     elif type(each) == TopVar:
                         arg_value[ind] = each.value
 
@@ -247,7 +247,7 @@ class Task:
             lines += [' '*4 + 'artifacts:']
             for k, v in self.cmd.outputs.items():
                 lines += [' ' * 6 + f'- name: {k}']
-                lines += [' ' * 8 + f'path: {v.path.format(**value_dict)}']
+                lines += [' ' * 8 + f'path: {v.value.format(**value_dict)}']
         return [' '*2+x for x in lines]
 
 
@@ -349,11 +349,12 @@ class Workflow:
             for line in lines:
                 f.write(line+'\n')
 
-    def to_nestcmd(self, outfile, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+    def to_nestcmd(self, outdir=os.getcwd(), threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
         import configparser
         wf = configparser.ConfigParser()
         wf.optionxform = str
         wf['mode'] = dict(
+            outdir=outdir,
             threads=threads,
             retry=retry,
             monitor_resource=not no_monitor_resource,
@@ -361,7 +362,18 @@ class Workflow:
             check_resource_before_run=not no_check_resource,
         )
         for task_id, task in self.tasks.items():
-            wf[task.name] =
+            for k, v in task.cmd.args.items():
+                if type(v.value) == Output:
+                    v.value.value = os.path.join(outdir, self.tasks[v.value.task_id].name, v.value.value)
+            wf[task.name] = dict(
+                depend=','.join(self.tasks[x].name for x in task.depends) if task.depends else '',
+                cmd=task.cmd.format_cmd(self.tasks),
+                mem=task.cmd.runtime.memory,
+                cpu=task.cmd.runtime.cpu
+            )
+
+        with open(os.path.join(outdir, f'{self.meta.name}.ini'), 'w') as configfile:
+            wf.write(configfile)
 
 
 class ToWdlTask(object):
