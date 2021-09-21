@@ -354,7 +354,7 @@ class Workflow:
         wf = configparser.ConfigParser()
         wf.optionxform = str
         wf['mode'] = dict(
-            outdir=outdir,
+            outdir=os.path.abspath(outdir),
             threads=threads,
             retry=retry,
             monitor_resource=not no_monitor_resource,
@@ -364,14 +364,15 @@ class Workflow:
         for task_id, task in self.tasks.items():
             for k, v in task.cmd.args.items():
                 if type(v.value) == Output:
-                    v.value.value = os.path.join(outdir, self.tasks[v.value.task_id].name, v.value.value)
+                    v.value.value = os.path.join("${{mode:outdir}}", self.tasks[v.value.task_id].name, v.value.value)
             wf[task.name] = dict(
                 depend=','.join(self.tasks[x].name for x in task.depends) if task.depends else '',
                 cmd=task.cmd.format_cmd(self.tasks),
                 mem=task.cmd.runtime.memory,
-                cpu=task.cmd.runtime.cpu
+                cpu=task.cmd.runtime.cpu,
+                image=task.cmd.runtime.image if task.cmd.runtime.image is not None else ''
             )
-
+        os.makedirs(outdir, exist_ok=True)
         with open(os.path.join(outdir, f'{self.meta.name}.ini'), 'w') as configfile:
             wf.write(configfile)
 

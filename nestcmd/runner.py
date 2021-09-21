@@ -66,10 +66,11 @@ def set_logger(name='workflow.log', logger_id='x'):
 
 
 class Command(object):
-    def __init__(self, cmd, name, timeout=3600*24*10, outdir=os.getcwd(),
+    def __init__(self, cmd, name, timeout=3600*24*10, outdir=os.getcwd(), image=None,
                  monitor_resource=True, monitor_time_step=2, logger=None, **kwargs):
         self.name = name
         self.cmd = cmd
+        self.image = image
         self.proc = None
         self.stdout = None
         self.stderr = None
@@ -101,9 +102,14 @@ class Command(object):
                 break
 
     def run(self):
-
         cmd_wkdir = os.path.join(self.outdir, self.name)
         os.makedirs(cmd_wkdir, exist_ok=True)
+        if self.image:
+            with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
+                f.write(self.cmd + '\n')
+            self.cmd = f'docker run --rm -i --entrypoint /bin/bash '
+            self.cmd += f'-v {self.outdir}:{self.outdir} -w {cmd_wkdir} {self.image} cmd.sh'
+            print(self.cmd)
         start_time = time.time()
         self.logger.warning("RunStep: {}".format(self.name))
         self.logger.info("RunCmd: {}".format(self.cmd))
@@ -152,7 +158,7 @@ class CommandNetwork(object):
         self.parser = configparser.ConfigParser(interpolation=configparser.ExtendedInterpolation())
         self.parser.read(cmd_config, encoding='utf-8')
         self.pool_size = self.parser.getint('mode', 'threads')
-        self.workdir = os.path.abspath(self.parser.get('mode', 'outdir'))
+        self.outdir = os.path.abspath(self.parser.get('mode', 'outdir'))
 
     def names(self):
         sections = self.parser.sections()
@@ -336,19 +342,19 @@ class StateGraph(object):
 class RunCommands(CommandNetwork):
     __LOCK__ = Lock()
 
-    def __init__(self, cmd_config, outdir=os.getcwd(), timeout=10, logger=None, draw_state_graph=True):
+    def __init__(self, cmd_config, timeout=10, logger=None, draw_state_graph=True):
         super().__init__(cmd_config)
         self.end = False
         self.ever_queued = set()
         self.queue = self.__init_queue()
         self.state = self.__init_state()
         self.task_number = len(self.state)
-        self.outdir = outdir
         self.success = 0
         self.failed = 0
         # wait resource time limit
         self.timeout = timeout
         if not logger:
+            os.makedirs(self.outdir, exist_ok=True)
             self.logger = set_logger(name=os.path.join(self.outdir, 'workflow.log'))
         else:
             self.logger = logger
@@ -558,7 +564,6 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-cfg', required=True, help="pipeline configuration file")
-    parser.add_argument('-outdir', required=False, default='.', help="output directory")
     parser.add_argument('-wt', required=False, type=float, default=10,
                         help="time to wait for enough resource to initiate a task")
     parser.add_argument('--plot', action='store_true', default=False,
@@ -566,7 +571,7 @@ if __name__ == '__main__':
     parser.add_argument('--rerun', action='store_true', default=False,
                         help="if set, restart the pipeline at the failed/broken points")
     args = parser.parse_args()
-    workflow = RunCommands(args.cfg, timeout=args.wt, outdir=args.outdir, draw_state_graph=args.plot)
+    workflow = RunCommands(args.cfg, timeout=args.wt, draw_state_graph=args.plot)
     if not args.rerun:
         workflow.parallel_run()
     else:
