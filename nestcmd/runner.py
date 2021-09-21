@@ -116,11 +116,13 @@ class Command(object):
 
         start_time = time.time()
         self.logger.warning("RunStep: {}".format(self.name))
-        self.logger.info("RunCmd: {}".format(self.cmd))
+
         # submit task
         if self.image:
+            self.logger.info("> {}".format(docker_cmd))
             self.proc = psutil.Popen(docker_cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
         else:
+            self.logger.info("> {}".format(self.cmd))
             self.proc = psutil.Popen(self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
 
         PROCESS_local[self.proc] = self.name
