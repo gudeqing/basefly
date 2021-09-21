@@ -115,7 +115,7 @@ class Command(object):
             docker_cmd += f'-w {cmd_wkdir} {self.image} cmd.sh'
 
         start_time = time.time()
-        self.logger.warning("RunStep: {}".format(self.name))
+        self.logger.warning("Step: {}".format(self.name))
 
         # submit task
         if self.image:
