@@ -1,3 +1,4 @@
+import sys; sys.path.append('..')
 from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, get_fastq_info
 """
 pycharm里设置code completion 允许“suggest variable and parameter name”, 可以极大方便流程编写
@@ -142,14 +143,15 @@ def pipeline():
     args['out'].default = f'merged.{args["column"].value}.txt'
 
     for task_id, task in wf.tasks.items():
-        # print(task.task_id)
+        print(task.task_id)
         # print(task.outputs)
-        print(task.cmd.format_cmd(wf.tasks))
+        # print(task.cmd.format_cmd(wf.tasks))
         # for line in task.argo_template(wf.tasks):
         #     print(line)
 
-    wf.to_wdl(f'{wf.meta.name}.wdl')
-    wf.to_argo_worflow(f'{wf.meta.name}.yaml')
+    # wf.to_wdl(f'{wf.meta.name}.wdl')
+    # wf.to_argo_worflow(f'{wf.meta.name}.yaml')
+    wf.to_nestcmd(outdir='look')
 
 
 if __name__ == '__main__':

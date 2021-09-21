@@ -208,6 +208,7 @@ class Task:
         if self.name is None:
             self.name = self.cmd.meta.name + '-' + str(self.task_id)
         else:
+            self.name = self.name.replace('_', '-')
             if '_' in self.name or '+' in self.name or '@' in self.name:
                 raise Exception("name must consist of alpha-numeric characters or '-', and must start with an alpha-numeric character (e.g. My-name1-2, 123-NAME)")
         # 为每一个output带入
@@ -257,6 +258,9 @@ class TopVar:
     name: str = 'notNamed'
     type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
 
+    def __post_init__(self):
+        if self.type in ['infile', 'indir']:
+            self.value = os.path.abspath(self.value)
 
 @dataclass()
 class Workflow:
@@ -353,8 +357,9 @@ class Workflow:
         import configparser
         wf = configparser.ConfigParser()
         wf.optionxform = str
+        outdir = os.path.abspath(outdir)
         wf['mode'] = dict(
-            outdir=os.path.abspath(outdir),
+            outdir=outdir,
             threads=threads,
             retry=retry,
             monitor_resource=not no_monitor_resource,
@@ -362,15 +367,25 @@ class Workflow:
             check_resource_before_run=not no_check_resource,
         )
         for task_id, task in self.tasks.items():
+            mount_vols = [outdir]
             for k, v in task.cmd.args.items():
-                if type(v.value) == Output:
-                    v.value.value = os.path.join("${{mode:outdir}}", self.tasks[v.value.task_id].name, v.value.value)
+                if type(v.value) == list:
+                    values = v.value
+                else:
+                    values = [v.value]
+                for value in values:
+                    if type(value) == Output:
+                        value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
+                    elif type(value) == TopVar:
+                        file_dir = os.path.dirname(value.value)
+                        mount_vols.append(os.path.abspath(file_dir))
             wf[task.name] = dict(
                 depend=','.join(self.tasks[x].name for x in task.depends) if task.depends else '',
                 cmd=task.cmd.format_cmd(self.tasks),
                 mem=task.cmd.runtime.memory,
                 cpu=task.cmd.runtime.cpu,
-                image=task.cmd.runtime.image if task.cmd.runtime.image is not None else ''
+                image=task.cmd.runtime.image if task.cmd.runtime.image is not None else '',
+                mount_vols=';'.join(mount_vols)
             )
         os.makedirs(outdir, exist_ok=True)
         outfile = os.path.join(outdir, f'{self.meta.name}.ini')
@@ -853,6 +868,7 @@ def get_fastq_info(fastq_files: tuple = None, fastq_dirs: tuple = None, out='fas
 
     if fastq_dirs:
         for path in fastq_dirs:
+            path = os.path.abspath(path)
             for root, dirs, files in os.walk(path):
                 for each in files:
                     is_read1 = True

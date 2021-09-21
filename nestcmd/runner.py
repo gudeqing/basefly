@@ -66,11 +66,12 @@ def set_logger(name='workflow.log', logger_id='x'):
 
 
 class Command(object):
-    def __init__(self, cmd, name, timeout=3600*24*10, outdir=os.getcwd(), image=None,
+    def __init__(self, cmd, name, timeout=3600*24*10, outdir=os.getcwd(), image=None, mount_vols=None,
                  monitor_resource=True, monitor_time_step=2, logger=None, **kwargs):
         self.name = name
         self.cmd = cmd
         self.image = image
+        self.mount_vols = mount_vols
         self.proc = None
         self.stdout = None
         self.stderr = None
@@ -107,14 +108,21 @@ class Command(object):
         if self.image:
             with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
                 f.write(self.cmd + '\n')
-            self.cmd = f'docker run --rm -i --entrypoint /bin/bash '
-            self.cmd += f'-v {self.outdir}:{self.outdir} -w {cmd_wkdir} {self.image} cmd.sh'
-            print(self.cmd)
+
+            docker_cmd = 'docker run --rm -i --entrypoint /bin/bash '
+            for each in self.mount_vols.split(';'):
+                docker_cmd += f'-v {each}:{each} '
+            docker_cmd += f'-w {cmd_wkdir} {self.image} cmd.sh'
+
         start_time = time.time()
         self.logger.warning("RunStep: {}".format(self.name))
         self.logger.info("RunCmd: {}".format(self.cmd))
         # submit task
-        self.proc = psutil.Popen(self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
+        if self.image:
+            self.proc = psutil.Popen(docker_cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
+        else:
+            self.proc = psutil.Popen(self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
+
         PROCESS_local[self.proc] = self.name
         if self.monitor:
             thread = threading.Thread(target=self._monitor_resource, daemon=True)
