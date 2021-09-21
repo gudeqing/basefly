@@ -349,7 +349,7 @@ class Workflow:
             for line in lines:
                 f.write(line+'\n')
 
-    def to_nestcmd(self, outdir=os.getcwd(), threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+    def to_nestcmd(self, run=False, outdir=os.getcwd(), threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
         import configparser
         wf = configparser.ConfigParser()
         wf.optionxform = str
@@ -373,8 +373,12 @@ class Workflow:
                 image=task.cmd.runtime.image if task.cmd.runtime.image is not None else ''
             )
         os.makedirs(outdir, exist_ok=True)
-        with open(os.path.join(outdir, f'{self.meta.name}.ini'), 'w') as configfile:
+        outfile = os.path.join(outdir, f'{self.meta.name}.ini')
+        with open(outfile, 'w') as configfile:
             wf.write(configfile)
+        if run:
+            from .runner import RunCommands
+            RunCommands(outfile, timeout=600).parallel_run()
 
 
 class ToWdlTask(object):

@@ -34,7 +34,7 @@ def pipeline():
     args['infile'].value = task_a.outputs['outfile']
 
     wf.to_argo_worflow('mini_wf.yaml')
-    wf.to_nestcmd(outdir='look')
+    wf.to_nestcmd(outdir='look', run=True)
 
 
 if __name__ == '__main__':
