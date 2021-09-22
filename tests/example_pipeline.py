@@ -130,7 +130,8 @@ def pipeline():
     args['out'].default = f'merged.{args["column"].value}.txt'
 
     for task_id, task in wf.tasks.items():
-        print(task.task_id)
+        pass
+        # print(task.task_id)
         # print(task.outputs)
         # print(task.cmd.format_cmd(wf.tasks))
         # for line in task.argo_template(wf.tasks):
