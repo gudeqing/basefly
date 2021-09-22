@@ -12,16 +12,25 @@ __author__ = 'gdq'
 """
 设计思路
 1. 定义argument,runtime,outputs,meta
-2. 由上述对象进一步定义Command对象
-3. 给Command的参数具体赋值后，加上depend和outputs信息，可以进一步定义task对象
-4. 由task对象可构成workflow对象，当然也可以给workflow对象添加outputs对象,task的outputs继承自Command的outputs
-5. 定义方法将Command/Task对象转换成wdl脚本
-6. 定义方法依据Task对象生成具体的cmd信息,如此可以生成nestpipe格式的pipeline。
-7. 定义方法将workflow转换成wdl流程等
+    argument: 全面描述参数，最终可以根据参数列表自动组装成命令行
+    runtime：运行环境描述，如软件，docker image，memory，cpu限制等信息
+    outputs: 描述程序输出
+    meta: 描述程序/command的信息，如名称，作者，版本等信息
+2. 由上述对象进一步定义Command对象, 即Command = {Argument, RunTime, Output, Meta}
+3. 定义Task对象：
+    1. 给Command的参数具体赋值
+    2. 加上depend信息
+    3. 继承Command的outputs
+4. 定义workflow对象： 
+    1. 由task对象可构成workflow对象，workflow = dict(task1=task_body, task2=task_body, ...)
+    2. 当然也可以给workflow对象添加outputs对象, task的outputs继承自Command的outputs
+    
+5. 定义方法: 依据Task对象生成具体的cmd信息。
+6. 定义方法: 将Command/Task对象转换成wdl脚本
+7. 定义方法将workflow转换成wdl流程等、argo_workflow、nestcmd（我自定义的流程）
 
 注意：
-1. python dict的有序性对于cmd的正确解析非常重要
-2. 定义Argument的顺序非常重要，混乱的顺序对于cmd的形成不利
+1. python3.6以后的 dict有序性对于cmd的正确解析非常重要，因为定义Argument的顺序非常重要，很多命令行要求参数有序。
 3. Argument支持“多值且可重复”参数，如下，但是没有办法转化成wdl的，因为wdl不支持这么复杂的参数
     Argument(prefix='--x ', array=True, multi_times=True, default=[[1, 2], ['c', 'y']], delimiter=',')
 """
@@ -45,13 +54,14 @@ class Argument:
     delimiter: str = ' '
     # 指示一个参数是否可以多次使用
     multi_times: bool = False
+    # format 是描述输入文件的格式用的
     format: str = None
     # order字段是为了参数排序设计
     order: int = 0
     desc: str = 'This is description of the argument.'
 
     def __post_init__(self):
-        # type 类型检查
+        # type 类型检查和矫正
         if type(self.default) == int and self.type == 'str':
             # print(f'{self.name}: type of default value is not agree with type specified!')
             self.type = 'int'
@@ -66,7 +76,7 @@ class Argument:
             self.level = 'required'
             self.range = {True, False}
             if not self.default:
-                # 对于没有默认值的bool参数，强行赋值为false，该参数默认不参与命令行的形成
+                # 对于没有默认值的bool参数，强行赋值为false，即该参数默认不参与命令行的形成
                 self.default = False
         elif self.type == 'fix':
             if not self.value:
@@ -90,10 +100,16 @@ class Argument:
 @dataclass()
 class RunTime:
     image: str = None
+    # 软件所在目录
+    tool_dir: str = ''
+    # 软件名称
+    tool: str = ''
+    # 执行环境设置, 以下为命令运行所需的最少计算资源
     memory: int = 1000
     cpu: int = 2
-    tool_dir: str = ''
-    tool: str = ''
+    # 执行环境设置，以为命令行所需的最大计算资源
+    max_memory: int = None
+    max_cpu: int = None
 
 
 @dataclass()
@@ -101,9 +117,9 @@ class Output:
     path: str = None  # will be deprecated, replace with value
     value: Any = None
     # out_id: str = field(default_factory=uuid4)
-    type: str = 'File'
-    # 设计locate 参数用于整理结果目录
-    locate: str = "report"
+    type: Literal['str', 'int', 'float', 'bool', 'outfile', 'outdir'] = 'outfile'
+    # 设计report参数，用于指定该参数最终是否作为流程的outputs
+    report: bool = True
     # 由command形成task之后，可以带入task_id
     task_id: str = None
     name: str = None
@@ -112,8 +128,6 @@ class Output:
         if self.value is None:
             # value属性是后来修改增加的，本来用来替代path，为了向前兼容，保留path属性
             self.value = self.path
-        if self.type not in ['File', 'Directory', 'String']:
-            raise Exception("output type should be one of ['File', 'Directory', String]")
 
 
 @dataclass()
@@ -122,6 +136,7 @@ class Meta:
     desc: str = 'This is description of the tool/workflow.'
     author: str = 'unknown'
     source: str = 'source URL for the tool'
+    version: str = 'unknown'
 
 
 @dataclass()
@@ -155,7 +170,7 @@ class Command:
                     # 对于非必须参数，且没有赋值的参数，直接跳过，不参与命令行的形成
                     continue
 
-            # 当参数值为output类型时，需如下特殊处理
+            # 当参数值为output or topVar类型时，需如下特殊处理得到实际的参数值
             if type(arg_value) == Output:
                 value_dict = {k: v.value or v.default for k, v in wf_tasks[arg_value.task_id].cmd.args.items()}
                 arg_value = arg_value.value.replace('~', '').format(**value_dict)
@@ -166,6 +181,8 @@ class Command:
                 for ind, each in enumerate(arg_value):
                     if type(each) == Output:
                         value_dict = {k: v.value or v.default for k, v in wf_tasks[each.task_id].cmd.args.items()}
+                        # 当前设计中可以用’~{target}‘引用其他参数的形成outputs的值,这里需要替换回来
+                        # '~{}'也是wdl的语法, 所以起初这个功能是为wdl设置的
                         arg_value[ind] = each.value.replace('~', '').format(**value_dict)
                     elif type(each) == TopVar:
                         arg_value[ind] = each.value
@@ -176,6 +193,7 @@ class Command:
                     arg_value = arg.delimiter.join([str(x) for x in arg_value])
                 else:
                     arg_value = [arg.delimiter.join([str(x) for x in v]) for v in arg_value]
+
             # 处理bool值参数
             if arg.type == "bool" or type(arg.value) == bool:
                 if arg_value:
@@ -191,6 +209,7 @@ class Command:
         return cmd
 
     def format_wdl_task(self, outfile=None, wdl_version='development'):
+        # 形成wdl格式的task非常复杂，因此单独提供ToWdlTask处理，该函数只有当你仅需要某个task的wdl版本时需要
         if not outfile:
             outfile = f'{self.meta.name}.wdl'
         ToWdlTask(self, outfile, wdl_version)
@@ -208,13 +227,16 @@ class Task:
         if self.name is None:
             self.name = self.cmd.meta.name + '-' + str(self.task_id)
         else:
+            # 因为argo-workflow不支持步骤名称包含下划线, 因此这里特殊处理
             self.name = self.name.replace('_', '-')
             if '_' in self.name or '+' in self.name or '@' in self.name:
-                raise Exception("name must consist of alpha-numeric characters or '-', and must start with an alpha-numeric character (e.g. My-name1-2, 123-NAME)")
+                raise Exception("name must consist of alpha-numeric characters or '-', "
+                                "and must start with an alpha-numeric character (e.g. My-name1-2, 123-NAME)")
         # 为每一个output带入
         for key in self.cmd.outputs.keys():
             self.cmd.outputs[key].task_id = self.task_id
             self.cmd.outputs[key].name = key
+        # 继承 cmd 的outputs
         self.outputs = self.cmd.outputs
 
     def argo_template(self, wf_tasks):
@@ -254,13 +276,18 @@ class Task:
 
 @dataclass()
 class TopVar:
+    """
+    该对象用于描述输入流程的起始输入对象, 这样设计的目的是为了方便流程的转化
+    """
     value: Any
     name: str = 'notNamed'
     type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
 
     def __post_init__(self):
         if self.type in ['infile', 'indir']:
+            # 对输入文件的路径进行绝对化
             self.value = os.path.abspath(self.value)
+
 
 @dataclass()
 class Workflow:
@@ -271,6 +298,7 @@ class Workflow:
 
     def __post_init__(self):
         for k, v in self.top_vars.items():
+            # 将key作为var的名称
             v.name = k
 
     def add_task(self, cmd: Command, depends: list = None, name: str = None):
@@ -353,7 +381,17 @@ class Workflow:
             for line in lines:
                 f.write(line+'\n')
 
-    def to_nestcmd(self, run=False, outdir=os.getcwd(), threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+    def to_nestcmd(self, outdir, run=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+        """
+        生成nestcmd格式的workflow并且允许直接本地执行
+        :param outdir:
+        :param run:
+        :param threads:
+        :param retry:
+        :param no_monitor_resource:
+        :param no_check_resource:
+        :return:
+        """
         import configparser
         wf = configparser.ConfigParser()
         wf.optionxform = str
@@ -366,6 +404,7 @@ class Workflow:
             monitor_time_step=2,
             check_resource_before_run=not no_check_resource,
         )
+
         for task_id, task in self.tasks.items():
             mount_vols = [outdir]
             for k, v in task.cmd.args.items():
@@ -384,6 +423,8 @@ class Workflow:
                 cmd=task.cmd.format_cmd(self.tasks),
                 mem=task.cmd.runtime.memory,
                 cpu=task.cmd.runtime.cpu,
+                max_mem=task.cmd.runtime.max_memory,
+                max_cpu=task.cmd.runtime.max_cpu,
                 image=task.cmd.runtime.image if task.cmd.runtime.image is not None else '',
                 mount_vols=';'.join(mount_vols)
             )
@@ -621,7 +662,8 @@ class ToWdlTask(object):
 class ToWdlWorkflow(object):
     """
     workflow的group信息的依据是：是否可以在同一个循环中并发
-    如何知道task输入的依赖信息：要求给参数加一个wdl属性，对应使用wdl语法, 或者根据output对象推断
+    如何知道task输入的依赖信息：要求给参数加一个wdl属性，对应使用wdl语法, 或者根据output对象推断，
+    由于WDL语法并非十分结构化，难以正确形成，生成的流程需人工核查调整
     """
     def __init__(self, wf: Workflow):
         self.wf = wf

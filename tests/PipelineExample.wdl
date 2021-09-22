@@ -2,15 +2,18 @@ version development
 
 workflow pipeline {
     input {
-        Array[File] read1
-        Array[File] read2
-        Array[String] names
+        Directory index_dir = "testdata/index/"
+        File s1_r1 = "testdata/s1.R1.fastq"
+        File s1_r2 = "testdata/s1.R2.fastq"
+        File s2_r1 = "testdata/s2.R1.fastq"
+        File s2_r2 = "testdata/s2.R2.fastq"
     }
 
-    Array[Pair[File, File]] reads = zip(read1, read2)
-    Array[Pair[String, Pair[File, File]]] init_array = zip(names, reads)
-
-    scatter (each in init_array) { 
+    call getFastqInfo{}
+    scatter (each in keys(getFastqInfo.fastq_info)) { 
+        String sample = each
+        File read1 = getFastqInfo.fastq_info[each][0][0]
+        File read2 = getFastqInfo.fastq_info[each][1][0]
         call fastp {
             input: 
             read1 = each.right.left,
@@ -21,6 +24,7 @@ workflow pipeline {
 
         call salmon {
             input: 
+            indexDir = index_dir,
             read1 = fastp.out1,
             read2 = fastp.out2,
             outDir = each.left
@@ -56,6 +60,44 @@ workflow pipeline {
 
 }
 
+
+
+task getFastqInfo{
+    input {
+        Array[Directory]? fastq_dirs
+        Array[File]? fastq_files
+        String r1_name = '(.*).read1.fastq.gz'
+        String r2_name = '(.*).read2.fastq.gz'
+        String docker = 'gudeqing/getfastqinfo:1.0'
+    }
+
+    command <<<
+        set -e
+        python /get_fastq_info.py \
+            ~{if defined(fastq_dirs) then "-fastq_dirs " else ""}~{sep=" " fastq_dirs} \
+            ~{if defined(fastq_files) then "-fastq_files " else ""}~{sep=" " fastq_files} \
+            -r1_name '~{r1_name}' \
+            -r2_name '~{r2_name}' \
+            -out fastq.info.json
+    >>>
+
+    output {
+        Map[String, Array[Array[File]]] fastq_info = read_json("fastq.info.json")
+        File fastq_info_json = "fastq.info.json"
+    }
+
+    runtime {
+        docker: docker
+    }
+
+    parameter_meta {
+        fastq_dirs: {desc: "directory list, target fastq files should be in these directories. All target files in 'fastq_files' or 'fastq_dirs' will be used", level: "optional", type: "indir", range: "", default: ""}
+        fastq_files: {desc: "target fastq file list. 'fastq_files' or 'fastq_dirs' must be provided.", level: "optional", type: "infile", range: "", default: ""}
+        r1_name: {desc: "python regExp that describes the full name of read1 fastq file name. It requires at least one pair of small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'", level: "required", type: "str", range: "", default: ""}
+        r2_name: {desc: "python regExp that describes the full name of read2 fastq file name. It requires at least one pair of small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'", level: "required", type: "str", range: "", default: ""}
+    }
+}
+    
 task fastp{
     input {
         File read1

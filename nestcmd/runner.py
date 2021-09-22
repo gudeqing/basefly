@@ -77,8 +77,8 @@ class Command(object):
         self.stderr = None
         self.timeout = int(timeout)
         self.used_time = 0
-        self.max_mem = 0
-        self.max_cpu = 0
+        self.max_used_mem = 0
+        self.max_used_cpu = 0
         self.monitor = monitor_resource
         self.monitor_time_step = int(monitor_time_step)
         self.outdir = outdir
@@ -92,12 +92,12 @@ class Command(object):
             try:
                 cpu_percent = self.proc.cpu_percent(self.monitor_time_step)
                 used_cpu = round(cpu_percent*0.01, 4)
-                if used_cpu > self.max_cpu:
-                    self.max_cpu = used_cpu
+                if used_cpu > self.max_used_cpu:
+                    self.max_used_cpu = used_cpu
                 memory_obj = self.proc.memory_full_info()
                 memory = round(memory_obj.uss/1024/1024, 4)
-                if memory > self.max_mem:
-                    self.max_mem = memory
+                if memory > self.max_used_mem:
+                    self.max_used_mem = memory
             except Exception as e:
                 # print('Failed to capture cpu/mem info for: ', e)
                 break
@@ -156,10 +156,10 @@ class Command(object):
         if self.stdout:
             with open(prefix+'.stdout.txt', 'wb') as f:
                 f.write(self.stdout)
-        if self.max_cpu or self.max_mem:
+        if self.max_used_cpu or self.max_used_mem:
             with open(prefix+'.resource.txt', 'w') as f:
-                f.write('max_cpu: {}\n'.format(self.max_cpu))
-                f.write('max_mem: {}M\n'.format(round(self.max_mem, 4)))
+                f.write('max_cpu: {}\n'.format(self.max_used_cpu))
+                f.write('max_mem: {}M\n'.format(round(self.max_used_mem, 4)))
 
 
 class CommandNetwork(object):
@@ -416,8 +416,8 @@ class RunCommands(CommandNetwork):
             else:
                 cmd_state['state'] = 'success' if cmd.proc.returncode == 0 else 'failed'
                 cmd_state['used_time'] = cmd.used_time
-                cmd_state['mem'] = cmd.max_mem
-                cmd_state['cpu'] = cmd.max_cpu
+                cmd_state['mem'] = cmd.max_used_mem
+                cmd_state['cpu'] = cmd.max_used_cpu
                 cmd_state['pid'] = cmd.proc.pid
         success = set(x for x in self.state if self.state[x]['state'] == 'success')
         self.success = len(success)
