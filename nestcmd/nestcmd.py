@@ -545,7 +545,11 @@ class ToWdlTask(object):
                     arg_info += ' = "{}"'.format(detail['default'])
             else:
                 if detail['default'] is not None:
-                    arg_info += ' = {}'.format(detail['default'])
+                    if detail['type'] != 'indir':
+                        arg_info += ' = {}'.format(detail['default'])
+                    else:
+                        # 目前cromwell并不支持给Directory参数赋默认值
+                        pass
 
             inputs.append(arg_info)
 
@@ -808,7 +812,11 @@ class ToWdlWorkflow(object):
                 else:
                     var_type = 'String'
                     var_value = f'"{v.value}"'
-                wdl += ' '*4*2 + f'{var_type} {k} = {var_value}\n'
+                if var_type == 'Directory':
+                    print('warn: wdl目前不支持给Directory变量赋默认值')
+                    wdl += ' ' * 4 * 2 + f'{var_type} {k}\n'
+                else:
+                    wdl += ' '*4*2 + f'{var_type} {k} = {var_value}\n'
 
         wdl += ' '*4 + '}\n\n'
         wdl += ' '*4*1 + 'call getFastqInfo{}\n'
