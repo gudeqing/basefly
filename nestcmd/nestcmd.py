@@ -108,8 +108,8 @@ class RunTime:
     memory: int = 1000
     cpu: int = 2
     # 执行环境设置，以为命令行所需的最大计算资源
-    max_memory: int = None
-    max_cpu: int = None
+    max_memory: int = 0
+    max_cpu: int = 0
 
 
 @dataclass()
@@ -174,7 +174,7 @@ class Command:
             if type(arg_value) == Output:
                 value_dict = {k: v.value or v.default for k, v in wf_tasks[arg_value.task_id].cmd.args.items()}
                 arg_value = arg_value.value.replace('~', '').format(**value_dict)
-            elif type(arg_value) == TopVar:
+            elif type(arg_value) == TopVar or type(arg_value) == LoopVar:
                 arg_value = arg_value.value
             elif type(arg_value) == list:
                 arg_value = arg_value.copy()
@@ -184,7 +184,7 @@ class Command:
                         # 当前设计中可以用’~{target}‘引用其他参数的形成outputs的值,这里需要替换回来
                         # '~{}'也是wdl的语法, 所以起初这个功能是为wdl设置的
                         arg_value[ind] = each.value.replace('~', '').format(**value_dict)
-                    elif type(each) == TopVar:
+                    elif type(each) == TopVar or type(each) == LoopVar:
                         arg_value[ind] = each.value
 
             # 对于可以接收多个值的参数
@@ -276,6 +276,21 @@ class Task:
 
 @dataclass()
 class TopVar:
+    """
+    该对象用于描述流程循环时的临时变量, 纯粹是为wdl的scatter模式设计
+    """
+    value: Any
+    name: str = 'notNamed'
+    type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
+
+    def __post_init__(self):
+        if self.type in ['infile', 'indir']:
+            # 对输入文件的路径进行绝对化
+            self.value = os.path.abspath(self.value)
+
+
+@dataclass()
+class LoopVar:
     """
     该对象用于描述输入流程的起始输入对象, 这样设计的目的是为了方便流程的转化
     """
@@ -406,18 +421,18 @@ class Workflow:
         )
 
         for task_id, task in self.tasks.items():
-            mount_vols = [outdir]
+            mount_vols = {outdir}
             for k, v in task.cmd.args.items():
                 if type(v.value) == list:
                     values = v.value
                 else:
                     values = [v.value]
                 for value in values:
-                    if type(value) == Output:
+                    if type(value) == Output and value.type in ['outfile', 'outdir']:
                         value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
-                    elif type(value) == TopVar:
+                    elif (type(value) == TopVar or type(value) == LoopVar) and value.type in ['infile', 'indir']:
                         file_dir = os.path.dirname(value.value)
-                        mount_vols.append(os.path.abspath(file_dir))
+                        mount_vols.add(os.path.abspath(file_dir))
             wf[task.name] = dict(
                 depend=','.join(self.tasks[x].name for x in task.depends) if task.depends else '',
                 cmd=task.cmd.format_cmd(self.tasks),
@@ -438,6 +453,17 @@ class Workflow:
 
 
 class ToWdlTask(object):
+    type_conv_dict = {
+        'str': 'String',
+        'int': 'Int',
+        'float': 'Float',
+        'bool': 'Boolean',
+        'infile': 'File',
+        'outfile': 'File',
+        'indir': 'Directory',
+        'outdir': 'Directory',
+    }
+
     def __init__(self, command: Command, outfile=None, wdl_version='development'):
         self.cmd = command
         self.task_name = None
@@ -562,7 +588,7 @@ class ToWdlTask(object):
                 value = v.path.replace('{', '~{')
             else:
                 value = v.path
-            outputs += [v.type + ' ' + name + ' = ' + f'"{value}"']
+            outputs += [self.type_conv_dict[v.type] + ' ' + name + ' = ' + f'"{value}"']
         return outputs
 
     def format_wdl_task(self, outfile=None, wdl_version='development'):
@@ -665,6 +691,17 @@ class ToWdlWorkflow(object):
     如何知道task输入的依赖信息：要求给参数加一个wdl属性，对应使用wdl语法, 或者根据output对象推断，
     由于WDL语法并非十分结构化，难以正确形成，生成的流程需人工核查调整
     """
+    type_conv_dict = {
+        'str': 'String',
+        'int': 'Int',
+        'float': 'Float',
+        'bool': 'Boolean',
+        'infile': 'File',
+        'outfile': 'File',
+        'indir': 'Directory',
+        'outdir': 'Directory',
+    }
+
     def __init__(self, wf: Workflow):
         self.wf = wf
 
@@ -718,7 +755,7 @@ class ToWdlWorkflow(object):
                     task_name = self.wf.tasks[detail.value.task_id].cmd.meta.name
                     detail.wdl = task_name + '.' + detail.value.name
                     lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.wdl + ',\n'
-                elif type(detail.value) == TopVar:
+                elif type(detail.value) == TopVar or type(detail.value) == LoopVar:
                     lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.value.name + ',\n'
                 elif type(detail.value) == list:
                     # print(detail.value)
@@ -800,9 +837,9 @@ class ToWdlWorkflow(object):
         for cmd, is_scattered in zip(all_cmds, scattered):
             name = cmd.meta.name
             if is_scattered:
-                output_lst += [f'Array[{v.type}] {(name+"_"+k).replace(".", "_")} = {name}.{k}' for k, v in cmd.outputs.items()]
+                output_lst += [f'Array[{self.type_conv_dict[v.type]}] {(name+"_"+k).replace(".", "_")} = {name}.{k}' for k, v in cmd.outputs.items()]
             else:
-                output_lst += [f'{v.type} {(name+"_"+k).replace(".", "_")} = {name}.{k}' for k, v in cmd.outputs.items()]
+                output_lst += [f'{self.type_conv_dict[v.type]} {(name+"_"+k).replace(".", "_")} = {name}.{k}' for k, v in cmd.outputs.items()]
         wdl += ' ' * 4 + 'output{\n'
         for line in output_lst:
             wdl += ' ' * 4*2 + line + '\n'

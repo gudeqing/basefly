@@ -1,5 +1,5 @@
 import sys; sys.path.append('..')
-from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, get_fastq_info
+from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, LoopVar, get_fastq_info
 """
 pycharm里设置code completion 允许“suggest variable and parameter name”, 可以极大方便流程编写
 
@@ -23,8 +23,8 @@ def fastp():
     # 当然，可以直接用字典的方式添加参数
     cmd.args['out1'] = Argument(prefix='-o ', type='str', desc='clean read1 output fastq file')
     cmd.args['out2'] = Argument(prefix='-O ', type='str', desc='clean read2 output fastq file')
-    # 下面的outputs设置纯粹是为了能够生成wdl设置
-    cmd.outputs['out1'] = Output(path="{out1}")
+    # 下面的outputs设置起初是为了能够生成wdl设置,
+    cmd.outputs['out1'] = Output(path="{out1}")  # 这里使用”{}“引用其他参数的值作为输入
     cmd.outputs['out2'] = Output(path="{out2}")
     return cmd
 
@@ -44,8 +44,8 @@ def salmon():
     cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 fastq file')
     cmd.args['outDir'] = Argument(prefix='-o ', type='str', default='quant', desc='output directory')
     cmd.args['gcBias'] = Argument(prefix='--gcBias ', type='bool', default=True, desc='perform gc Bias correction')
-    cmd.outputs['transcript'] = Output(path="{outDir}" + "/quant.sf", locate='quant')
-    cmd.outputs['outDir'] = Output(path="{outDir}", type='Directory')
+    cmd.outputs['transcript'] = Output(path="{outDir}" + "/quant.sf")
+    cmd.outputs['outDir'] = Output(path="{outDir}", type='outdir')
     return cmd
 
 
@@ -70,13 +70,6 @@ def pipeline():
     top_vars = dict(
         index_dir=TopVar(value='testdata/index/', type='indir'),
     )
-    final_fastq_info = dict()
-    for k, v in fastq_info.items():
-        r1 = TopVar(value=v[0][0], type='infile')
-        r2 = TopVar(value=v[1][0], type='infile')
-        top_vars[k+'_r1'] = r1
-        top_vars[k+'_r2'] = r2
-        final_fastq_info[k] = [r1, r2]
 
     wf = Workflow(top_vars=top_vars)
     wf.meta.name = 'PipelineExample'
@@ -84,7 +77,9 @@ def pipeline():
     wf.meta.desc += 'workflow = [fastq -> Fastp -> Salmon]'
 
     merge_depends = []
-    for sample, (r1, r2) in final_fastq_info.items():
+    for sample, (r1, r2) in fastq_info.items():
+        r1 = r1[0]
+        r2 = r2[0]
         # 向流程中添加task
         task, args = wf.add_task(fastp(), name='fastp_'+sample)
         # 可随意带入任何信息，如样本信息
@@ -92,17 +87,10 @@ def pipeline():
         # 给task分组信息，同一批次循环中的task属于同一组，这对于wdl的scatter转换非常重要
         task.group = 'batch1'
         task_id = task.task_id
-        args['read1'].value = r1
-        args['read2'].value = r2
+        args['read1'].value = LoopVar(name='read1', value=r1, type='infile')
+        args['read2'].value = LoopVar(name='read2', value=r2, type='infile')
         args['out1'].value = f'{sample}.clean.R1.fq'
         args['out2'].value = f'{sample}.clean.R2.fq'
-
-        # 给参数添加wdl属性,目的是为了正确生成wdl流程，如果无需生成wdl流程，则无需添加wdl属性。
-        # 下面代码中的each表示wdl中对init_array进行循环时的临时变量, each结构={sample:{r1:r2}}
-        args['read1'].wdl = "each.right.left"
-        args['read2'].wdl = "each.right.right"
-        args['out1'].wdl = "~{each.left}.clean.R1.fq"
-        args['out2'].wdl = "~{each.left}.clean.R2.fq"
 
         depend_task = task
         task, args = wf.add_task(salmon(), name='salmon_'+sample)
@@ -114,7 +102,6 @@ def pipeline():
         args['indexDir'].value = top_vars['index_dir']
         args['outDir'].value = sample
         # 上面的sample只是一个普通的字符串，所以必须添加wdl属性用以辅助wdl生成
-        args['outDir'].wdl = "each.left"
         merge_depends.append(task.task_id)
 
     # merge transcript TPM
@@ -149,7 +136,7 @@ def pipeline():
         # for line in task.argo_template(wf.tasks):
         #     print(line)
 
-    # wf.to_wdl(f'{wf.meta.name}.wdl')
+    wf.to_wdl(f'{wf.meta.name}.wdl')
     # wf.to_argo_worflow(f'{wf.meta.name}.yaml')
     wf.to_nestcmd(outdir='look')
 
