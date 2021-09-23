@@ -172,19 +172,29 @@ class Command:
 
             # 当参数值为output or topVar类型时，需如下特殊处理得到实际的参数值
             if type(arg_value) == Output:
-                value_dict = {k: v.value or v.default for k, v in wf_tasks[arg_value.task_id].cmd.args.items()}
+                value_dict = dict()
+                for k, v in wf_tasks[arg_value.task_id].cmd.args.items():
+                    if type(v.value) != TmpVar:
+                        value_dict[k] = v.value or v.default
+                    else:
+                        value_dict[k] = v.value.value
                 arg_value = arg_value.value.replace('~', '').format(**value_dict)
-            elif type(arg_value) == TopVar or type(arg_value) == LoopVar:
+            elif type(arg_value) == TopVar or type(arg_value) == TmpVar:
                 arg_value = arg_value.value
             elif type(arg_value) == list:
                 arg_value = arg_value.copy()
                 for ind, each in enumerate(arg_value):
                     if type(each) == Output:
-                        value_dict = {k: v.value or v.default for k, v in wf_tasks[each.task_id].cmd.args.items()}
+                        value_dict = dict()
+                        for k, v in wf_tasks[each.task_id].cmd.args.items():
+                            if type(v.value) != TmpVar:
+                                value_dict[k] = v.value or v.default
+                            else:
+                                value_dict[k] = v.value.value
                         # 当前设计中可以用’~{target}‘引用其他参数的形成outputs的值,这里需要替换回来
-                        # '~{}'也是wdl的语法, 所以起初这个功能是为wdl设置的
+                        # '~{}'也是wdl的语法, 其实起初这个功能是为wdl设置的
                         arg_value[ind] = each.value.replace('~', '').format(**value_dict)
-                    elif type(each) == TopVar or type(each) == LoopVar:
+                    elif type(each) == TopVar or type(each) == TmpVar:
                         arg_value[ind] = each.value
 
             # 对于可以接收多个值的参数
@@ -277,7 +287,7 @@ class Task:
 @dataclass()
 class TopVar:
     """
-    该对象用于描述流程循环时的临时变量, 纯粹是为wdl的scatter模式设计
+    该对象用于描述输入流程的起始输入对象, 这样设计的目的是为了方便流程的转化
     """
     value: Any
     name: str = 'notNamed'
@@ -290,18 +300,22 @@ class TopVar:
 
 
 @dataclass()
-class LoopVar:
+class TmpVar:
     """
-    该对象用于描述输入流程的起始输入对象, 这样设计的目的是为了方便流程的转化
+    该对象用于描述流程中如循环时的临时变量, 纯粹是为wdl的scatter模式设计, name属性将作为传递值。
+    例如：如循环中某个变量为A，则把输出文件名定义为out_file = ’~{A}.txt‘.
+    那么，这时脚本中可以写: outfile = TmpVar(name="~{A}.txt", type='str') , 这里“~{}”是wdl传递变量值的语法。
     """
     value: Any
     name: str = 'notNamed'
-    type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
+    type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'str'
 
     def __post_init__(self):
         if self.type in ['infile', 'indir']:
             # 对输入文件的路径进行绝对化
             self.value = os.path.abspath(self.value)
+        if '~{' in self.name:
+            self.name = f'"{self.name}"'
 
 
 @dataclass()
@@ -325,6 +339,7 @@ class Workflow:
         ToWdlWorkflow(self).write_wdl(outfile)
 
     def to_argo_worflow(self, outfile):
+        # 有待完善
         lines = ['apiVersion: argoproj.io/v1alpha1']
         lines += ['kind: Workflow']
         lines += ['metadata:']
@@ -365,7 +380,7 @@ class Workflow:
                 for each in artifacts:
                     if type(args[each].value) != list:
                         lines += [' ' * 10 + f'- name: {each}']
-                        if type(args[each].value) == TopVar:
+                        if type(args[each].value) in [TopVar, TmpVar]:
                             lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{args[each].value.name}}}}}"']
                         elif type(args[each].value) == Output:
                             depend_task = self.tasks[args[each].value.task_id].name
@@ -377,7 +392,7 @@ class Workflow:
                     else:
                         for i, v in enumerate(args[each].value):
                             lines += [' ' * 10 + f'- name: {each}_{i}']
-                            if type(v) == TopVar:
+                            if type(v) in [TopVar, TmpVar]:
                                 lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{v.name}}}}}"']
                             elif type(v) == Output:
                                 depend_task = self.tasks[v.task_id].name
@@ -430,7 +445,7 @@ class Workflow:
                 for value in values:
                     if type(value) == Output and value.type in ['outfile', 'outdir']:
                         value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
-                    elif (type(value) == TopVar or type(value) == LoopVar) and value.type in ['infile', 'indir']:
+                    elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir']:
                         file_dir = os.path.dirname(value.value)
                         mount_vols.add(os.path.abspath(file_dir))
             wf[task.name] = dict(
@@ -759,7 +774,7 @@ class ToWdlWorkflow(object):
                     task_name = self.wf.tasks[detail.value.task_id].cmd.meta.name
                     detail.wdl = task_name + '.' + detail.value.name
                     lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.wdl + ',\n'
-                elif type(detail.value) == TopVar or type(detail.value) == LoopVar:
+                elif type(detail.value) == TopVar or type(detail.value) == TmpVar:
                     lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.value.name + ',\n'
                 elif type(detail.value) == list:
                     # print(detail.value)
@@ -769,9 +784,9 @@ class ToWdlWorkflow(object):
                             task_name = self.wf.tasks[each.task_id].cmd.meta.name
                             wdl_str = task_name + '.' + each.name
                             wdl_str_set.add(wdl_str)
-                        if type(each) == TopVar:
+                        elif type(each) == TopVar or type(each) == TmpVar:
                             wdl_str_set.add(each.name)
-                    # 如果wdl_str_set长度唯一，说明这个list里面存储的是并发结果
+                    # 如果wdl_str_set长度=1，说明这个list里面存储的是并发结果
                     if len(wdl_str_set) == 1:
                         wdl_str_lst = wdl_str_set.pop()
                     else:
@@ -813,7 +828,7 @@ class ToWdlWorkflow(object):
                     var_type = 'String'
                     var_value = f'"{v.value}"'
                 if var_type == 'Directory':
-                    print('warn: wdl目前不支持给Directory变量赋默认值')
+                    # print('warn: wdl目前不支持给Directory变量赋默认值')
                     wdl += ' ' * 4 * 2 + f'{var_type} {k}\n'
                 else:
                     wdl += ' '*4*2 + f'{var_type} {k} = {var_value}\n'

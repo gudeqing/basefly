@@ -1,9 +1,11 @@
 import sys; sys.path.append('..')
-from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, LoopVar, get_fastq_info
+from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar, get_fastq_info
 """
 pycharm里设置code completion 允许“suggest variable and parameter name”, 可以极大方便流程编写
 
 注意:
+0. 写workflow时，参数赋值规范建议：args[X].value = TopVar[?] | .Outputs[?] | TmpVar()
+0. 如果不是为了写wdl流程，可以不使用TmpVar，直接赋值就ok
 1. 一定要正确定义参数的类型, type is one of ['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix']
     其中‘fix'可以用于表示命令行中的固定字符串或固定参数, 如 “bwa xxx | samtools sort -" 中的‘| samtools sort -’ 可以用fix固定
 2. 参数的添加顺序对于命令行的正确形成很重要，这里字典的有序性得到利用
@@ -81,26 +83,26 @@ def pipeline():
         r1 = r1[0]
         r2 = r2[0]
         # 向流程中添加task
-        task, args = wf.add_task(fastp(), name='fastp_'+sample)
+        task, args = wf.add_task(fastp(), name='fastp-'+sample)
         # 可随意带入任何信息，如样本信息
         task.sample = sample
         # 给task分组信息，同一批次循环中的task属于同一组，这对于wdl的scatter转换非常重要
         task.group = 'batch1'
         task_id = task.task_id
-        args['read1'].value = LoopVar(name='read1', value=r1, type='infile')
-        args['read2'].value = LoopVar(name='read2', value=r2, type='infile')
-        args['out1'].value = f'{sample}.clean.R1.fq'
-        args['out2'].value = f'{sample}.clean.R2.fq'
+        args['read1'].value = TmpVar(name='read1', value=r1, type='infile')
+        args['read2'].value = TmpVar(name='read2', value=r2, type='infile')
+        args['out1'].value = TmpVar(name='~{sample}.clean.R1.fq', value=f'{sample}.clean.R1.fq', type='str')
+        args['out2'].value = TmpVar(name='~{sample}.clean.R2.fq', value=f'{sample}.clean.R2.fq', type='str')
 
         depend_task = task
-        task, args = wf.add_task(salmon(), name='salmon_'+sample)
+        task, args = wf.add_task(salmon(), name='salmon-'+sample)
         task.depends = [task_id]
         task.sample = sample
         task.group = 'batch1'
         args['read1'].value = depend_task.outputs["out1"]
         args['read2'].value = depend_task.outputs["out2"]
         args['indexDir'].value = top_vars['index_dir']
-        args['outDir'].value = sample
+        args['outDir'].value = TmpVar(name="sample", value=sample, type='str')
         # 上面的sample只是一个普通的字符串，所以必须添加wdl属性用以辅助wdl生成
         merge_depends.append(task.task_id)
 
