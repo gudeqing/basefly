@@ -5,7 +5,7 @@ from uuid import uuid4
 from dataclasses import dataclass, field
 from typing import Any, List, Dict, Literal
 # shadow default dict
-from munch import Munch as dict
+# from munch import Munch as dict
 
 __author__ = 'gdq'
 

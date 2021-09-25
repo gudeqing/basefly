@@ -1,16 +1,26 @@
 import sys; sys.path.append('..')
 from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar, get_fastq_info
-"""
-pycharm里设置code completion 允许“suggest variable and parameter name”, 可以极大方便流程编写
 
+"""
 注意:
-0. 写workflow时，参数赋值规范建议：args[X].value = TopVar[?] | .Outputs[?] | TmpVar()
-0. 如果不是为了写wdl流程，可以不使用TmpVar，直接赋值就ok
+pycharm里设置code completion 允许“suggest variable and parameter name”, 可以极大方便流程编写
+0. 写workflow时，参数赋值规范建议：args[X].value = TopVar[?] | task.Outputs[?] | TmpVar()
+*. 如果不是为了写wdl流程，可以不使用TmpVar，直接赋值就ok
 1. 一定要正确定义参数的类型, type is one of ['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix']
     其中‘fix'可以用于表示命令行中的固定字符串或固定参数, 如 “bwa xxx | samtools sort -" 中的‘| samtools sort -’ 可以用fix固定
 2. 参数的添加顺序对于命令行的正确形成很重要，这里字典的有序性得到利用
-3. 定义output时，path属性对应的值不能包含’~‘, 其对于wdl有特殊含义;可以用{}引用cmd.args的key
-4. 必要时，你需要给参数对象Argument添加wdl属性，用以辅助wdl的正确生成，这需要你懂一点点wdl语法
+3. 定义output时，value(或path）属性对应的值可以直接用{}引用cmd.args的key，
+
+关于runtime:
+memory和cpu是定义最小计算资源需求
+max_memory和max_cpu定义计算资源上限
+image: 定义docker镜像
+tool：工具命令，即命令行的第一个参数
+tool_dir: 定义tool所在路径
+
+关于meta：
+name: 定义命令行的名称，会参与具体task的name的形成，建议组成：[数字，字母，’-‘], 下划线会自动被替换为中划线’-‘
+其他字段都是描述工具的开发作者(author)，链接(source)，版本号(version)，简介（desc)
 """
 
 
@@ -20,13 +30,13 @@ def fastp():
     cmd.runtime.image = 'gudeqing/fastp:0.21.0'
     cmd.runtime.tool = 'fastp'
     # 可以直接用访问属性的方式添加参数，这个得益于使用Munch对象而不是原生字典
-    cmd.args.read1 = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
-    cmd.args.read2 = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
+    cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
+    cmd.args['read2'] = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
     # 当然，可以直接用字典的方式添加参数
     cmd.args['out1'] = Argument(prefix='-o ', type='str', desc='clean read1 output fastq file')
     cmd.args['out2'] = Argument(prefix='-O ', type='str', desc='clean read2 output fastq file')
     # 下面的outputs设置起初是为了能够生成wdl设置,
-    cmd.outputs['out1'] = Output(path="{out1}")  # 这里使用”{}“引用其他参数的值作为输入
+    cmd.outputs['out1'] = Output(path="{out1}")  # 这里使用”{}“引用其他Argument对象作为输入
     cmd.outputs['out2'] = Output(path="{out2}")
     return cmd
 
@@ -40,7 +50,7 @@ def salmon():
     cmd.runtime.memory = 2*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quant'
-    cmd.args.libType = Argument(prefix='--libType ', default='A')
+    cmd.args['libType'] = Argument(prefix='--libType ', default='A')
     cmd.args['indexDir'] = Argument(prefix='-i ', type='indir', desc='transcript fasta index directory')
     cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 fastq file')
