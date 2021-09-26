@@ -444,7 +444,8 @@ class Workflow:
                     values = [v.value]
                 for value in values:
                     if type(value) == Output and value.type in ['outfile', 'outdir']:
-                        value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
+                        if not value.value.startswith('${{mode:'):
+                            value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
                     elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir']:
                         file_dir = os.path.dirname(value.value)
                         mount_vols.add(os.path.abspath(file_dir))
