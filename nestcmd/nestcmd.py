@@ -465,7 +465,10 @@ class Workflow:
             wf.write(configfile)
         if run:
             from .runner import RunCommands
-            RunCommands(outfile, timeout=600).parallel_run()
+            if os.path.exists(os.path.join(outdir, 'cmd_state.txt')):
+                RunCommands(outfile, timeout=600).continue_run()
+            else:
+                RunCommands(outfile, timeout=600).parallel_run()
 
 
 class ToWdlTask(object):
