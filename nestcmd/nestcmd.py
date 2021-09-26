@@ -302,9 +302,9 @@ class TopVar:
 @dataclass()
 class TmpVar:
     """
-    该对象用于描述流程中如循环时的临时变量, 纯粹是为wdl的scatter模式设计, name属性将作为传递值。
+    该对象用于描述流程中如循环时的临时变量, 纯粹是为wdl的scatter模式设计, name属性将作为wdl文件中的传递值。
     例如：如循环中某个变量为A，则把输出文件名定义为out_file = ’~{A}.txt‘.
-    那么，这时脚本中可以写: outfile = TmpVar(name="~{A}.txt", type='str') , 这里“~{}”是wdl传递变量值的语法。
+    那么，这时脚本中可以写: outfile = TmpVar(name="~{A}.txt", type='str') , 这里name中“~{}”是wdl传递变量值的语法。
     """
     value: Any
     name: str = 'notNamed'
