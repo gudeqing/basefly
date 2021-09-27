@@ -88,6 +88,9 @@ def star(sample, platform='illumina'):
     cmd.args['_flagstats'] = Argument(value=f'samtools flagstat {sample}.Aligned.sortedByCoord.out.bam > {sample}.align.flagstat.txt', type='fix')
     cmd.args["_3"] = Argument(value=' && ', type='fix')
     cmd.args['_idxstats'] = Argument(value=f"samtools idxstats {sample}.Aligned.sortedByCoord.out.bam > {sample}.align.idxstats.txt", type='fix')
+    cmd.args["_4"] = Argument(value=' && ', type='fix')
+    # 增加一行命令检查是否有chimeric输出，如果没有，则写一个空文件出来，这样不会导致后面的star-fusion的步骤失败
+    cmd.args['_5'] = Argument(value=f"if [ ! -f {sample}.Chimeric.out.junction ]; then echo -e '# No output of chimeric\\n# Nreads 1\tNreadsUnique 1\tNreadsMulti 0' >  {sample}.Chimeric.out.junction ; fi", type='fix')
     cmd.outputs['bam'] = Output(value=f"{sample}.Aligned.sortedByCoord.out.bam")
     cmd.outputs['bam_bai'] = Output(value=f"{sample}.Aligned.sortedByCoord.out.bam.bai")
     cmd.outputs['transcript_bam'] = Output(value=f"{sample}.Aligned.toTranscriptome.out.bam")
@@ -274,6 +277,7 @@ def pipeline(fastq_dir, star_index, fusion_index, transcripts_fa, gtf, ref_flat,
             args['column'].value = data_type
             args['genes'].value = True if feature == 'gene' else False
             args['quants'].value = [wf.tasks[task_id].outputs['outDir'] for task_id in depends]
+            args['names'].value = [wf.tasks[task_id].name.split('-', 1)[1] for task_id in depends]
             args['out'].value = f'{feature}.{data_type}.txt'
 
     for task_id, task in wf.tasks.items():
