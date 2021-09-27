@@ -142,8 +142,8 @@ def star_fusion():
     cmd.runtime.image = "trinityctat/starfusion:1.10.0"
     cmd.runtime.tool = ' STAR-Fusion'
     cmd.args['threads'] = Argument(prefix='--CPU ', default=4, desc='The number of threads')
-    cmd.args['read1'] = Argument(prefix='--left_fq ', type='infile', array=True, delimiter=' ', desc='read1 fastq file')
-    cmd.args['read2'] = Argument(prefix='--right_fq ', type='infile',  array=True, delimiter=' ', desc='read2 fastq file')
+    cmd.args['read1'] = Argument(prefix='--left_fq ', type='infile', array=True, delimiter=',', desc='read1 fastq file')
+    cmd.args['read2'] = Argument(prefix='--right_fq ', type='infile',  array=True, delimiter=',', desc='read2 fastq file')
     cmd.args['chimeric_junction'] = Argument(prefix='-J ', type='infile', desc="generated file called 'Chimeric.out.junction' by STAR alignment")
     cmd.args['genomeLibDir'] = Argument(prefix='--genome_lib_dir ', type='indir', desc='ctat_genome_lib_build_dir which contains fusion database')
     cmd.args['outdir'] = Argument(prefix='--output_dir ', default='.', desc='output dir')
@@ -165,17 +165,18 @@ def collect_metrics(sample):
     """
     cmd = Command()
     cmd.meta.name = 'CollectRnaSeqMetrics'
-    # cmd.runtime.image = "trinityctat/starfusion:1.10.0"
-    cmd.runtime.image = 'broadinstitute/picard:latest'
-    cmd.runtime.tool = 'java -jar /usr/picard/picard.jar CollectRnaSeqMetrics'
+    # cmd.runtime.image = 'broadinstitute/picard:latest'
+    # cmd.runtime.tool = 'java -jar /usr/picard/picard.jar CollectRnaSeqMetrics'
+    cmd.runtime.image = "trinityctat/starfusion:1.10.0"
+    cmd.runtime.tool = 'java -jar /usr/local/src/picard.jar CollectRnaSeqMetrics'
     cmd.args['bam'] = Argument(prefix='I=', type='infile', desc='input bam file')
     cmd.args['out_metrics'] = Argument(prefix='O=', value=f'{sample}.RnaSeqMetrics.txt', desc='output metric file')
     cmd.args['strandness'] = Argument(prefix='STRAND_SPECIFICITY=', default='NONE', desc='strand-specificity')
     cmd.args['ref_flat'] = Argument(prefix='REF_FLAT=', desc='Gene annotations in refFlat form.  Format described here: http://genome.ucsc.edu/goldenPath/gbdDescriptionsOld.html#RefFlat')
     cmd.args['ribosomal_interval'] = Argument(prefix='RIBOSOMAL_INTERVALS=', desc="Location of rRNA sequences in genome, in interval_list format.  If not specified no bases will be identified as being ribosomal.")
-    cmd.args['cov_pdf'] = Argument(prefix='CHART_OUTPUT=', value=f'{sample}.coverage.pdf', desc='coverage output file')
+    # cmd.args['cov_pdf'] = Argument(prefix='CHART_OUTPUT=', value=f'{sample}.coverage.pdf', desc='coverage output file')
     cmd.outputs['metrics'] = Output(value="{out_metrics}")
-    cmd.outputs['cov_pdf'] = Output(value="{cov_pdf}")
+    # cmd.outputs['cov_pdf'] = Output(value="{cov_pdf}")
     return cmd
 
 
