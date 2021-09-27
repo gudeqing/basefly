@@ -3,7 +3,9 @@ import re
 import json
 from uuid import uuid4
 from dataclasses import dataclass, field
-from typing import Any, List, Dict, Literal
+# from typing import Any, List, Dict, Literal
+from typing import Any, List, Dict
+from typing_extensions import Literal
 # shadow default dict
 # from munch import Munch as dict
 
