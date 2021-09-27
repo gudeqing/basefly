@@ -17,7 +17,8 @@ from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar,
 def fastp(sample):
     cmd = Command()
     cmd.meta.name = 'fastp'
-    cmd.runtime.image = 'gudeqing/fastp:0.21.0'
+    # cmd.runtime.image = 'gudeqing/fastp:0.21.0'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
     cmd.runtime.tool = 'fastp'
     # 可以直接用访问属性的方式添加参数，这个得益于使用Munch对象而不是原生字典
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
@@ -42,7 +43,7 @@ def star(sample, platform='illumina'):
     """
     cmd = Command()
     cmd.meta.name = 'star'
-    cmd.runtime.image = "trinityctat/starfusion:1.10.0"
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
     cmd.runtime.tool = 'STAR'
     cmd.args['threads'] = Argument(prefix='--runThreadN ', default=4, desc='threads to use')
     cmd.args['genomeDir'] = Argument(prefix='--genomeDir ', type='indir', desc='genome index directory')
@@ -110,7 +111,7 @@ def salmon():
     cmd = Command()
     cmd.meta.name = 'salmon'
     cmd.meta.desc = 'gene/transcript expression quantification'
-    cmd.runtime.image = "combinelab/salmon:latest"
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
     cmd.runtime.memory = 2*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quant'
@@ -139,7 +140,7 @@ def star_fusion():
     cmd.meta.name = 'star-fusion'
     cmd.meta.source = "https://github.com/STAR-Fusion/STAR-Fusion"
     cmd.meta.version = 'v1.10.0'
-    cmd.runtime.image = "trinityctat/starfusion:1.10.0"
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
     cmd.runtime.tool = ' STAR-Fusion'
     cmd.args['threads'] = Argument(prefix='--CPU ', default=4, desc='The number of threads')
     cmd.args['read1'] = Argument(prefix='--left_fq ', type='infile', array=True, delimiter=',', desc='read1 fastq file')
@@ -167,7 +168,7 @@ def collect_metrics(sample):
     cmd.meta.name = 'CollectRnaSeqMetrics'
     # cmd.runtime.image = 'broadinstitute/picard:latest'
     # cmd.runtime.tool = 'java -jar /usr/picard/picard.jar CollectRnaSeqMetrics'
-    cmd.runtime.image = "trinityctat/starfusion:1.10.0"
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
     cmd.runtime.tool = 'java -jar /usr/local/src/picard.jar CollectRnaSeqMetrics'
     cmd.args['bam'] = Argument(prefix='I=', type='infile', desc='input bam file')
     cmd.args['out_metrics'] = Argument(prefix='O=', value=f'{sample}.RnaSeqMetrics.txt', desc='output metric file')
@@ -190,7 +191,7 @@ def arcas_hla(threads=4):
     cmd = Command()
     cmd.meta.name = 'arcasHLA'
     cmd.meta.version = '0.2.5'
-    cmd.runtime.image = "gudeqing/arcashla:0.2.5"
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
     cmd.runtime.tool = 'arcasHLA'
     cmd.args['_1'] = Argument(value=f'extract --unmapped -t {threads} -o .', type='fix')
     cmd.args['bam'] = Argument(value='', type='infile', desc='input bam file')
@@ -205,7 +206,7 @@ def quant_merge():
     cmd = Command()
     cmd.meta.name = 'quantMerge'
     cmd.meta.desc = 'Merge multiple quantification results into a single file'
-    cmd.runtime.image = "combinelab/salmon:latest"
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
     cmd.runtime.tool = 'salmon quantmerge'
     # 下面的quants参数对应的是目录，所以type='indir'
     cmd.args['quants'] = Argument(prefix="--quants ", array=True, type='indir', desc='salmon quant dir list')
