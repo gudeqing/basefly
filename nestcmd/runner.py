@@ -20,7 +20,6 @@ except Exception as e:
     pgv = None
 
 PROCESS_local = weakref.WeakKeyDictionary()
-PROCESS_remote = weakref.WeakKeyDictionary()
 
 
 @atexit.register
@@ -31,11 +30,6 @@ def _kill_processes_when_exit():
             print('Shutting down running tasks {}:{}'.format(proc.pid, cmd_name))
             proc.kill()
     # 有些已经发起但还没有收进来的无法终止
-    for proc in list(PROCESS_remote.keys()):
-        cmd_name = PROCESS_remote[proc]
-        if proc.pid_exists:
-            print('Shutting down remote running tasks {}:{}'.format(proc.pid, cmd_name))
-            proc.kill()
 
 
 def shutdown(signum, frame):
@@ -427,7 +421,6 @@ class RunCommands(CommandNetwork):
         running_or_queueing = self.ever_queued - success - failed
         waiting = set(self.names()) - self.ever_queued
         tmp_dict = {y: x for x, y in PROCESS_local.items()}
-        tmp_dict.update({y: x for x, y in PROCESS_remote.items()})
         for each in running_or_queueing:
             try:
                 if each in tmp_dict:

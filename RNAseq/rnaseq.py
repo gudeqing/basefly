@@ -250,6 +250,8 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
     wf.meta.desc = 'This is a  pipeline for rnaseq analysis'
 
     fastq_info = get_fastq_info(fastq_dirs=fastq_dirs, fastq_files=fastq_files, r1_name=r1_name, r2_name=r2_name)
+    if len(fastq_info) <= 0:
+        raise Exception('No fastq file found !')
     for sample, (r1s, r2s) in fastq_info.items():
         # 一个样本可能有多个fastq
         fastp_tasks = []
