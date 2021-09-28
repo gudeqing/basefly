@@ -18,7 +18,7 @@ def fastp(sample):
     cmd = Command()
     cmd.meta.name = 'fastp'
     # cmd.runtime.image = 'gudeqing/fastp:0.21.0'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.tool = 'fastp'
     # 可以直接用访问属性的方式添加参数，这个得益于使用Munch对象而不是原生字典
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
@@ -43,7 +43,7 @@ def star(sample, platform='illumina'):
     """
     cmd = Command()
     cmd.meta.name = 'star'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.tool = 'STAR'
     cmd.args['threads'] = Argument(prefix='--runThreadN ', default=4, desc='threads to use')
     cmd.args['genomeDir'] = Argument(prefix='--genomeDir ', type='indir', desc='genome index directory')
@@ -111,7 +111,7 @@ def salmon():
     cmd = Command()
     cmd.meta.name = 'salmon'
     cmd.meta.desc = 'gene/transcript expression quantification'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.memory = 2*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quant'
@@ -140,7 +140,7 @@ def star_fusion():
     cmd.meta.name = 'star-fusion'
     cmd.meta.source = "https://github.com/STAR-Fusion/STAR-Fusion"
     cmd.meta.version = 'v1.10.0'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.tool = ' STAR-Fusion'
     cmd.args['threads'] = Argument(prefix='--CPU ', default=4, desc='The number of threads')
     cmd.args['read1'] = Argument(prefix='--left_fq ', type='infile', array=True, delimiter=',', desc='read1 fastq file')
@@ -168,7 +168,7 @@ def collect_metrics(sample):
     cmd.meta.name = 'CollectRnaSeqMetrics'
     # cmd.runtime.image = 'broadinstitute/picard:latest'
     # cmd.runtime.tool = 'java -jar /usr/picard/picard.jar CollectRnaSeqMetrics'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.tool = 'java -jar /usr/local/src/picard.jar CollectRnaSeqMetrics'
     cmd.args['bam'] = Argument(prefix='I=', type='infile', desc='input bam file')
     cmd.args['out_metrics'] = Argument(prefix='O=', value=f'{sample}.RnaSeqMetrics.txt', desc='output metric file')
@@ -191,9 +191,12 @@ def arcas_hla(threads=4):
     cmd = Command()
     cmd.meta.name = 'arcasHLA'
     cmd.meta.version = '0.2.5'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
-    cmd.runtime.tool = 'arcasHLA'
-    cmd.args['_1'] = Argument(value=f'extract --unmapped -t {threads} -o .', type='fix')
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    # 软链接数据库
+    cmd.args['database'] = Argument(prefix='ln -s ', type='indir', desc='database of arcas_software')
+    cmd.args ['_0'] = Argument(value='/home/arcasHLA-master/dat && ', type='fix')
+    # run software
+    cmd.args['_1'] = Argument(value=f'arcasHLA extract --unmapped -t {threads} -o .', type='fix')
     cmd.args['bam'] = Argument(value='', type='infile', desc='input bam file')
     cmd.args['_2'] = Argument(value=' && arcasHLA genotype', type='fix')
     cmd.args['_3'] = Argument(value=f'--min_count 75 -t {threads} -o ./ *.1.fq.gz *.2.fq.gz &&', type='fix')
@@ -206,7 +209,7 @@ def quant_merge():
     cmd = Command()
     cmd.meta.name = 'quantMerge'
     cmd.meta.desc = 'Merge multiple quantification results into a single file'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.1'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.tool = 'salmon quantmerge'
     # 下面的quants参数对应的是目录，所以type='indir'
     cmd.args['quants'] = Argument(prefix="--quants ", array=True, type='indir', desc='salmon quant dir list')
@@ -218,12 +221,14 @@ def quant_merge():
     return cmd
 
 
-def pipeline(fastq_dir, star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval,
+def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database,
+             fastq_dirs:tuple=None, fastq_files:tuple=None,
              r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', run=False,
              no_docker=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
     top_vars = dict(
         starIndex=TopVar(value=star_index, type='indir'),
         fusionIndex=TopVar(value=fusion_index, type='indir'),
+        hla_database=TopVar(value=hla_database, type='indir'),
         transcripts=TopVar(value=transcripts_fa, type='infile'),
         gtf=TopVar(value=gtf, type='infile'),
         ref_flat=TopVar(value=ref_flat, type='infile'),
@@ -234,7 +239,7 @@ def pipeline(fastq_dir, star_index, fusion_index, transcripts_fa, gtf, ref_flat,
     wf.meta.name = 'RnaSeqPipeline'
     wf.meta.desc = 'This is a  pipeline for rnaseq analysis'
 
-    fastq_info = get_fastq_info(fastq_dirs=(fastq_dir,), r1_name=r1_name, r2_name=r2_name)
+    fastq_info = get_fastq_info(fastq_dirs=fastq_dirs, fastq_files=fastq_files, r1_name=r1_name, r2_name=r2_name)
     for sample, (r1s, r2s) in fastq_info.items():
         # 一个样本可能有多个fastq
         fastp_tasks = []
@@ -269,6 +274,7 @@ def pipeline(fastq_dir, star_index, fusion_index, transcripts_fa, gtf, ref_flat,
         # HLA-typing
         hla_task, args = wf.add_task(arcas_hla(), name='hla-'+sample, depends=[star_task.task_id])
         args['bam'].value = star_task.outputs['bam']
+        args['database'].value = top_vars['hla_database']
 
     # merge transcript/gene TPM/Count
     depends = [k for k, v in wf.tasks.items() if v.name.startswith('salmon')]
