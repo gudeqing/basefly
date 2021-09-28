@@ -238,12 +238,13 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
     top_vars = dict(
         starIndex=TopVar(value=star_index, type='indir'),
         fusionIndex=TopVar(value=fusion_index, type='indir'),
-        hla_database=TopVar(value=hla_database, type='indir'),
         transcripts=TopVar(value=transcripts_fa, type='infile'),
         gtf=TopVar(value=gtf, type='infile'),
         ref_flat=TopVar(value=ref_flat, type='infile'),
         rRNA_interval=TopVar(value=rRNA_interval, type='infile')
     )
+    if hla_database:
+        top_vars['hla_database'] = TopVar(value=hla_database, type='indir')
 
     wf = Workflow(top_vars=top_vars)
     wf.meta.name = 'RnaSeqPipeline'
@@ -286,7 +287,7 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
         # HLA-typing
         hla_task, args = wf.add_task(arcas_hla(), name='hla-'+sample, depends=[star_task.task_id])
         args['bam'].value = star_task.outputs['bam']
-        if top_vars['hla_database']:
+        if hla_database:
             args['database'].value = top_vars['hla_database']
             args['link'].value = True
 

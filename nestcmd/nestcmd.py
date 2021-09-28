@@ -455,6 +455,7 @@ class Workflow:
                 max_mem=task.cmd.runtime.max_memory,
                 max_cpu=task.cmd.runtime.max_cpu,
                 image='' if no_docker else (task.cmd.runtime.image or ''),
+                wkdir=cmd_wkdir,
                 mount_vols=';'.join(mount_vols)
             )
         os.makedirs(outdir, exist_ok=True)

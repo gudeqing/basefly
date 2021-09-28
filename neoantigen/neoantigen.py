@@ -1,14 +1,4 @@
 from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, get_fastq_info
-"""
-pycharm里设置code completion 允许“suggest variable and parameter name”, 可以极大方便流程编写
-
-注意:
-1. 一定要正确定义参数的类型, type is one of ['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix']
-    其中‘fix'可以用于表示命令行中的固定字符串或固定参数, 如 “bwa xxx | samtools sort -" 中的‘| samtools sort -’ 可以用fix固定
-2. 参数的添加顺序对于命令行的正确形成很重要，这里字典的有序性得到利用
-3. 定义output时，path属性对应的值不能包含’~‘, 其对于wdl有特殊含义;可以用{}引用cmd.args的key
-4. 必要时，你需要给参数对象Argument添加wdl属性，用以辅助wdl的正确生成，这需要你懂一点点wdl语法
-"""
 
 
 def phase_vcf():
