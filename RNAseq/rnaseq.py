@@ -2,7 +2,7 @@ import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar, get_fastq_info
-
+__author__ = 'gdq'
 
 """
 1. fastp
@@ -219,8 +219,8 @@ def quant_merge():
 
 
 def pipeline(fastq_dir, star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval,
-             r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq'):
-    fastq_info = get_fastq_info(fastq_dirs=(fastq_dir,), r1_name=r1_name, r2_name=r2_name)
+             r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', run=False,
+             no_docker=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
     top_vars = dict(
         starIndex=TopVar(value=star_index, type='indir'),
         fusionIndex=TopVar(value=fusion_index, type='indir'),
@@ -234,6 +234,7 @@ def pipeline(fastq_dir, star_index, fusion_index, transcripts_fa, gtf, ref_flat,
     wf.meta.name = 'RnaSeqPipeline'
     wf.meta.desc = 'This is a  pipeline for rnaseq analysis'
 
+    fastq_info = get_fastq_info(fastq_dirs=(fastq_dir,), r1_name=r1_name, r2_name=r2_name)
     for sample, (r1s, r2s) in fastq_info.items():
         # 一个样本可能有多个fastq
         fastp_tasks = []
@@ -282,19 +283,10 @@ def pipeline(fastq_dir, star_index, fusion_index, transcripts_fa, gtf, ref_flat,
             args['names'].value = [wf.tasks[task_id].name.split('-', 1)[1] for task_id in depends]
             args['out'].value = f'{feature}.{data_type}.txt'
 
-    for task_id, task in wf.tasks.items():
-        pass
-        # print(task.task_id)
-        # print(task.outputs)
-        # print(task.cmd.format_cmd(wf.tasks))
-        # for line in task.argo_template(wf.tasks):
-        #     print(line)
-
-    # wf.to_wdl(f'{wf.meta.name}.wdl')
-    # wf.to_argo_worflow(f'{wf.meta.name}.yaml')
-    wf.to_nestcmd(outdir='test', run=True)
+    wf.to_nestcmd(outdir=outdir, run=run, no_docker=no_docker, threads=threads, retry=retry,
+                  no_monitor_resource=no_monitor_resource, no_check_resource=no_check_resource)
 
 
 if __name__ == '__main__':
     from xcmds import xcmds
-    xcmds.xcmds(locals())
+    xcmds.xcmds(locals(), include=['pipeline'])

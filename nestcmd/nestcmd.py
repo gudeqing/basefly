@@ -413,16 +413,10 @@ class Workflow:
             for line in lines:
                 f.write(line+'\n')
 
-    def to_nestcmd(self, outdir, run=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+    def to_nestcmd(self, outdir, run=False, no_docker=False, threads=3, retry=1,
+                   no_monitor_resource=False, no_check_resource=False):
         """
         生成nestcmd格式的workflow并且允许直接本地执行
-        :param outdir:
-        :param run:
-        :param threads:
-        :param retry:
-        :param no_monitor_resource:
-        :param no_check_resource:
-        :return:
         """
         import configparser
         wf = configparser.ConfigParser()
@@ -458,7 +452,7 @@ class Workflow:
                 cpu=task.cmd.runtime.cpu,
                 max_mem=task.cmd.runtime.max_memory,
                 max_cpu=task.cmd.runtime.max_cpu,
-                image=task.cmd.runtime.image if task.cmd.runtime.image is not None else '',
+                image='' if no_docker else (task.cmd.runtime.image or ''),
                 mount_vols=';'.join(mount_vols)
             )
         os.makedirs(outdir, exist_ok=True)
