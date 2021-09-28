@@ -201,8 +201,8 @@ def arcas_hla(threads=4):
     cmd.runtime.memory = 3*1024**2
     cmd.runtime.cpu = 2
     # 软链接数据库
-    cmd.args['database'] = Argument(prefix='ln -s ', type='indir', desc='database of arcas_software')
-    cmd.args ['_0'] = Argument(value='/home/arcasHLA-master/dat && ', type='fix')
+    cmd.args['database'] = Argument(prefix='ln -s ', type='indir', level='optional', desc='database of arcas_software')
+    cmd.args['link'] = Argument(prefix='/home/arcasHLA-master/dat && ', type='bool', default=False)
     # run software
     cmd.args['_1'] = Argument(value=f'arcasHLA extract --unmapped -t {threads} -o .', type='fix')
     cmd.args['bam'] = Argument(value='', type='infile', desc='input bam file')
@@ -231,7 +231,7 @@ def quant_merge():
     return cmd
 
 
-def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database,
+def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database=None,
              fastq_dirs:tuple=None, fastq_files:tuple=None,
              r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', run=False,
              no_docker=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
@@ -286,7 +286,9 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
         # HLA-typing
         hla_task, args = wf.add_task(arcas_hla(), name='hla-'+sample, depends=[star_task.task_id])
         args['bam'].value = star_task.outputs['bam']
-        args['database'].value = top_vars['hla_database']
+        if top_vars['hla_database']:
+            args['database'].value = top_vars['hla_database']
+            args['link'].value = True
 
     # merge transcript/gene TPM/Count
     depends = [k for k, v in wf.tasks.items() if v.name.startswith('salmon')]
