@@ -44,6 +44,8 @@ def star(sample, platform='illumina'):
     cmd = Command()
     cmd.meta.name = 'star'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.memory = 20*1024**2
+    cmd.runtime.cpu = 2
     cmd.runtime.tool = 'STAR'
     cmd.args['threads'] = Argument(prefix='--runThreadN ', default=4, desc='threads to use')
     cmd.args['genomeDir'] = Argument(prefix='--genomeDir ', type='indir', desc='genome index directory')
@@ -112,7 +114,7 @@ def salmon():
     cmd.meta.name = 'salmon'
     cmd.meta.desc = 'gene/transcript expression quantification'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
-    cmd.runtime.memory = 2*1024**3
+    cmd.runtime.memory = 2*1024**2
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quant'
     cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc='The number of threads that will be used for quasi-mapping, quantification, and bootstrapping / posterior sampling (if enabled).')
@@ -141,6 +143,8 @@ def star_fusion():
     cmd.meta.source = "https://github.com/STAR-Fusion/STAR-Fusion"
     cmd.meta.version = 'v1.10.0'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.memory = 10*1024**2
+    cmd.runtime.cpu = 2
     cmd.runtime.tool = ' STAR-Fusion'
     cmd.args['threads'] = Argument(prefix='--CPU ', default=4, desc='The number of threads')
     cmd.args['read1'] = Argument(prefix='--left_fq ', type='infile', array=True, delimiter=',', desc='read1 fastq file')
@@ -169,6 +173,8 @@ def collect_metrics(sample):
     # cmd.runtime.image = 'broadinstitute/picard:latest'
     # cmd.runtime.tool = 'java -jar /usr/picard/picard.jar CollectRnaSeqMetrics'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.memory = 5*1024**2
+    cmd.runtime.cpu = 2
     cmd.runtime.tool = 'java -jar /usr/local/src/picard.jar CollectRnaSeqMetrics'
     cmd.args['bam'] = Argument(prefix='I=', type='infile', desc='input bam file')
     cmd.args['out_metrics'] = Argument(prefix='O=', value=f'{sample}.RnaSeqMetrics.txt', desc='output metric file')
@@ -192,6 +198,8 @@ def arcas_hla(threads=4):
     cmd.meta.name = 'arcasHLA'
     cmd.meta.version = '0.2.5'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.memory = 3*1024**2
+    cmd.runtime.cpu = 2
     # 软链接数据库
     cmd.args['database'] = Argument(prefix='ln -s ', type='indir', desc='database of arcas_software')
     cmd.args ['_0'] = Argument(value='/home/arcasHLA-master/dat && ', type='fix')
@@ -210,6 +218,8 @@ def quant_merge():
     cmd.meta.name = 'quantMerge'
     cmd.meta.desc = 'Merge multiple quantification results into a single file'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.image = 2*1024**2
+    cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quantmerge'
     # 下面的quants参数对应的是目录，所以type='indir'
     cmd.args['quants'] = Argument(prefix="--quants ", array=True, type='indir', desc='salmon quant dir list')

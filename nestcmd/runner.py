@@ -109,6 +109,7 @@ class Command(object):
             with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
                 f.write(self.cmd + '\n')
 
+            # docker_cmd = 'docker run --rm --user `id -u`:`id -g` -i --entrypoint /bin/bash '
             docker_cmd = 'docker run --rm -i --entrypoint /bin/bash '
             for each in self.mount_vols.split(';'):
                 docker_cmd += f'-v {each}:{each} '
