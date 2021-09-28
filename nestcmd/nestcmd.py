@@ -238,12 +238,7 @@ class Task:
         # task name
         if self.name is None:
             self.name = self.cmd.meta.name + '-' + str(self.task_id)
-        else:
-            # 因为argo-workflow不支持步骤名称包含下划线, 因此这里特殊处理
-            self.name = self.name.replace('_', '-')
-            if '_' in self.name or '+' in self.name or '@' in self.name:
-                raise Exception("name must consist of alpha-numeric characters or '-', "
-                                "and must start with an alpha-numeric character (e.g. My-name1-2, 123-NAME)")
+
         # 为每一个output带入
         for key in self.cmd.outputs.keys():
             self.cmd.outputs[key].task_id = self.task_id
@@ -369,6 +364,7 @@ class Workflow:
         lines += [' '*4 + 'dag:']
         lines += [' '*6 + 'tasks:']
         for task_id, task in self.tasks.items():
+            task.name = task.name.replace('_', '-')
             lines += [' '*6 + f'- name: {task.name}']
             if task.depends:
                 lines += [' '*8 + 'dependencies: ' + str([self.tasks[x].name for x in task.depends]).replace("'", '')]
@@ -432,7 +428,8 @@ class Workflow:
         )
 
         for task_id, task in self.tasks.items():
-            mount_vols = {outdir}
+            cmd_wkdir = os.path.join(outdir, task.name)
+            mount_vols = {cmd_wkdir}
             for k, v in task.cmd.args.items():
                 if type(v.value) == list:
                     values = v.value
@@ -442,6 +439,7 @@ class Workflow:
                     if type(value) == Output and value.type in ['outfile', 'outdir']:
                         if not value.value.startswith('${{mode:'):
                             value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
+                        mount_vols.add(os.path.join(outdir, self.tasks[value.task_id].name))
                     elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir']:
                         if value.type == 'infile':
                             file_dir = os.path.dirname(value.value)

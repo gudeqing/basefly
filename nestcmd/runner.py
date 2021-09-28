@@ -558,7 +558,7 @@ class RunCommands(CommandNetwork):
                     if line_lst[0] in self.state:
                         self.state[line_lst[0]].update(dict(zip(fields[:-2], line_lst[1:])))
                     else:
-                        self.logger.warning(line_lst[0] + ' was skipped for a modified pipeline.ini was used')
+                        self.logger.warning(line_lst[0] + ' was skipped for it no longer in the modified pipeline.ini')
         failed = set(self.names()) - self.ever_queued
         if failed:
             self.logger.warning('Continue to run: {}'.format(failed))
