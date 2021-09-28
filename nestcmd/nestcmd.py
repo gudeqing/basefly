@@ -443,8 +443,12 @@ class Workflow:
                         if not value.value.startswith('${{mode:'):
                             value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
                     elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir']:
-                        file_dir = os.path.dirname(value.value)
-                        mount_vols.add(os.path.abspath(file_dir))
+                        if value.type == 'infile':
+                            file_dir = os.path.dirname(value.value)
+                            mount_vols.add(os.path.abspath(file_dir))
+                        elif value.type == 'indir':
+                            mount_vols.add(os.path.abspath(value.value))
+
             wf[task.name] = dict(
                 depend=','.join(self.tasks[x].name for x in task.depends) if task.depends else '',
                 cmd=task.cmd.format_cmd(self.tasks),
