@@ -218,7 +218,7 @@ def quant_merge():
     cmd.meta.name = 'quantMerge'
     cmd.meta.desc = 'Merge multiple quantification results into a single file'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
-    cmd.runtime.image = 2*1024**2
+    cmd.runtime.memory = 2*1024**2
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quantmerge'
     # 下面的quants参数对应的是目录，所以type='indir'
