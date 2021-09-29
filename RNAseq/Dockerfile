@@ -46,7 +46,7 @@ RUN rm -fr /home/arcasHLA-master/dat/
 RUN pip3 install -i $PIP_SOURCE psutil
 RUN pip3 install https://github.com/gudeqing/xcmds/raw/master/dist/xcmds-1.5.0-py3-none-any.whl
 RUN wget http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp /usr/local/bin/
-
+RUN apt install -y nano
 # 复制数据库
 #COPY ./dat /home/arcasHLA-master/dat
 
