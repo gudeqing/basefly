@@ -390,6 +390,7 @@ class RunCommands(CommandNetwork):
         waiting = set(self.names()) - self.ever_queued
         if not waiting:
             self.queue.put(None)
+            return
         for each in waiting:
             dependency = set(self.get_dependency(each))
             if dependency & failed:
@@ -404,7 +405,7 @@ class RunCommands(CommandNetwork):
         current_queue = list(self.queue.queue)
         reorder_queue = queue.Queue()
         for each in self.names():
-            if each in current_queue or each is None:
+            if each in current_queue:
                 reorder_queue.put(each)
         self.queue = reorder_queue
 
