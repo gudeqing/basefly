@@ -566,12 +566,12 @@ class RunCommands(CommandNetwork):
         failed = set(self.names()) - self.ever_queued
         if failed:
             self.logger.warning('Continue to run: {}'.format(failed))
+            self.queue = queue.Queue()
+            self._update_queue()
+            self._draw_state()
+            self.parallel_run()
         else:
-            self.logger.warning('Nothing to continue run')
-        self.queue = queue.Queue()
-        self._update_queue()
-        self._draw_state()
-        self.parallel_run()
+            self.logger.warning('Nothing to continue run since all steps are in success status')
 
 
 if __name__ == '__main__':
