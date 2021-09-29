@@ -400,6 +400,13 @@ class RunCommands(CommandNetwork):
             if not (dependency - success):
                 self.ever_queued.add(each)
                 self.queue.put(each, block=True)
+        # 按照self.names排序，也即原始流程中的顺序排序
+        current_queue = list(self.queue.queue)
+        reorder_queue = queue.Queue()
+        for each in self.names():
+            if each in current_queue or each is None:
+                reorder_queue.put(each)
+        self.queue = reorder_queue
 
     def _update_state(self, cmd=None, killed=False):
         if cmd is not None:
@@ -515,6 +522,8 @@ class RunCommands(CommandNetwork):
             thread = threading.Thread(target=self.single_run, daemon=True)
             threads.append(thread)
             thread.start()
+            # 每隔5秒提交一个任务，一定程度可以避免同时提交多个消耗资源比较大的任务。
+            time.sleep(5)
 
         # update state
         time.sleep(2)
