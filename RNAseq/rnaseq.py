@@ -152,7 +152,8 @@ def star_fusion():
     cmd.args['chimeric_junction'] = Argument(prefix='-J ', type='infile', desc="generated file called 'Chimeric.out.junction' by STAR alignment")
     cmd.args['genomeLibDir'] = Argument(prefix='--genome_lib_dir ', type='indir', desc='ctat_genome_lib_build_dir which contains fusion database')
     cmd.args['outdir'] = Argument(prefix='--output_dir ', default='.', desc='output dir')
-    cmd.args['FusionInspector'] = Argument(prefix='--FusionInspector ', default='inspect', range=["inspect", "validate"], desc="FusionInspector that provides a more in-depth view of the evidence supporting the predicted fusions.")
+    cmd.args['tmpdir'] = Argument(prefix='--tmpdir ', default='.', desc='temp file dir')
+    cmd.args['FusionInspector'] = Argument(prefix='--FusionInspector ', default='validate', range=["inspect", "validate"], desc="FusionInspector that provides a more in-depth view of the evidence supporting the predicted fusions.")
     cmd.args['examine_coding_effect'] = Argument(prefix='--examine_coding_effect', type='bool', desc="explore impact of fusions on coding sequences")
     cmd.args['denovo_reconstruct'] = Argument(prefix='--denovo_reconstruct', type='bool', desc="attempt to reconstruct fusion transcripts using Trinity de novo assembly (requires --FusionInspector)")
     cmd.outputs['fusion_predictions'] = Output(value="{outdir}/star-fusion.fusion_predictions.tsv")
@@ -204,7 +205,7 @@ def arcas_hla(threads=4):
     cmd.args['database'] = Argument(prefix='ln -s ', type='indir', level='optional', desc='database of arcas_software')
     cmd.args['link'] = Argument(prefix='/home/arcasHLA-master/dat && ', type='bool', default=False)
     # run software
-    cmd.args['_1'] = Argument(value=f'arcasHLA extract --unmapped -t {threads} -o .', type='fix')
+    cmd.args['_1'] = Argument(value=f'arcasHLA extract --temp ./ --unmapped -t {threads} -o .', type='fix')
     cmd.args['bam'] = Argument(value='', type='infile', desc='input bam file')
     cmd.args['_2'] = Argument(value=' && arcasHLA genotype', type='fix')
     cmd.args['_3'] = Argument(value=f'--min_count 75 -t {threads} -o ./ *.1.fq.gz *.2.fq.gz &&', type='fix')
