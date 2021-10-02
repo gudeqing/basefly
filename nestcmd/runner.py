@@ -84,7 +84,9 @@ class Command(object):
     def _monitor_resource(self):
         while self.proc.is_running():
             try:
-                cpu_percent = self.proc.cpu_percent(self.monitor_time_step)
+                cpu_percent = self.proc.cpu_percent()
+                time.sleep(self.monitor_time_step)
+                cpu_percent = self.proc.cpu_percent()
                 used_cpu = round(cpu_percent*0.01, 4)
                 if used_cpu > self.max_used_cpu:
                     self.max_used_cpu = used_cpu
