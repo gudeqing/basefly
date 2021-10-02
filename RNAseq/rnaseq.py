@@ -147,13 +147,13 @@ def star_fusion():
     cmd.runtime.cpu = 2
     cmd.runtime.tool = ' STAR-Fusion'
     cmd.args['threads'] = Argument(prefix='--CPU ', default=4, desc='The number of threads')
-    cmd.args['read1'] = Argument(prefix='--left_fq ', type='infile', array=True, delimiter=',', desc='read1 fastq file')
-    cmd.args['read2'] = Argument(prefix='--right_fq ', type='infile',  array=True, delimiter=',', desc='read2 fastq file')
+    cmd.args['read1'] = Argument(prefix='--left_fq ', level='optional', type='infile', array=True, delimiter=',', desc='read1 fastq file')
+    cmd.args['read2'] = Argument(prefix='--right_fq ', level='optional', type='infile',  array=True, delimiter=',', desc='read2 fastq file')
     cmd.args['chimeric_junction'] = Argument(prefix='-J ', type='infile', desc="generated file called 'Chimeric.out.junction' by STAR alignment")
     cmd.args['genomeLibDir'] = Argument(prefix='--genome_lib_dir ', type='indir', desc='ctat_genome_lib_build_dir which contains fusion database')
     cmd.args['outdir'] = Argument(prefix='--output_dir ', default='.', desc='output dir')
     cmd.args['tmpdir'] = Argument(prefix='--tmpdir ', default='.', desc='temp file dir')
-    cmd.args['FusionInspector'] = Argument(prefix='--FusionInspector ', default='validate', range=["inspect", "validate"], desc="FusionInspector that provides a more in-depth view of the evidence supporting the predicted fusions.")
+    cmd.args['FusionInspector'] = Argument(prefix='--FusionInspector ', level='optional', range=["inspect", "validate"], desc="FusionInspector that provides a more in-depth view of the evidence supporting the predicted fusions.")
     cmd.args['examine_coding_effect'] = Argument(prefix='--examine_coding_effect', type='bool', desc="explore impact of fusions on coding sequences")
     cmd.args['denovo_reconstruct'] = Argument(prefix='--denovo_reconstruct', type='bool', desc="attempt to reconstruct fusion transcripts using Trinity de novo assembly (requires --FusionInspector)")
     cmd.outputs['fusion_predictions'] = Output(value="{outdir}/star-fusion.fusion_predictions.tsv")
@@ -235,7 +235,7 @@ def quant_merge():
 def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database=None,
              fastq_dirs:tuple=None, fastq_files:tuple=None,
              r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', run=False,
-             no_docker=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+             fusion=False, no_docker=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
     top_vars = dict(
         starIndex=TopVar(value=star_index, type='indir'),
         fusionIndex=TopVar(value=fusion_index, type='indir'),
@@ -275,11 +275,12 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
         args['transcripts'].value = top_vars['transcripts']
         args['geneMap'].value = top_vars['gtf']
         # fusion identification
-        fusion_task, args = wf.add_task(star_fusion(), name='starfusion-'+sample, depends=[star_task.task_id])
-        args['genomeLibDir'].value = top_vars['fusionIndex']
-        args['chimeric_junction'].value = star_task.outputs['chimeric']
-        args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
-        args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
+        if fusion:
+            fusion_task, args = wf.add_task(star_fusion(), name='starfusion-'+sample, depends=[star_task.task_id])
+            args['genomeLibDir'].value = top_vars['fusionIndex']
+            args['chimeric_junction'].value = star_task.outputs['chimeric']
+            # args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
+            # args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
         # collectRNAseqMetrics
         metric_task, args = wf.add_task(collect_metrics(sample), name='collectMetrics-'+sample, depends=[star_task.task_id])
         args['bam'].value = star_task.outputs['bam']
