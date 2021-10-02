@@ -431,7 +431,7 @@ class Workflow:
             cmd_wkdir = os.path.join(outdir, task.name)
             mount_vols = {cmd_wkdir}
             for k, v in task.cmd.args.items():
-                if type(v.value) == list:
+                if type(v.value) in [list, tuple]:
                     values = v.value
                 else:
                     values = [v.value]
