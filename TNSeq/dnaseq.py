@@ -376,11 +376,18 @@ def HLA_ABC_typer(sample):
     return cmd
 
 
-def pipeline(fastq_dirs=None, fastq_files=('normal.r1.fq', 'normal.r2.fq', 'tumor.r1.fq', 'tumor.r2.fq'),
-             r1_name="(.*).r1.fq", r2_name="(.*).r2.fq", pair_info_txt=None, optiType=False,
-             ref_fa='hg19.fa', dbsnp='dbsnp.vcf', known_indels='known.indels.vcf',
+def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(.*).r2.fq",
+             pair_info_txt=None, optiType=False, ref_fa='hg19.fa', dbsnp='dbsnp.vcf', known_indels='known.indels.vcf',
              known_mills='mills.vcf', vep_cache='vep_cache/', vep_plugins='vep_plugins/',
-             intervals=None, threads=15, germline_vcf=None, pon=None, do_realign=False):
+             intervals=None, threads=15, germline_vcf=None, pon=None, do_realign=False,
+             outdir='Results', run=False, no_docker=False, workers=3, retry=1,
+             no_monitor_resource=False, no_check_resource=False):
+    if fastq_files is None and fastq_dirs is None:
+        print('this is a simple test')
+        fastq_files = ('normal.r1.fq', 'normal.r2.fq', 'tumor.r1.fq', 'tumor.r2.fq')
+        pair_info_txt = None
+        run = False
+
     top_vars = dict(
         thread_number=TopVar(value=threads, type='int'),
         ref=TopVar(value=ref_fa, type='infile'),
@@ -588,7 +595,8 @@ def pipeline(fastq_dirs=None, fastq_files=('normal.r1.fq', 'normal.r2.fq', 'tumo
         # args['dir_cache'].value = top_vars['vep_cache_dir']
         # args['dir_plugins'].value = top_vars['vep_plugin_dir']
 
-    wf.to_nestcmd(outdir='.', no_docker=True)
+    wf.to_nestcmd(outdir=outdir, run=run, no_docker=no_docker, threads=workers, retry=retry,
+                  no_monitor_resource=no_monitor_resource, no_check_resource=no_check_resource)
 
 
 if __name__ == '__main__':
