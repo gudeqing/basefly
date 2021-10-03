@@ -465,9 +465,9 @@ class Workflow:
         if run:
             from .runner import RunCommands
             if os.path.exists(os.path.join(outdir, 'cmd_state.txt')):
-                RunCommands(outfile, timeout=600).continue_run()
+                RunCommands(outfile, timeout=900).continue_run()
             else:
-                RunCommands(outfile, timeout=600).parallel_run()
+                RunCommands(outfile, timeout=900).parallel_run()
 
 
 class ToWdlTask(object):
