@@ -76,6 +76,7 @@ class Command(object):
         self.monitor = monitor_resource
         self.monitor_time_step = int(monitor_time_step)
         self.outdir = outdir
+        self.times = 0
         if not logger:
             self.logger = set_logger(name=os.path.join(self.outdir, 'command.log'))
         else:
@@ -384,6 +385,7 @@ class RunCommands(CommandNetwork):
                 state_dict[name][each] = 'unknown'
             state_dict[name]['cmd'] = self.parser[name]['cmd']
             state_dict[name]['depend'] = ','.join(self.get_dependency(name))
+            state_dict[name]['times'] = 0
         return state_dict
 
     def _update_queue(self):
@@ -408,7 +410,7 @@ class RunCommands(CommandNetwork):
         reorder_queue = queue.Queue()
         for each in self.names():
             if each in current_queue:
-                reorder_queue.put(each)
+                reorder_queue.put(each, block=True)
         self.queue = reorder_queue
 
     def _update_state(self, cmd=None, killed=False):
@@ -417,6 +419,7 @@ class RunCommands(CommandNetwork):
             if cmd.proc is None:
                 cmd_state['state'] = 'failed'
                 cmd_state['used_time'] = 'NotEnoughResource'
+                cmd_state['times'] += 1
                 self.logger.warning(cmd.name + ' cannot be started for not enough resource!')
             else:
                 cmd_state['state'] = 'success' if cmd.proc.returncode == 0 else 'failed'
@@ -424,6 +427,7 @@ class RunCommands(CommandNetwork):
                 cmd_state['mem'] = cmd.max_used_mem
                 cmd_state['cpu'] = cmd.max_used_cpu
                 cmd_state['pid'] = cmd.proc.pid
+                cmd_state['times'] += 1
         success = set(x for x in self.state if self.state[x]['state'] == 'success')
         self.success = len(success)
         failed = set(x for x in self.state if self.state[x]['state'] == 'failed')
@@ -493,29 +497,42 @@ class RunCommands(CommandNetwork):
                 tmp_dict.pop('outdir')
             if 'logger' in tmp_dict:
                 tmp_dict.pop('logger')
-            try_times = 0
-            cmd = Command(**tmp_dict, outdir=self.outdir, logger=self.logger)
-            while try_times <= int(tmp_dict['retry']):
-                try_times += 1
+
+            if self.state[name]['times'] <= int(tmp_dict['retry']):
+                cmd = Command(**tmp_dict, outdir=self.outdir, logger=self.logger)
                 enough = True
+                success = False
                 if tmp_dict['check_resource_before_run']:
                     if not CheckResource().is_enough(tmp_dict['cpu'], tmp_dict['mem'], self.timeout):
                         self.logger.warning('Local resource is Not enough for {}!'.format(cmd.name))
                         enough = False
+                        if self.state[name]['times'] < int(tmp_dict['retry']):
+                            # 把任务在再放回任务队列
+                            self.queue.put(name, block=True)
                 if enough:
-                    if try_times > 1:
-                        self.logger.warning('{}th run {}'.format(try_times, cmd.name))
+                    if self.state[name]['times'] > 0:
+                        self.logger.warning('{}th run {}'.format(self.state[name]['times'], cmd.name))
                     self.state[cmd.name]['state'] = 'running'
                     with self.__LOCK__:
                         self._draw_state()
                     cmd.run()
                     if cmd.proc.returncode == 0:
-                        break
-            with self.__LOCK__:
-                self._update_state(cmd)
-                self._update_queue()
-                self._write_state()
-                self._draw_state()
+                        success = True
+                    else:
+                        if self.state[name]['times'] < int(tmp_dict['retry']):
+                            # 如果不是最后一次执行任务，失败的任务再放回任务队列
+                            self.queue.put(name, block=True)
+                # 只有本次执行任务成功，或者最是后一次尝试执行任务时，才去更新状态
+                if success or self.state[name]['times'] == int(tmp_dict['retry']):
+                    with self.__LOCK__:
+                        self._update_state(cmd)
+                        self._update_queue()
+                        self._write_state()
+                        self._draw_state()
+                else:
+                    # 中间失败时递增执行次数
+                    with self.__LOCK__:
+                        self.state[name]['times'] += 1
 
     def parallel_run(self):
         atexit.register(self._update_status_when_exit)
@@ -544,7 +561,7 @@ class RunCommands(CommandNetwork):
         detail_steps = []
         if steps:
             for each in steps:
-                detail_steps += [x for x in self.names() if x == each or x.startswith(each + '_')]
+                detail_steps += [x for x in self.names() if x == each or x.startswith(each + '-')]
 
         self.ever_queued = set()
         # 使用已有状态信息更新状态
