@@ -510,7 +510,7 @@ class RunCommands(CommandNetwork):
                             self.queue.put(name, block=True)
                 if enough:
                     if self.state[name]['times'] > 0:
-                        self.logger.warning('{}th run {}'.format(self.state[name]['times'], cmd.name))
+                        self.logger.warning('{}th retry {}'.format(self.state[name]['times'], cmd.name))
                     self.state[cmd.name]['state'] = 'running'
                     with self.__LOCK__:
                         self._draw_state()
