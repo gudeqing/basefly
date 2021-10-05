@@ -446,6 +446,12 @@ class Workflow:
                             mount_vols.add(os.path.abspath(file_dir))
                         elif value.type == 'indir':
                             mount_vols.add(os.path.abspath(value.value))
+                    elif v.type in ['infile', 'indir'] and type(value) == str:
+                        # 直接从参数的类型来判定输入文件，这样，即使没有定义TopVar或者TmpVar等对象，也可以顺利生成nestcmd
+                        if v.type == 'infile':
+                            mount_vols.add(os.path.abspath(os.path.dirname(value)))
+                        elif v.type == 'indir':
+                            mount_vols.add(os.path.abspath(value))
 
             wf[task.name] = dict(
                 depend=','.join(self.tasks[x].name for x in task.depends) if task.depends else '',
