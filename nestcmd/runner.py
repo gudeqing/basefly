@@ -504,7 +504,6 @@ class RunCommands(CommandNetwork):
                 success = False
                 if tmp_dict['check_resource_before_run']:
                     if not CheckResource().is_enough(tmp_dict['cpu'], tmp_dict['mem'], self.timeout):
-                        self.logger.warning('Local resource is Not enough for {}!'.format(cmd.name))
                         enough = False
                         if self.state[name]['times'] < int(tmp_dict['retry']):
                             # 把任务在再放回任务队列
@@ -524,6 +523,8 @@ class RunCommands(CommandNetwork):
                             self.queue.put(name, block=True)
                 # 只有本次执行任务成功，或者最是后一次尝试执行任务时，才去更新状态
                 if success or self.state[name]['times'] == int(tmp_dict['retry']):
+                    if not enough:
+                        self.logger.warning('Local resource is Not enough for {}!'.format(cmd.name))
                     with self.__LOCK__:
                         self._update_state(cmd)
                         self._update_queue()
