@@ -233,7 +233,7 @@ def quant_merge():
 
 
 def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database=None,
-             fastq_dirs:tuple=None, fastq_files:tuple=None,
+             fastq_dirs:tuple=None, fastq_files:tuple=None, exclude_samples:tuple=None,
              r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', run=False,
              fusion=False, no_docker=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
     top_vars = dict(
@@ -255,6 +255,8 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
     for sample, (r1s, r2s) in fastq_info.items():
+        if sample in exclude_samples:
+            continue
         # 一个样本可能有多个fastq
         fastp_tasks = []
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
