@@ -348,7 +348,7 @@ class StateGraph(object):
                 self.graph.add_edge('Input', target, color='green')
 
     def _add_legend(self):
-        subgraph = self.graph.add_subgraph(name='cluster_sub', label='Color Legend')
+        subgraph = self.graph.add_subgraph(name='cluster_sub', label='Color Legend', rank='max')
         subgraph.graph_attr['color'] = 'lightgrey'
         subgraph.graph_attr['style'] = 'filled'
         subgraph.graph_attr['ratio'] = 'compress'
@@ -507,7 +507,7 @@ class RunCommands(CommandNetwork):
     def single_run(self):
         while True:
             if self.queue.empty():
-                time.sleep(5)
+                time.sleep(3)
                 with self.__LOCK__:
                     self._update_queue()
                     self._write_state()
