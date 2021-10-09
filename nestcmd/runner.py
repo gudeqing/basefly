@@ -252,7 +252,8 @@ class CommandNetwork(object):
 class CheckResource(object):
     @staticmethod
     def available_mem():
-        return psutil.virtual_memory().free
+        # memory
+        return psutil.virtual_memory().available*0.98
 
     @staticmethod
     def available_cpu():
