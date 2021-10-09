@@ -26,7 +26,7 @@ TIMERS = weakref.WeakKeyDictionary()
 @atexit.register
 def _kill_processes_when_exit():
     # register函数位于atexit模块，用于在程序退出时运行，进行必要的清理等
-    print("....Ending....")
+    # print("....Ending....")
     living_processes = list(PROCESS_local.items())
     while living_processes:
         for proc, cmd_name in living_processes:
@@ -584,7 +584,7 @@ class RunCommands(CommandNetwork):
         self.logger.warning('Success/Total = {}/{}'.format(self.success, self.task_number))
         return self.success, len(self.state)
 
-    def continue_run(self, steps=''):
+    def continue_run(self, steps=None):
         detail_steps = []
         if steps:
             for each in steps:
@@ -620,19 +620,28 @@ class RunCommands(CommandNetwork):
             self.logger.warning('Nothing to continue run since all steps are in success status')
 
 
-if __name__ == '__main__':
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-cfg', required=True, help="pipeline configuration file")
-    parser.add_argument('-wt', required=False, type=float, default=10,
-                        help="time to wait for enough resource to initiate a task")
-    parser.add_argument('--plot', action='store_true', default=False,
-                        help="if set, running state will be visualized if pygraphviz installed")
-    parser.add_argument('--rerun', action='store_true', default=False,
-                        help="if set, restart the pipeline at the failed/broken points")
-    args = parser.parse_args()
-    workflow = RunCommands(args.cfg, timeout=args.wt, draw_state_graph=args.plot)
-    if not args.rerun:
-        workflow.parallel_run()
+def draw_state(cmd_state, out='state.svg'):
+    StateGraph(cmd_state).draw(img_file=out)
+
+
+def run_wf(wf, plot=False, timeout=300, go_on=False, rerun_steps:tuple=None):
+    """
+
+    :param wf: pipeline configuration file
+    :param plot: if set, running state will be visualized if pygraphviz installed
+    :param timeout: time to wait for enough resource to initiate a task, default 300
+    :param go_on: if set, restart the pipeline at the failed task
+    :param rerun_steps: tell which finished tasks need to be rerun
+    :return:
+    """
+    workflow = RunCommands(wf, timeout=timeout, draw_state_graph=plot)
+    if go_on:
+        workflow.continue_run(steps=rerun_steps)
     else:
-        workflow.continue_run()
+        workflow.parallel_run()
+
+
+if __name__ == '__main__':
+    from xcmds import xcmds
+    xcmds.xcmds(locals(), include=['run_wf', 'draw_state'])
+
