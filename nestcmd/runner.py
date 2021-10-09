@@ -39,7 +39,7 @@ def _kill_processes_when_exit():
     living_timers = list(TIMERS.items())
     while living_timers:
         for tmp_timer, cmd_name in living_timers:
-            print(f'Cancel running timer of task {cmd_name}')
+            # print(f'Cancel running timer of task {cmd_name}')
             tmp_timer.cancel()
             TIMERS.pop(tmp_timer)
         living_timers = list(TIMERS.items())
