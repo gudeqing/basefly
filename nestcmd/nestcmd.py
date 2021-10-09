@@ -477,6 +477,32 @@ class Workflow:
             else:
                 RunCommands(outfile, timeout=time_wait_resource).parallel_run()
 
+    def dump_args(self, out='arguments.json'):
+        cmd_names = set()
+        arg_value_dict = dict()
+        for tid, task in self.tasks.items():
+            cmd_name = task.cmd.meta.name
+            if cmd_name not in cmd_names:
+                tmp_dict = arg_value_dict.setdefault(cmd_name, dict())
+                for arg_name, arg in task.cmd.args.items():
+                    if arg.level == 'required' and (arg.default is None):
+                        continue
+                    if arg.type not in ['infile', 'indir', 'fix']:
+                        tmp_dict[arg_name] = arg.value or arg.default
+            cmd_names.add(cmd_name)
+
+        with open(out, 'w') as f:
+            json.dump(arg_value_dict, f, indent=2)
+
+    def update_args(self, cfg_file):
+        with open(cfg_file) as f:
+            cfg = json.load(f)
+        for tid, task in self.tasks.items():
+            for arg_name, arg in task.cmd.args.items():
+                cmd_name = task.cmd.meta.name
+                if (cmd_name in cfg) and (arg_name in cfg[cmd_name]):
+                    arg.value = cfg[cmd_name][arg_name]
+
 
 class ToWdlTask(object):
     type_conv_dict = {
