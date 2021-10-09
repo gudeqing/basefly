@@ -201,7 +201,7 @@ def arcas_hla(threads=4):
     cmd.runtime.cpu = 2
     # 软链接数据库
     cmd.args['database'] = Argument(prefix='ln -s ', type='indir', level='optional', desc='database of arcas_software')
-    cmd.args['link'] = Argument(prefix='/home/arcasHLA-master/dat && ', type='bool', default=False)
+    cmd.args['link'] = Argument(prefix='/home/arcasHLA-master/dat &', type='bool', default=False)
     # run software
     cmd.args['_1'] = Argument(value=f'arcasHLA extract --temp ./ --unmapped -t {threads} -o .', type='fix')
     cmd.args['bam'] = Argument(value='', type='infile', desc='input bam file')
@@ -233,7 +233,8 @@ def quant_merge():
 def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database=None,
              fastq_dirs: tuple = None, fastq_files: tuple = None, exclude_samples: tuple = None,
              r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', run=False,
-             fusion=False, no_docker=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+             fusion=False, no_docker=False, threads=3, retry=1,
+             no_monitor_resource=False, no_check_resource=False):
     exclude_samples = set() if exclude_samples is None else exclude_samples
     top_vars = dict(
         starIndex=TopVar(value=star_index, type='indir'),
