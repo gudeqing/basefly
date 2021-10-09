@@ -178,8 +178,8 @@ def collect_metrics(sample):
     cmd.args['bam'] = Argument(prefix='I=', type='infile', desc='input bam file')
     cmd.args['out_metrics'] = Argument(prefix='O=', value=f'{sample}.RnaSeqMetrics.txt', desc='output metric file')
     cmd.args['strandness'] = Argument(prefix='STRAND_SPECIFICITY=', default='NONE', desc='strand-specificity')
-    cmd.args['ref_flat'] = Argument(prefix='REF_FLAT=', desc='Gene annotations in refFlat form.  Format described here: http://genome.ucsc.edu/goldenPath/gbdDescriptionsOld.html#RefFlat')
-    cmd.args['ribosomal_interval'] = Argument(prefix='RIBOSOMAL_INTERVALS=', desc="Location of rRNA sequences in genome, in interval_list format.  If not specified no bases will be identified as being ribosomal.")
+    cmd.args['ref_flat'] = Argument(prefix='REF_FLAT=', type='infile', desc='Gene annotations in refFlat form.  Format described here: http://genome.ucsc.edu/goldenPath/gbdDescriptionsOld.html#RefFlat')
+    cmd.args['ribosomal_interval'] = Argument(prefix='RIBOSOMAL_INTERVALS=', type='infile', desc="Location of rRNA sequences in genome, in interval_list format.  If not specified no bases will be identified as being ribosomal.")
     # cmd.args['cov_pdf'] = Argument(prefix='CHART_OUTPUT=', value=f'{sample}.coverage.pdf', desc='coverage output file')
     cmd.outputs['metrics'] = Output(value="{out_metrics}")
     # cmd.outputs['cov_pdf'] = Output(value="{cov_pdf}")
@@ -233,7 +233,7 @@ def quant_merge():
 def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database=None,
              fastq_dirs: tuple = None, fastq_files: tuple = None, exclude_samples: tuple = None,
              r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', run=False,
-             fusion=False, no_docker=False, threads=3, retry=1,
+             fusion=False, no_docker=False, threads=3, retry=1, out_arg_cfg=None, update_args=None,
              no_monitor_resource=False, no_check_resource=False):
     exclude_samples = set() if exclude_samples is None else exclude_samples
     top_vars = dict(
@@ -307,6 +307,11 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
             args['quants'].value = [wf.tasks[task_id].outputs['outDir'] for task_id in depends]
             args['names'].value = [wf.tasks[task_id].name.split('-', 1)[1] for task_id in depends]
             args['out'].value = f'{feature}.{data_type}.txt'
+
+    if out_arg_cfg:
+        wf.dump_args(out_arg_cfg)
+    if update_args:
+        wf.update_args(update_args)
 
     wf.to_nestcmd(outdir=outdir, run=run, no_docker=no_docker, threads=threads, retry=retry,
                   no_monitor_resource=no_monitor_resource, no_check_resource=no_check_resource)
