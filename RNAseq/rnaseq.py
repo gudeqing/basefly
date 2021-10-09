@@ -20,11 +20,9 @@ def fastp(sample):
     # cmd.runtime.image = 'gudeqing/fastp:0.21.0'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.tool = 'fastp'
-    # 可以直接用访问属性的方式添加参数，这个得益于使用Munch对象而不是原生字典
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
     cmd.args['other_args'] = Argument(prefix='', default='', desc="other arguments you want to use, such as '-x val'")
-    # 当然，可以直接用字典的方式添加参数
     cmd.args['out1'] = Argument(prefix='-o ', value=TmpVar(value=f'{sample}.clean.R1.fq.gz', name='~{sample}.clean.R1.fq.gz'), type='str', desc='clean read1 output fastq file')
     cmd.args['out2'] = Argument(prefix='-O ', value=TmpVar(value=f'{sample}.clean.R2.fq.gz', name='~{sample}.clean.R2.fq.gz'), type='str', desc='clean read2 output fastq file')
     cmd.args['html'] = Argument(prefix='-h ', value=TmpVar(value=f'{sample}.qc.html', name='~{sample}.qc.html'), type='str', desc='html report file')
@@ -233,9 +231,10 @@ def quant_merge():
 
 
 def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database=None,
-             fastq_dirs:tuple=None, fastq_files:tuple=None, exclude_samples:tuple=None,
+             fastq_dirs: tuple = None, fastq_files: tuple = None, exclude_samples: tuple = None,
              r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', run=False,
              fusion=False, no_docker=False, threads=3, retry=1, no_monitor_resource=False, no_check_resource=False):
+    exclude_samples = set() if exclude_samples is None else exclude_samples
     top_vars = dict(
         starIndex=TopVar(value=star_index, type='indir'),
         fusionIndex=TopVar(value=fusion_index, type='indir'),
