@@ -112,7 +112,8 @@ class RunTime:
     # 执行环境设置，以为命令行所需的最大计算资源
     max_memory: int = 0
     max_cpu: int = 0
-
+    # 运行时间上线
+    timeout: int = 3600*24
 
 @dataclass()
 class Output:
@@ -460,6 +461,7 @@ class Workflow:
                 cpu=task.cmd.runtime.cpu,
                 max_mem=task.cmd.runtime.max_memory,
                 max_cpu=task.cmd.runtime.max_cpu,
+                timeout=task.cmd.runtime.timeout,
                 image='' if no_docker else (task.cmd.runtime.image or ''),
                 wkdir=cmd_wkdir,
                 mount_vols=';'.join(mount_vols)
