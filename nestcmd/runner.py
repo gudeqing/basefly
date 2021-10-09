@@ -20,20 +20,33 @@ except Exception as e:
     pgv = None
 
 PROCESS_local = weakref.WeakKeyDictionary()
+TIMERS = weakref.WeakKeyDictionary()
 
 
 @atexit.register
 def _kill_processes_when_exit():
+    # register函数位于atexit模块，用于在程序退出时运行，进行必要的清理等
     print("....Ending....")
-    for proc, cmd_name in PROCESS_local.items():
-        if psutil.pid_exists(proc.pid):
-            print('Shutting down running tasks {}:{}'.format(proc.pid, cmd_name))
-            proc.kill()
-    # 有些已经发起但还没有收进来的无法终止
+    living_processes = list(PROCESS_local.items())
+    while living_processes:
+        for proc, cmd_name in living_processes:
+            if psutil.pid_exists(proc.pid):
+                print('Stop running task(pid={}): {}'.format(proc.pid, cmd_name))
+                proc.kill()
+            PROCESS_local.pop(proc)
+        living_processes = list(PROCESS_local.items())
+    # 取消计时器
+    living_timers = list(TIMERS.items())
+    while living_timers:
+        for tmp_timer, cmd_name in living_timers:
+            print(f'Cancel running timer of task {cmd_name}')
+            tmp_timer.cancel()
+            TIMERS.pop(tmp_timer)
+        living_timers = list(TIMERS.items())
 
 
 def shutdown(signum, frame):
-    print('Killing main process, thus its derived processes will also be killed')
+    print('\nyou are Killing the main process, and we will help to kill the derived processes!')
     exit(0)
 
 
@@ -60,7 +73,7 @@ def set_logger(name='workflow.log', logger_id='x'):
 
 
 class Command(object):
-    def __init__(self, cmd, name, timeout=3600*24*10, outdir=os.getcwd(), image=None, mount_vols=None,
+    def __init__(self, cmd, name, timeout=3600*24*1, outdir=os.getcwd(), image=None, mount_vols=None,
                  monitor_resource=True, monitor_time_step=2, logger=None, **kwargs):
         self.name = name
         self.cmd = cmd
@@ -83,7 +96,7 @@ class Command(object):
             self.logger = logger
 
     def _monitor_resource(self):
-        while self.proc.is_running():
+        while psutil.pid_exists(self.proc.pid) and self.proc.is_running():
             try:
                 cpu_percent = self.proc.cpu_percent()
                 time.sleep(self.monitor_time_step)
@@ -123,11 +136,15 @@ class Command(object):
             self.logger.info("> {}".format(self.cmd))
             self.proc = psutil.Popen(self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
 
+        # tracing process
         PROCESS_local[self.proc] = self.name
+
         if self.monitor:
             thread = threading.Thread(target=self._monitor_resource, daemon=True)
             thread.start()
+
         timer = Timer(self.timeout, self.proc.kill)
+        TIMERS[timer] = self.name
         try:
             timer.start()
             self.stdout, self.stderr = self.proc.communicate()
@@ -135,9 +152,10 @@ class Command(object):
                 thread.join()
         finally:
             timer.cancel()
+
         self._write_log()
         end_time = time.time()
-        self.used_time = round(end_time - start_time, 4)
+        self.used_time = round(end_time - start_time, 2)
 
     def _write_log(self):
         log_dir = os.path.join(self.outdir, 'logs')
@@ -217,7 +235,7 @@ class CommandNetwork(object):
         else:
             tmp_dict['monitor_resource'] = self.parser.getboolean(name, 'monitor_resource')
         if 'timeout' not in tmp_dict:
-            tmp_dict['timeout'] = 3600*24*10
+            tmp_dict['timeout'] = 3600*24*1
         else:
             tmp_dict['timeout'] = self.parser.getint(name, 'timeout')
         if 'monitor_time_step' not in tmp_dict:
@@ -259,6 +277,14 @@ class CheckResource(object):
 
 class StateGraph(object):
     def __init__(self, state):
+        if type(state) != dict:
+            state_dict = dict()
+            with open(state) as f:
+                header = f.readline().strip('\n').split('\t')
+                for line in f:
+                    lst = line.strip('\n').split('\t')
+                    state_dict[lst[0]] = dict(zip(header[1:], lst[1:]))
+            state = state_dict
         self.state = state
         self.graph = pgv.AGraph(directed=True, rankdir='LR')
         self.used_colors = dict()
