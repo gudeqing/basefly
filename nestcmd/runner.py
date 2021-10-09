@@ -584,8 +584,9 @@ class RunCommands(CommandNetwork):
             self._draw_state()
         # join threads
         _ = [x.join() for x in threads]
-        self.logger.warning('Finished all tasks!')
-        self.logger.warning('Success/Total = {}/{}'.format(self.success, self.task_number))
+        percent = f'{self.success/self.task_number:.2%}'
+        failed = self.task_number - self.success
+        self.logger.warning(f'Finished {percent}: Success={self.success}, Failed={failed}, Total={self.task_number}')
         return self.success, len(self.state)
 
     def continue_run(self, steps=None):
