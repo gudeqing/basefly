@@ -537,7 +537,7 @@ class RunCommands(CommandNetwork):
                             self.queue.put(name, block=True)
                 if enough:
                     if self.state[name]['times'] > 0:
-                        self.logger.warning('{}th retry {}'.format(self.state[name]['times'], cmd.name))
+                        self.logger.info('It is {}th time to retry {}'.format(self.state[name]['times'], cmd.name))
                     self.state[cmd.name]['state'] = 'running'
                     with self.__LOCK__:
                         self._draw_state()
@@ -548,6 +548,9 @@ class RunCommands(CommandNetwork):
                         if self.state[name]['times'] < int(tmp_dict['retry']):
                             # 如果不是最后一次执行任务，失败的任务再放回任务队列
                             self.queue.put(name, block=True)
+                # 最后一次尝试运行，且执行失败，则判定任务执行失败
+                if (not success) and self.state[name]['times'] == int(tmp_dict['retry']):
+                    self.logger.warning(f'Failed to complete task {name}!')
                 # 只有本次执行任务成功，或者最是后一次尝试执行任务时，才去更新状态
                 if success or self.state[name]['times'] == int(tmp_dict['retry']):
                     if not enough:

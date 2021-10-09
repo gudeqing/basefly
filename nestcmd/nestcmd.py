@@ -410,7 +410,7 @@ class Workflow:
             for line in lines:
                 f.write(line+'\n')
 
-    def to_nestcmd(self, outdir, run=False, no_docker=False, threads=3, retry=1,
+    def to_nestcmd(self, outdir, run=False, no_docker=False, threads=3, retry=1, time_wait_resource=15,
                    no_monitor_resource=False, no_check_resource=False):
         """
         生成nestcmd格式的workflow并且允许直接本地执行
@@ -473,9 +473,9 @@ class Workflow:
         if run:
             from .runner import RunCommands
             if os.path.exists(os.path.join(outdir, 'cmd_state.txt')):
-                RunCommands(outfile, timeout=900).continue_run()
+                RunCommands(outfile, timeout=time_wait_resource).continue_run()
             else:
-                RunCommands(outfile, timeout=900).parallel_run()
+                RunCommands(outfile, timeout=time_wait_resource).parallel_run()
 
 
 class ToWdlTask(object):
