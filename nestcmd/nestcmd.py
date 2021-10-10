@@ -8,6 +8,7 @@ from typing import Any, List, Dict
 from typing_extensions import Literal
 # shadow default dict
 # from munch import Munch as dict
+from .runner import run_wf, draw_state
 
 __author__ = 'gdq'
 
@@ -322,13 +323,20 @@ class Workflow:
     tasks: Dict[str, Task] = field(default_factory=dict)
     outputs: Dict[str, Output] = field(default_factory=dict)
     top_vars: Dict[str, TopVar] = field(default_factory=dict)
+    argparser = None
 
     def __post_init__(self):
         for k, v in self.top_vars.items():
             # 将key作为var的名称
             v.name = k
 
-    def add_task(self, cmd: Command, depends: list = None, name: str = None):
+    def add_topvars(self, var_dict):
+        for k, v in var_dict.items():
+            # 将key作为var的名称
+            v.name = k
+        self.top_vars.update(var_dict)
+
+    def add_task(self, cmd: Command, depends: list = [], name: str = None):
         task = Task(cmd=cmd, depends=depends, name=name)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
@@ -410,22 +418,23 @@ class Workflow:
             for line in lines:
                 f.write(line+'\n')
 
-    def to_nestcmd(self, outdir, run=False, no_docker=False, threads=3, retry=1, time_wait_resource=15,
-                   no_monitor_resource=False, no_check_resource=False):
+    def run(self):
         """
         生成nestcmd格式的workflow并且允许直接本地执行
         """
         import configparser
         wf = configparser.ConfigParser()
         wf.optionxform = str
-        outdir = os.path.abspath(outdir)
+        parameters = self.argparser.parse_args()
+        outdir = os.path.abspath(parameters.outdir)
+
         wf['mode'] = dict(
             outdir=outdir,
-            threads=threads,
-            retry=retry,
-            monitor_resource=not no_monitor_resource,
-            monitor_time_step=2,
-            check_resource_before_run=not no_check_resource,
+            threads=parameters.threads,
+            retry=parameters.retry,
+            monitor_resource=not parameters.monitor_resource,
+            monitor_time_step=3,
+            check_resource_before_run=not parameters.no_check_resource_before_run,
         )
 
         for task_id, task in self.tasks.items():
@@ -462,20 +471,34 @@ class Workflow:
                 max_mem=task.cmd.runtime.max_memory,
                 max_cpu=task.cmd.runtime.max_cpu,
                 timeout=task.cmd.runtime.timeout,
-                image='' if no_docker else (task.cmd.runtime.image or ''),
+                image='' if parameters.no_docker else (task.cmd.runtime.image or ''),
                 wkdir=cmd_wkdir,
                 mount_vols=';'.join(mount_vols)
             )
-        os.makedirs(outdir, exist_ok=True)
-        outfile = os.path.join(outdir, f'{self.meta.name}.ini')
-        with open(outfile, 'w') as configfile:
-            wf.write(configfile)
-        if run:
-            from .runner import RunCommands
-            if os.path.exists(os.path.join(outdir, 'cmd_state.txt')):
-                RunCommands(outfile, timeout=time_wait_resource).continue_run()
-            else:
-                RunCommands(outfile, timeout=time_wait_resource).parallel_run()
+
+        if parameters.skip:
+            self.skip_steps(parameters.skip)
+
+        if parameters.update_args:
+            self.update_args(parameters.update_args)
+
+        if parameters.dump_args:
+            self.dump_args()
+
+        if parameters.list_cmd:
+            self.list_cmd()
+        elif parameters.show_cmd:
+            self.show_cmd(parameters.show_cmd)
+        elif parameters.list_task:
+            self.list_task()
+        else:
+            os.makedirs(outdir, exist_ok=True)
+            outfile = os.path.join(outdir, f'{self.meta.name}.ini')
+            with open(outfile, 'w') as configfile:
+                wf.write(configfile)
+            if parameters.run:
+                run_wf(outfile, timeout=parameters.wait_resource_time,
+                       plot=parameters.plot, rerun_steps=parameters.rerun_steps)
 
     def dump_args(self, out='arguments.json'):
         cmd_names = set()
@@ -502,6 +525,72 @@ class Workflow:
                 cmd_name = task.cmd.meta.name
                 if (cmd_name in cfg) and (arg_name in cfg[cmd_name]):
                     arg.value = cfg[cmd_name][arg_name]
+
+    def skip_steps(self, steps):
+        """
+        :param steps: list containing cmd.meta.name or task.name
+        :return:
+        """
+        task_copy = self.tasks.copy()
+        skip_tasks = [tid for tid, x in self.tasks.items() if x.name in steps or x.cmd.meta.name in steps]
+        # pop task
+        _ = [self.tasks.pop(x) for x in skip_tasks]
+        # find out depending task
+        total_deduced_skips = list()
+        while True:
+            to_be_skip = list()
+            for tid in self.tasks.keys():
+                # print(self.tasks[tid].depends, self.tasks[tid].name)
+                if set(self.tasks[tid].depends) - set(self.tasks.keys()):
+                    to_be_skip.append(tid)
+                    total_deduced_skips.append(tid)
+            _ = [self.tasks.pop(x) for x in to_be_skip]
+            # judge if all dependencies are available
+            if all(len(set(self.tasks[x].depends) - set(self.tasks.keys())) == 0 for x in self.tasks):
+                break
+        skip_tasks += total_deduced_skips
+        print('All skipped tasks are:', [task_copy[tid].name for tid in skip_tasks])
+
+    def list_cmd(self):
+        print(sorted({tsk.cmd.meta.name for _, tsk in self.tasks.items()}))
+
+    def list_task(self):
+        print([tsk.name for _, tsk in self.tasks.items()])
+
+    def show_cmd(self, cmd_name):
+        for _, tsk in self.tasks.items():
+            if tsk.cmd.meta.name == cmd_name:
+                print(tsk.cmd.format_cmd(self.tasks))
+                break
+
+    def add_argparser(self):
+        import sys
+        import argparse
+        if len(sys.argv) <= 1:
+            exit('Please provide at least one argument, use -h for help')
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description=self.meta.desc
+        )
+        parser.add_argument('-dump_args', required=False, help="输出参数配置json文件, 其包含流程所有软件需要的参数,")
+        parser.add_argument('-update_args', required=False, help="输入参数配置文件, 其包含流程所有软件需要的参数,")
+        parser.add_argument('-outdir', default=os.path.join(os.getcwd(), 'Result'), help='分析目录或结果目录')
+        parser.add_argument('-skip', default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
+        parser.add_argument('-rerun_steps', default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可以是: 你重新设置了参数. 使用--list_task可查看候选，可以使用task的前缀指定属于同一个步骤的task")
+        parser.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 且已经排除指定跳过的步骤")
+        parser.add_argument('-show_cmd', help="提供一个cmd名称,输出该cmd的样例")
+        parser.add_argument('--list_task', default=False, action="store_true", help="仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤")
+        parser.add_argument('--run', default=False, action='store_true', help="运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动需跑")
+        parser.add_argument('--no_docker', default=False, action='store_true', help="禁用docker")
+        parser.add_argument('--plot', default=False, action='store_true', help="generate directed acyclic graph for whole workflow timely")
+        parser.add_argument('-threads', default=5, type=int, help="允许的最大并行的cmd数目, 默认5")
+        parser.add_argument('-retry', default=1, type=int, help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
+        parser.add_argument('--monitor_resource', default=False, action='store_true', help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
+        parser.add_argument('-wait_resource_time', default=60, type=int, help="等待资源的时间上限, 默认每次等待时间为15秒, 等待时间超过这个时间且资源不足时判定任务失败")
+        parser.add_argument('--no_check_resource_before_run', default=False, action='store_true',
+                            help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. "
+                                 "如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
+        self.argparser = parser
 
 
 class ToWdlTask(object):

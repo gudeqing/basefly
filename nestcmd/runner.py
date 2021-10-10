@@ -629,18 +629,17 @@ def draw_state(cmd_state, out='state.svg'):
     StateGraph(cmd_state).draw(img_file=out)
 
 
-def run_wf(wf, plot=False, timeout=300, go_on=False, rerun_steps:tuple=None):
+def run_wf(wf, plot=False, timeout=300, rerun_steps:tuple=None):
     """
-
     :param wf: pipeline configuration file
     :param plot: if set, running state will be visualized if pygraphviz installed
     :param timeout: time to wait for enough resource to initiate a task, default 300
-    :param go_on: if set, restart the pipeline at the failed task
-    :param rerun_steps: tell which finished tasks need to be rerun
+    :param rerun_steps: tell which finished tasks need to be rerun. By default the runner will start from failed steps.
     :return:
     """
     workflow = RunCommands(wf, timeout=timeout, draw_state_graph=plot)
-    if go_on:
+    state = os.path.join(wf.outdir, 'cmd_state.txt')
+    if os.path.exists(state):
         workflow.continue_run(steps=rerun_steps)
     else:
         workflow.parallel_run()

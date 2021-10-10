@@ -230,32 +230,48 @@ def quant_merge():
     return cmd
 
 
-def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_interval, hla_database=None,
-             fastq_dirs: tuple = None, fastq_files: tuple = None, exclude_samples: tuple = None,
-             r1_name='(.*).R1.fastq', r2_name='(.*).R2.fastq', outdir='test', fusion=False,
-             run=False, no_docker=False, threads=3, retry=1, out_arg_cfg=None, update_args=None,
-             no_monitor_resource=False, no_check_resource=False):
-    exclude_samples = set() if exclude_samples is None else exclude_samples
-    top_vars = dict(
-        starIndex=TopVar(value=star_index, type='indir'),
-        fusionIndex=TopVar(value=fusion_index, type='indir'),
-        transcripts=TopVar(value=transcripts_fa, type='infile'),
-        gtf=TopVar(value=gtf, type='infile'),
-        ref_flat=TopVar(value=ref_flat, type='infile'),
-        rRNA_interval=TopVar(value=rRNA_interval, type='infile')
-    )
-    if hla_database:
-        top_vars['hla_database'] = TopVar(value=hla_database, type='indir')
-
-    wf = Workflow(top_vars=top_vars)
+def pipeline():
+    wf = Workflow()
     wf.meta.name = 'RnaSeqPipeline'
-    wf.meta.desc = 'This is a  pipeline for rnaseq analysis'
+    wf.meta.desc = 'This is a pipeline for rnaseq analysis'
+    wf.add_argparser()
+    # add workflow args
+    wf.argparser.add_argument('-star_index', required=True, help='star alignment index dir')
+    wf.argparser.add_argument('-fusion_index', required=True, help='star-fusion database dir')
+    wf.argparser.add_argument('-transcripts_fa', required=True, help='transcriptome fasta file')
+    wf.argparser.add_argument('-gtf', required=True, help='genome annotation file')
+    wf.argparser.add_argument('-ref_flat', required=True, help='gene model file')
+    wf.argparser.add_argument('-rRNA_interval', required=True, help='picard interval file of rRNA')
+    wf.argparser.add_argument('-hla_db', required=False, help='arcasHLA database')
+    wf.argparser.add_argument('-fastq_dirs', nargs='+', required=False, help='fastq file parent dir list')
+    wf.argparser.add_argument('-fastq_files', nargs='+', required=False, help='fastq file list')
+    wf.argparser.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
+    wf.argparser.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
+    wf.argparser.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
+    wf.args = wf.argparser.parse_args()
+    if not wf.args.fastq_dirs and not wf.args.fastq_files:
+        exit('Error: fastq info must be provided either by -fastq_dirs or -fastq_files')
+    # add top_vars
+    wf.add_topvars(dict(
+        starIndex=TopVar(value=wf.args.star_index, type='indir'),
+        fusionIndex=TopVar(value=wf.args.fusion_index, type='indir'),
+        transcripts=TopVar(value=wf.args.transcripts_fa, type='infile'),
+        gtf=TopVar(value=wf.args.gtf, type='infile'),
+        ref_flat=TopVar(value=wf.args.ref_flat, type='infile'),
+        rRNA_interval=TopVar(value=wf.args.rRNA_interval, type='infile')
+    ))
+    if wf.args.hla_db:
+        wf.top_vars['hla_database'] = TopVar(value=wf.args.db, type='indir')
 
-    fastq_info = get_fastq_info(fastq_dirs=fastq_dirs, fastq_files=fastq_files, r1_name=r1_name, r2_name=r2_name)
+    fastq_info = get_fastq_info(
+        fastq_dirs=wf.args.fastq_dirs,
+        fastq_files=wf.args.fastq_files,
+        r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
+
     for sample, (r1s, r2s) in fastq_info.items():
-        if sample in exclude_samples:
+        if sample in wf.args.exclude_samples:
             continue
         # 一个样本可能有多个fastq
         fastp_tasks = []
@@ -265,34 +281,38 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
             args['read1'].value = TmpVar(name='read1', value=r1, type='infile')
             args['read2'].value = TmpVar(name='read2', value=r2, type='infile')
             fastp_tasks.append(fastp_task)
+
         # star alignment
         fastp_task_ids = [x.task_id for x in fastp_tasks]
         star_task, args = wf.add_task(star(sample), name='star-'+sample, depends=fastp_task_ids)
         args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
         args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
-        args['genomeDir'].value = top_vars['starIndex']
+        args['genomeDir'].value = wf.top_vars['starIndex']
+
         # salmon quant
         salmon_task, args = wf.add_task(salmon(), name='salmon-'+sample, depends=[star_task.task_id])
         args['bam'].value = [star_task.outputs['transcript_bam']]
-        args['transcripts'].value = top_vars['transcripts']
-        args['geneMap'].value = top_vars['gtf']
+        args['transcripts'].value = wf.top_vars['transcripts']
+        args['geneMap'].value = wf.top_vars['gtf']
+
         # fusion identification
-        if fusion:
-            fusion_task, args = wf.add_task(star_fusion(), name='starfusion-'+sample, depends=[star_task.task_id])
-            args['genomeLibDir'].value = top_vars['fusionIndex']
-            args['chimeric_junction'].value = star_task.outputs['chimeric']
-            # args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
-            # args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
+        fusion_task, args = wf.add_task(star_fusion(), name='starfusion-'+sample, depends=[star_task.task_id])
+        args['genomeLibDir'].value = wf.top_vars['fusionIndex']
+        args['chimeric_junction'].value = star_task.outputs['chimeric']
+        # args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
+        # args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
+
         # collectRNAseqMetrics
         metric_task, args = wf.add_task(collect_metrics(sample), name='collectMetrics-'+sample, depends=[star_task.task_id])
         args['bam'].value = star_task.outputs['bam']
-        args['ref_flat'].value = top_vars['ref_flat']
-        args['ribosomal_interval'].value = top_vars['rRNA_interval']
+        args['ref_flat'].value = wf.top_vars['ref_flat']
+        args['ribosomal_interval'].value = wf.top_vars['rRNA_interval']
+
         # HLA-typing
         hla_task, args = wf.add_task(arcas_hla(), name='hla-'+sample, depends=[star_task.task_id])
         args['bam'].value = star_task.outputs['bam']
-        if hla_database:
-            args['database'].value = top_vars['hla_database']
+        if wf.args.hla_db:
+            args['database'].value = wf.top_vars['hla_database']
             args['link'].value = True
 
     # merge transcript/gene TPM/Count
@@ -307,16 +327,8 @@ def pipeline(star_index, fusion_index, transcripts_fa, gtf, ref_flat, rRNA_inter
             args['quants'].value = [wf.tasks[task_id].outputs['outDir'] for task_id in depends]
             args['names'].value = [wf.tasks[task_id].name.split('-', 1)[1] for task_id in depends]
             args['out'].value = f'{feature}.{data_type}.txt'
-
-    if out_arg_cfg:
-        wf.dump_args(out_arg_cfg)
-    if update_args:
-        wf.update_args(update_args)
-
-    wf.to_nestcmd(outdir=outdir, run=run, no_docker=no_docker, threads=threads, retry=retry,
-                  no_monitor_resource=no_monitor_resource, no_check_resource=no_check_resource)
+    wf.run()
 
 
 if __name__ == '__main__':
-    from xcmds import xcmds
-    xcmds.xcmds(locals(), include=['pipeline'])
+    pipeline()
