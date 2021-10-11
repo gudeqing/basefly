@@ -40,7 +40,7 @@ WORKDIR /home/
 RUN git clone https://github.com/RabadanLab/arcasHLA.git arcasHLA-master
 
 ENV PATH="${PATH}:/home/arcasHLA-master/"
-RUN rm -fr /home/arcasHLA-master/dat/
+#RUN rm -fr /home/arcasHLA-master/dat/
 
 # install two annother packages
 RUN pip3 install -i $PIP_SOURCE psutil
@@ -51,7 +51,7 @@ RUN apt install -y nano
 #COPY ./dat /home/arcasHLA-master/dat
 
 # 安装graphviz
-RUN apt-get update && apt-get update && apt-get install python3.6-dev libgraphviz-dev --fix-missing -y
+RUN apt-get update && apt-get install python3.6-dev libgraphviz-dev --fix-missing -y
 RUN pip3 install -i $PIP_SOURCE pygraphviz
 
 # clean up
