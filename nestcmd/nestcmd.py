@@ -324,12 +324,12 @@ class Workflow:
     meta: Meta = field(default_factory=Meta)
     tasks: Dict[str, Task] = field(default_factory=dict)
     outputs: Dict[str, Output] = field(default_factory=dict)
-    top_vars: Dict[str, TopVar] = field(default_factory=dict)
+    topvars: Dict[str, TopVar] = field(default_factory=dict)
     argparser = None
     args = None
 
     def __post_init__(self):
-        for k, v in self.top_vars.items():
+        for k, v in self.topvars.items():
             # 将key作为var的名称
             v.name = k
 
@@ -337,7 +337,7 @@ class Workflow:
         for k, v in var_dict.items():
             # 将key作为var的名称
             v.name = k
-        self.top_vars.update(var_dict)
+        self.topvars.update(var_dict)
 
     def add_task(self, cmd: Command, depends: list = [], name: str = None):
         task = Task(cmd=cmd, depends=depends, name=name)
@@ -356,16 +356,16 @@ class Workflow:
         lines += ['spec:']
         # entry point
         lines += [' '*2 + 'entrypoint: main']
-        artifacts = [k for k, v in self.top_vars.items() if v.type in ['infile', 'indir']]
+        artifacts = [k for k, v in self.topvars.items() if v.type in ['infile', 'indir']]
         if artifacts:
             lines += [' ' * 2 + 'arguments:']
             lines += [' ' * 4 + 'artifacts:']
             for each in artifacts:
-                if type(self.top_vars[each].value) != list:
+                if type(self.topvars[each].value) != list:
                     lines += [' ' * 4 + f'- name: {each}']
-                    lines += [' ' * 6 + f'path: {self.top_vars[each].value}']
+                    lines += [' ' * 6 + f'path: {self.topvars[each].value}']
                 else:
-                    for i, v in enumerate(self.top_vars[each].value):
+                    for i, v in enumerate(self.topvars[each].value):
                         lines += [' ' * 4 + f'- name: {each}_{i}']
                         lines += [' ' * 6 + f'path: {v}']
 
@@ -938,8 +938,8 @@ class ToWdlWorkflow(object):
 
         # 这一部分是针对fastq数据特殊设计的
         wdl += " "*4 + "input {\n"
-        if self.wf.top_vars:
-            for k, v in self.wf.top_vars.items():
+        if self.wf.topvars:
+            for k, v in self.wf.topvars.items():
                 var_value = v.value
                 if v.type == 'infile':
                     var_type = 'File'

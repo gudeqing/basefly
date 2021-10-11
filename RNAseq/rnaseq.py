@@ -261,7 +261,7 @@ def pipeline():
         rRNA_interval=TopVar(value=wf.args.rRNA_interval, type='infile')
     ))
     if wf.args.hla_db:
-        wf.top_vars['hla_database'] = TopVar(value=wf.args.hla_db, type='indir')
+        wf.topvars['hla_database'] = TopVar(value=wf.args.hla_db, type='indir')
 
     fastq_info = get_fastq_info(
         fastq_dirs=wf.args.fastq_dirs,
@@ -287,17 +287,17 @@ def pipeline():
         star_task, args = wf.add_task(star(sample), name='star-'+sample, depends=fastp_task_ids)
         args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
         args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
-        args['genomeDir'].value = wf.top_vars['starIndex']
+        args['genomeDir'].value = wf.topvars['starIndex']
 
         # salmon quant
         salmon_task, args = wf.add_task(salmon(), name='salmon-'+sample, depends=[star_task.task_id])
         args['bam'].value = [star_task.outputs['transcript_bam']]
-        args['transcripts'].value = wf.top_vars['transcripts']
-        args['geneMap'].value = wf.top_vars['gtf']
+        args['transcripts'].value = wf.topvars['transcripts']
+        args['geneMap'].value = wf.topvars['gtf']
 
         # fusion identification
         fusion_task, args = wf.add_task(star_fusion(), name='starfusion-'+sample, depends=[star_task.task_id])
-        args['genomeLibDir'].value = wf.top_vars['fusionIndex']
+        args['genomeLibDir'].value = wf.topvars['fusionIndex']
         args['chimeric_junction'].value = star_task.outputs['chimeric']
         # args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
         # args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
@@ -305,14 +305,14 @@ def pipeline():
         # collectRNAseqMetrics
         metric_task, args = wf.add_task(collect_metrics(sample), name='collectMetrics-'+sample, depends=[star_task.task_id])
         args['bam'].value = star_task.outputs['bam']
-        args['ref_flat'].value = wf.top_vars['ref_flat']
-        args['ribosomal_interval'].value = wf.top_vars['rRNA_interval']
+        args['ref_flat'].value = wf.topvars['ref_flat']
+        args['ribosomal_interval'].value = wf.topvars['rRNA_interval']
 
         # HLA-typing
         hla_task, args = wf.add_task(arcas_hla(), name='hla-'+sample, depends=[star_task.task_id])
         args['bam'].value = star_task.outputs['bam']
         if wf.args.hla_db:
-            args['database'].value = wf.top_vars['hla_database']
+            args['database'].value = wf.topvars['hla_database']
             args['link'].value = True
 
     # merge transcript/gene TPM/Count
