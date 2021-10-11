@@ -1,6 +1,8 @@
 import os
 import re
 import json
+import sys
+import argparse
 from uuid import uuid4
 from dataclasses import dataclass, field
 # from typing import Any, List, Dict, Literal
@@ -324,6 +326,7 @@ class Workflow:
     outputs: Dict[str, Output] = field(default_factory=dict)
     top_vars: Dict[str, TopVar] = field(default_factory=dict)
     argparser = None
+    args = None
 
     def __post_init__(self):
         for k, v in self.top_vars.items():
@@ -564,33 +567,37 @@ class Workflow:
                 break
 
     def add_argparser(self):
-        import sys
-        import argparse
         if len(sys.argv) <= 1:
             exit('Please provide at least one argument, use -h for help')
         parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             description=self.meta.desc
         )
-        parser.add_argument('-dump_args', required=False, help="输出参数配置json文件, 其包含流程所有软件需要的参数,")
-        parser.add_argument('-update_args', required=False, help="输入参数配置文件, 其包含流程所有软件需要的参数,")
-        parser.add_argument('-outdir', default=os.path.join(os.getcwd(), 'Result'), help='分析目录或结果目录')
-        parser.add_argument('-skip', default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
-        parser.add_argument('-rerun_steps', default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可以是: 你重新设置了参数. 使用--list_task可查看候选，可以使用task的前缀指定属于同一个步骤的task")
-        parser.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 且已经排除指定跳过的步骤")
-        parser.add_argument('-show_cmd', help="提供一个cmd名称,输出该cmd的样例")
-        parser.add_argument('--list_task', default=False, action="store_true", help="仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤")
-        parser.add_argument('--run', default=False, action='store_true', help="运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动需跑")
-        parser.add_argument('--no_docker', default=False, action='store_true', help="禁用docker")
-        parser.add_argument('--plot', default=False, action='store_true', help="generate directed acyclic graph for whole workflow timely")
-        parser.add_argument('-threads', default=5, type=int, help="允许的最大并行的cmd数目, 默认5")
-        parser.add_argument('-retry', default=1, type=int, help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
-        parser.add_argument('--monitor_resource', default=False, action='store_true', help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
-        parser.add_argument('-wait_resource_time', default=60, type=int, help="等待资源的时间上限, 默认每次等待时间为15秒, 等待时间超过这个时间且资源不足时判定任务失败")
-        parser.add_argument('--no_check_resource_before_run', default=False, action='store_true',
-                            help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. "
-                                 "如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
+        wf_args = parser.add_argument_group('Arguments for controlling running mode')
+        wf_args.add_argument('--run', default=False, action='store_true', help="运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动需跑")
+        wf_args.add_argument('--no_docker', default=False, action='store_true', help="do not use docker even if docker image is provided")
+        wf_args.add_argument('--plot', default=False, action='store_true', help="generate directed acyclic graph for whole workflow timely")
+        wf_args.add_argument('-dump_args', metavar='dump-args', required=False, help="输出参数配置json文件, 其包含流程所有软件需要的参数")
+        wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, 其包含流程所有软件需要的参数")
+        wf_args.add_argument('-threads', metavar='max-workers', default=5, type=int, help="允许的最大并行的cmd数目, 默认5")
+        wf_args.add_argument('-outdir', metavar='workdir', default=os.path.join(os.getcwd(), 'Result'), help='分析目录或结果目录')
+        wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
+        wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可以是: 你重新设置了参数. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task")
+        wf_args.add_argument('-retry', metavar='max-retry', default=1, type=int, help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
+        wf_args.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 且已经排除指定跳过的步骤")
+        wf_args.add_argument('-show_cmd', metavar='cmd-query', help="提供一个cmd名称,输出该cmd的样例")
+        wf_args.add_argument('--list_task', default=False, action="store_true", help="仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤")
+        wf_args.add_argument('--monitor_resource', default=False, action='store_true', help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
+        wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=60, type=int, help="等待资源的时间上限, 默认每次等待时间为15秒, 等待时间超过这个时间且资源不足时判定任务失败")
+        wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true', help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
         self.argparser = parser
+        # for user defined arguments
+        self.add_argument = self.argparser.add_argument
+
+    def parse_args(self):
+        if self.argparser is None:
+            self.add_argparser()
+        self.args = self.argparser.parse_args()
 
 
 class ToWdlTask(object):
