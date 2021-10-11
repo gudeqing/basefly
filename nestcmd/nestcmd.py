@@ -298,7 +298,8 @@ class TopVar:
     def __post_init__(self):
         if self.type in ['infile', 'indir']:
             # 对输入文件的路径进行绝对化
-            self.value = os.path.abspath(self.value)
+            if self.value is not None:
+                self.value = os.path.abspath(self.value)
 
 
 @dataclass()
