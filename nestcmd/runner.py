@@ -117,10 +117,10 @@ class Command(object):
         os.makedirs(cmd_wkdir, exist_ok=True)
         if self.image:
             with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
-                f.write(self.cmd + '\n')
+                f.write(self.cmd + f' && chown -R {os.getuid()}:{os.getgid()} {cmd_wkdir}' + '\n')
 
-            docker_cmd = 'docker run --rm --user `id -u`:`id -g` -i --entrypoint /bin/bash '
-            # docker_cmd = 'docker run --rm -i --entrypoint /bin/bash '
+            # docker_cmd = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash '
+            docker_cmd = 'docker run --rm --privileged -i --entrypoint /bin/bash '
             for each in self.mount_vols.split(';'):
                 docker_cmd += f'-v {each}:{each} '
             docker_cmd += f'-w {cmd_wkdir} {self.image} cmd.sh'
@@ -573,8 +573,8 @@ class RunCommands(CommandNetwork):
             thread = threading.Thread(target=self.single_run, daemon=True)
             threads.append(thread)
             thread.start()
-            # 每隔5秒提交一个任务，一定程度可以避免同时提交多个消耗资源比较大的任务。
-            time.sleep(5)
+            # 每隔2秒提交一个任务，一定程度可以避免同时提交多个消耗资源比较大的任务。
+            time.sleep(3)
 
         # update state
         time.sleep(2)
@@ -593,7 +593,7 @@ class RunCommands(CommandNetwork):
         detail_steps = []
         if steps:
             for each in steps:
-                detail_steps += [x for x in self.names() if x == each or x.startswith(each + '-')]
+                detail_steps += [x for x in self.names() if x.startswith(each)]
 
         self.ever_queued = set()
         # 使用已有状态信息更新状态
