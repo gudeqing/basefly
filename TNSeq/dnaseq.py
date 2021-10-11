@@ -376,35 +376,46 @@ def HLA_ABC_typer(sample):
     return cmd
 
 
-def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(.*).r2.fq",
-             pair_info_txt=None, optiType=False, ref_fa='hg19.fa', dbsnp='dbsnp.vcf', known_indels='known.indels.vcf',
-             known_mills='mills.vcf', vep_cache='vep_cache/', vep_plugins='vep_plugins/',
-             intervals=None, threads=15, germline_vcf=None, pon=None, do_realign=False,
-             outdir='Results', run=False, no_docker=False, workers=3, retry=1,
-             no_monitor_resource=False, no_check_resource=False):
-    if fastq_files is None and fastq_dirs is None:
-        print('this is a simple test')
-        fastq_files = ('normal.r1.fq', 'normal.r2.fq', 'tumor.r1.fq', 'tumor.r2.fq')
-        pair_info_txt = None
-        run = False
-
-    top_vars = dict(
-        thread_number=TopVar(value=threads, type='int'),
-        ref=TopVar(value=ref_fa, type='infile'),
-        known_dbsnp=TopVar(value=dbsnp, type='infile'),
-        known_indel=TopVar(value=known_indels, type='infile'),
-        known_mills=TopVar(value=known_mills),
-        pon=TopVar(value=pon if pon else ''),
-        germline_vcf=TopVar(value=germline_vcf if germline_vcf else ''),
-        vep_cache_dir=TopVar(value=vep_cache, type='indir'),
-        vep_plugin_dir=TopVar(value=vep_plugins, type='indir'),
-        intervals=TopVar(value=intervals if intervals else '', type='infile')
-    )
-    wf = Workflow(top_vars=top_vars)
+def pipeline():
+    wf = Workflow()
     wf.meta.name = 'DNAseqPipeline'
     wf.meta.desc = 'typical bioinformatics pipeline using sentieon TNSeq and VEP, including HLA-typing'
+    wf.init_argparser()
+    wf.add_argument('-fastq_dirs', nargs='+', required=False, help='fastq file parent dir list')
+    wf.add_argument('-fastq_files', nargs='+', required=False, help='fastq file list')
+    wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
+    wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
+    wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
+    wf.add_argument('-pair_info', required=True, help='tumor normal pair info, two-column txt file, first column is tumor sample name')
+    wf.add_argument('-sentieon_threads', default=4, help='threads number used in sentieon')
+    wf.add_argument('--realign', default=False, action='store_true', help='if to realign indel region')
+    wf.add_argument('-ref', required=True, help='reference fasta file, require bwa index being created')
+    wf.add_argument('-dbsnp', required=True, help='dbsnp vcf file')
+    wf.add_argument('-known_indels', required=True, help='high confidence known indel vcf file')
+    wf.add_argument('-known_mills', required=True, help='high confidence known indel vcf file')
+    wf.add_argument('-pon', required=False, help='panel of normal vcf file for germline variant filtering, this will be required for tumor only analysis')
+    wf.add_argument('-germline_vcf', required=False, help='germline vcf, will be used for germline variant filtering and contamination analysis')
+    wf.add_argument('-vep_cache_dir', required=False, help='VEP cache directory')
+    wf.add_argument('-vep_plugin_dir', required=False, help='VEP plugin directory')
+    wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval or vcf format")
+    wf.parse_args()
 
-    fastq_info = get_fastq_info(fastq_dirs=fastq_dirs, fastq_files=fastq_files, r1_name=r1_name, r2_name=r2_name)
+    top_vars = dict(
+        thread_number=TopVar(value=wf.args.sentieon_threads, type='int'),
+        ref=TopVar(value=wf.args.ref, type='infile'),
+        known_dbsnp=TopVar(value=wf.args.dbsnp, type='infile'),
+        known_indels=TopVar(value=wf.args.known_indels, type='infile'),
+        known_mills=TopVar(value=wf.args.known_mills),
+        pon=TopVar(value=wf.args.pon),
+        germline_vcf=TopVar(value=wf.args.germline_vcf),
+        vep_cache_dir=TopVar(value=wf.args.vep_cache_dir, type='indir'),
+        vep_plugin_dir=TopVar(value=wf.args.vep_plugin_dir, type='indir'),
+        intervals=TopVar(value=wf.args.intervals, type='infile')
+    )
+    wf.add_topvars(top_vars)
+
+    fastq_info = get_fastq_info(fastq_dirs=wf.args.fastq_dirs, fastq_files=wf.args.fastq_files,
+                                r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
 
@@ -412,6 +423,9 @@ def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(
     bam_dict = dict()
     # batch是分组信息，用于wdl的scatter判断
     for sample, (r1s, r2s) in fastq_info.items():
+        if sample in wf.args.exclude_samples:
+            continue
+
         read1 = r1s[0]  # 假设每个样本只有对应一对fastq文件，不存在1对多的情况
         read2 = r2s[0]
 
@@ -421,9 +435,8 @@ def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(
         args['read2'].value = TmpVar(name='read2', value=read2, type='infile')
 
         # optiType
-        if optiType:
-            task, args = wf.add_task(HLA_ABC_typer(sample), name=f'optiType-{sample}', depends=[fastp_task.task_id])
-            args['reads'].value = [fastp_task.outputs['out1'], fastp_task.outputs['out2']]
+        task, args = wf.add_task(HLA_ABC_typer(sample), name=f'optiType-{sample}', depends=[fastp_task.task_id])
+        args['reads'].value = [fastp_task.outputs['out1'], fastp_task.outputs['out2']]
 
         # mapping
         mapping, args = wf.add_task(bwa_mem(sample, platform='ILLUMINA'), name=f'bwaMem-{sample}', depends=[fastp_task.task_id])
@@ -435,11 +448,10 @@ def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(
         args['t2'].value = top_vars['thread_number']
 
         # get_metrics
-        depend_task = mapping
         task, args = wf.add_task(get_metrics(sample), name=f'getMetrics-{sample}', depends=[mapping.task_id])
         args['t'].value = top_vars['thread_number']
         args['ref'].value = top_vars['ref']
-        args['bam'].value = depend_task.outputs['out']
+        args['bam'].value = mapping.outputs['out']
         get_metrics_task_id = task.task_id
 
         # plot
@@ -474,38 +486,31 @@ def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(
         # coverage
         cov_task, args = wf.add_task(coverage_metrics(sample), name=f'covMetrics-{sample}', depends=[dedup_task.task_id])
         args['t'].value = top_vars['thread_number']
-        if intervals:
-            args['intervals'].value = [top_vars['intervals']]
+        args['intervals'].value = [top_vars['intervals']]
         args['bam'].value = dedup_task.outputs['out_bam']
         args['ref'].value = top_vars['ref']
 
         # realign
-        if do_realign:
+        if wf.args.realign:
             realign_task, args = wf.add_task(realign(sample), name=f'realign-{sample}', depends=[dedup_task.task_id])
             args['t'].value = top_vars['thread_number']
             args['bam'].value = dedup_task.outputs['out_bam']
             args['ref'].value = top_vars['ref']
-            args['database'].value = [top_vars['known_indel'], top_vars['known_mills']]
+            args['database'].value = [top_vars['known_indels'], top_vars['known_mills']]
 
         # recalibration
-        depend_task = realign_task if do_realign else dedup_task
+        depend_task = realign_task if wf.args.realign else dedup_task
         recal_task, args = wf.add_task(recalibration(sample), name=f'recal-{sample}', depends=[depend_task.task_id])
         args['t'].value = top_vars['thread_number']
-        if intervals:
-            args['intervals'].value = [top_vars['intervals']]
+        args['intervals'].value = [top_vars['intervals']]
         args['bam'].value = depend_task.outputs['out_bam']
         args['ref'].value = top_vars['ref']
-        args['database'].value = [top_vars['known_dbsnp'], top_vars['known_indel'], top_vars['known_mills']]
+        args['database'].value = [top_vars['known_dbsnp'], top_vars['known_indels'], top_vars['known_mills']]
         recal_dict[sample] = recal_task
         bam_dict[sample] = depend_task
 
-    if pair_info_txt is None:
-        pair_info_txt = 'example_pair_info.txt'
-        with open(pair_info_txt, 'w') as f:
-            f.write('tumor\tnormal')
-
-    for line in open(pair_info_txt):
-        tumor_sample, normal_sample = line.split('\t')[:2]
+    for line in open(wf.args.pair_info):
+        tumor_sample, normal_sample = line.strip('\n').split('\t')[:2]
         if tumor_sample not in bam_dict:
             print(f'Warning: tumor_sample {tumor_sample} is not in target list: {list(bam_dict.keys())}')
             continue
@@ -519,8 +524,7 @@ def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(
         args['ref'].value = top_vars['ref']
         args['bam'].value = bam_dict[normal_sample].outputs['out_bam']
         args['recal_data'].value = recal_dict[normal_sample].outputs['recal_data']
-        if intervals:
-            args['intervals'].value = [top_vars['intervals']]
+        args['intervals'].value = [top_vars['intervals']]
 
         # gvcf-typer
         germline_task, args = wf.add_task(GVCFtyper(normal_sample), name=f'gvcfTyper-{normal_sample}', depends=[hap_task.task_id])
@@ -534,21 +538,18 @@ def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(
         task.depends += [recal_dict[normal_sample].task_id, recal_dict[tumor_sample].task_id]
         args['ref'].value = top_vars['ref']
         args['t'].value = top_vars['thread_number']
-        if intervals:
-            args['intervals'].value = [top_vars['intervals']]
+        args['intervals'].value = [top_vars['intervals']]
         args['bams'].value = [t.outputs['out_bam'] for t in bam_dict.values()]
         args['recal_datas'].value = [t.outputs['recal_data'] for t in recal_dict.values()]
         args['normal_sample'].value = normal_sample
         # pon and germline
-        if pon:
-            args['pon'].value = top_vars['pon']
-        if germline_vcf:
-            args['germline_vcf'].value = top_vars['germline_vcf']
+        args['pon'].value = top_vars['pon']
+        args['germline_vcf'].value = top_vars['germline_vcf']
         # orientation
         args['orientation_sample'].value = tumor_sample
         args['orientation_data'].value = f'{tumor_sample}.orientation.data'
         # contamination
-        if germline_vcf:
+        if wf.args.germline_vcf:
             args['germline_vcf2'].value = top_vars['germline_vcf']
             args['contamination_tumor'].value = tumor_sample
             args['contamination_normal'].value = normal_sample
@@ -562,13 +563,13 @@ def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(
         args['ref'].value = top_vars['ref']
         args['normal_sample'].value = normal_sample
         args['tmp_vcf'].value = depend_task.outputs['out_vcf']
-        if germline_vcf:
+        if wf.args.germline_vcf:
             args['contamination'].value = depend_task.outputs['contamination_data']
             args['tumor_segments'].value = depend_task.outputs['tumor_segments']
         args['orientation_data'].value = depend_task.outputs['orientation_data']
 
         # annotation of somatic variant with VEP
-        if os.path.exists(vep_cache):
+        if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
             vep_task, args = wf.add_task(vep(tumor_sample), name=f'vep-{tumor_sample}', depends=[filter_task.task_id])
             args['input_file'].value = filter_task.outputs['out_vcf']
             args['fasta'].value = top_vars['ref']
@@ -595,11 +596,8 @@ def pipeline(fastq_dirs=None, fastq_files=None, r1_name="(.*).r1.fq", r2_name="(
         # args['dir_cache'].value = top_vars['vep_cache_dir']
         # args['dir_plugins'].value = top_vars['vep_plugin_dir']
 
-    wf.to_nestcmd(outdir=outdir, run=run, no_docker=no_docker, threads=workers, retry=retry,
-                  no_monitor_resource=no_monitor_resource, no_check_resource=no_check_resource)
+    wf.run()
 
 
 if __name__ == '__main__':
-    from xcmds import xcmds
-    xcmds.xcmds(locals(), include=['pipeline'])
-
+    pipeline()
