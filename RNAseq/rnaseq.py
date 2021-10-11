@@ -236,19 +236,19 @@ def pipeline():
     wf.meta.desc = 'This is a pipeline for rnaseq analysis'
     wf.add_argparser()
     # add workflow args
-    wf.argparser.add_argument('-star_index', required=True, help='star alignment index dir')
-    wf.argparser.add_argument('-fusion_index', required=True, help='star-fusion database dir')
-    wf.argparser.add_argument('-transcripts_fa', required=True, help='transcriptome fasta file')
-    wf.argparser.add_argument('-gtf', required=True, help='genome annotation file')
-    wf.argparser.add_argument('-ref_flat', required=True, help='gene model file')
-    wf.argparser.add_argument('-rRNA_interval', required=True, help='picard interval file of rRNA')
-    wf.argparser.add_argument('-hla_db', required=False, help='arcasHLA database')
-    wf.argparser.add_argument('-fastq_dirs', nargs='+', required=False, help='fastq file parent dir list')
-    wf.argparser.add_argument('-fastq_files', nargs='+', required=False, help='fastq file list')
-    wf.argparser.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
-    wf.argparser.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
-    wf.argparser.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
-    wf.args = wf.argparser.parse_args()
+    wf.add_argument('-star_index', required=True, help='star alignment index dir')
+    wf.add_argument('-fusion_index', required=True, help='star-fusion database dir')
+    wf.add_argument('-transcripts_fa', required=True, help='transcriptome fasta file')
+    wf.add_argument('-gtf', required=True, help='genome annotation file')
+    wf.add_argument('-ref_flat', required=True, help='gene model file')
+    wf.add_argument('-rRNA_interval', required=True, help='picard interval file of rRNA')
+    wf.add_argument('-hla_db', required=False, help='arcasHLA database')
+    wf.add_argument('-fastq_dirs', nargs='+', required=False, help='fastq file parent dir list')
+    wf.add_argument('-fastq_files', nargs='+', required=False, help='fastq file list')
+    wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
+    wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
+    wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
+    wf.parse_args()
     if not wf.args.fastq_dirs and not wf.args.fastq_files:
         exit('Error: fastq info must be provided either by -fastq_dirs or -fastq_files')
     # add top_vars
@@ -261,7 +261,7 @@ def pipeline():
         rRNA_interval=TopVar(value=wf.args.rRNA_interval, type='infile')
     ))
     if wf.args.hla_db:
-        wf.top_vars['hla_database'] = TopVar(value=wf.args.db, type='indir')
+        wf.top_vars['hla_database'] = TopVar(value=wf.args.hla_db, type='indir')
 
     fastq_info = get_fastq_info(
         fastq_dirs=wf.args.fastq_dirs,
