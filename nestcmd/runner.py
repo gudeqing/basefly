@@ -638,7 +638,7 @@ def run_wf(wf, plot=False, timeout=300, rerun_steps:tuple=None):
     :return:
     """
     workflow = RunCommands(wf, timeout=timeout, draw_state_graph=plot)
-    state = os.path.join(wf.outdir, 'cmd_state.txt')
+    state = os.path.join(workflow.outdir, 'cmd_state.txt')
     if os.path.exists(state):
         workflow.continue_run(steps=rerun_steps)
     else:
