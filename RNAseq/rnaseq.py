@@ -234,7 +234,7 @@ def pipeline():
     wf = Workflow()
     wf.meta.name = 'RnaSeqPipeline'
     wf.meta.desc = 'This is a pipeline for rnaseq analysis'
-    wf.add_argparser()
+    wf.init_argparser()
     # add workflow args
     wf.add_argument('-star_index', required=True, help='star alignment index dir')
     wf.add_argument('-fusion_index', required=True, help='star-fusion database dir')

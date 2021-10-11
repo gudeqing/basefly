@@ -566,7 +566,7 @@ class Workflow:
                 print(tsk.cmd.format_cmd(self.tasks))
                 break
 
-    def add_argparser(self):
+    def init_argparser(self):
         if len(sys.argv) <= 1:
             exit('Please provide at least one argument, use -h for help')
         parser = argparse.ArgumentParser(
@@ -596,7 +596,7 @@ class Workflow:
 
     def parse_args(self):
         if self.argparser is None:
-            self.add_argparser()
+            self.init_argparser()
         self.args = self.argparser.parse_args()
 
 
