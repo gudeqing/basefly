@@ -203,13 +203,14 @@ class Command:
                         arg_value[ind] = each.value.replace('~', '').format(**value_dict)
                     elif type(each) == TopVar or type(each) == TmpVar:
                         arg_value[ind] = each.value
+                arg_value = [x for x in arg_value if x is not None]
 
             # 对于可以接收多个值的参数
             if arg.array:
                 if not arg.multi_times:
-                    arg_value = arg.delimiter.join([str(x) for x in arg_value])
+                    arg_value = arg.delimiter.join([str(x) for x in arg_value if x is not None])
                 else:
-                    arg_value = [arg.delimiter.join([str(x) for x in v]) for v in arg_value]
+                    arg_value = [arg.delimiter.join([str(x) for x in v if x is not None]) for v in arg_value]
 
             # 处理bool值参数
             if arg.type == "bool" or type(arg.value) == bool:
@@ -219,10 +220,11 @@ class Command:
                     # 如果bool类型且value为false，则该参数不参与命令行形成
                     continue
             else:
-                if not arg.multi_times:
-                    cmd += ' ' + arg.prefix + str(arg_value)
-                else:
-                    cmd += ' ' + arg.prefix + (' ' + arg.prefix).join(arg_value)
+                if arg_value:
+                    if not arg.multi_times:
+                        cmd += ' ' + arg.prefix + str(arg_value)
+                    else:
+                        cmd += ' ' + arg.prefix + (' ' + arg.prefix).join(arg_value)
         return cmd
 
     def format_wdl_task(self, outfile=None, wdl_version='development'):
@@ -455,7 +457,7 @@ class Workflow:
                         if not value.value.startswith('${{mode:'):
                             value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
                         mount_vols.add(os.path.join(outdir, self.tasks[value.task_id].name))
-                    elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir']:
+                    elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir'] and value.value is not None:
                         if value.type == 'infile':
                             file_dir = os.path.dirname(value.value)
                             mount_vols.add(os.path.abspath(file_dir))
