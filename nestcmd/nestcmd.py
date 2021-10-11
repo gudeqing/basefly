@@ -3,6 +3,7 @@ import re
 import json
 import sys
 import argparse
+from functools import partial
 from uuid import uuid4
 from dataclasses import dataclass, field
 # from typing import Any, List, Dict, Literal
@@ -592,7 +593,7 @@ class Workflow:
         wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true', help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
         self.argparser = parser
         # for user defined arguments
-        self.add_argument = self.argparser.add_argument
+        self.add_argument = partial(self.argparser.add_argument, required=True)
 
     def parse_args(self):
         if self.argparser is None:
