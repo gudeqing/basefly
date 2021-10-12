@@ -31,7 +31,7 @@ def CollectRnaSeqMetrics(files:list):
         summary.index = [sample]
         data.append(summary)
     data = pd.concat(data, axis=0).dropna(axis=1).round(4)
-    print(data.head())
+    # print(data.head())
     data = data.drop(['CORRECT_STRAND_READS', 'INCORRECT_STRAND_READS', 'IGNORED_READS', 'PCT_CORRECT_STRAND_READS'], axis=1)
     # data = data.transpose()
     # out_table = os.path.join(outdir, 'RnaSeqMetrics.xls')
