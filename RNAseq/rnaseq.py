@@ -2,6 +2,7 @@ import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar, get_fastq_info
+from utils.rnaseq_tools import merge_metrics, merge_star_fusion, merge_arcasHLA_genetype
 __author__ = 'gdq'
 
 """
@@ -328,6 +329,11 @@ def pipeline():
             args['names'].value = [wf.tasks[task_id].name.split('-', 1)[1] for task_id in depends]
             args['out'].value = f'{feature}.{data_type}.txt'
     wf.run()
+
+    # merger result
+    merge_metrics(wf.args.outdir, filter_ref='', outdir=os.path.join(wf.args.outdir, 'merge_qc'))
+    merge_arcasHLA_genetype(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_HLA'))
+    merge_star_fusion(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_starfusion'))
 
 
 if __name__ == '__main__':
