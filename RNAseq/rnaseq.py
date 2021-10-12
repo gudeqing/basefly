@@ -1,8 +1,9 @@
 import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
-from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar, get_fastq_info
+from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar
 from utils.rnaseq_tools import merge_metrics, merge_star_fusion, merge_arcasHLA_genetype
+from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
 """
@@ -244,14 +245,12 @@ def pipeline():
     wf.add_argument('-ref_flat', required=True, help='gene model file')
     wf.add_argument('-rRNA_interval', required=True, help='picard interval file of rRNA')
     wf.add_argument('-hla_db', required=False, help='arcasHLA database')
-    wf.add_argument('-fastq_dirs', nargs='+', required=False, help='fastq file parent dir list')
-    wf.add_argument('-fastq_files', nargs='+', required=False, help='fastq file list')
+    wf.add_argument('-fastq_info', nargs='+', required=True, help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
     wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.parse_args()
-    if not wf.args.fastq_dirs and not wf.args.fastq_files:
-        exit('Error: fastq info must be provided either by -fastq_dirs or -fastq_files')
+
     # add top_vars
     wf.add_topvars(dict(
         starIndex=TopVar(value=wf.args.star_index, type='indir'),
@@ -264,10 +263,7 @@ def pipeline():
     if wf.args.hla_db:
         wf.topvars['hla_database'] = TopVar(value=wf.args.hla_db, type='indir')
 
-    fastq_info = get_fastq_info(
-        fastq_dirs=wf.args.fastq_dirs,
-        fastq_files=wf.args.fastq_files,
-        r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
+    fastq_info = get_fastq_info(fastq_info=wf.args.fastq_info, r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
 
