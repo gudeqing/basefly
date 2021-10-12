@@ -5,12 +5,11 @@ import json
 __author__ = 'gudeqing'
 
 
-def get_fastq_info(fastq_files=None, fastq_dirs=None, pair_info=None, out='fastq.info.json',
+def get_fastq_info(fastq_info:tuple, pair_info=None, out='fastq.info.json',
                    r1_name="(.*).R1.fq.gz", r2_name="(.*).R2.fq.gz",
                    link_data=False, add_s_to_numeric_name=False, middle2underscore=False):
     """
-    :param fastq_files: target fastq file list. 'fastq_files' or 'fastq_dirs' must be provided.
-    :param fastq_dirs: directory list, target fastq files should be in these directories. All target files in 'fastq_files' or 'fastq_dirs' will be used.
+    :param fastq_info: a list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]
     :param pair_info: 'pair info file that contains two columns without any header: [tumor_name, normal_name]
     :param r1_name: python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'
     :param r2_name: python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'
@@ -20,12 +19,32 @@ def get_fastq_info(fastq_files=None, fastq_dirs=None, pair_info=None, out='fastq
     :param middle2underscore: bool value to indicate if to transform '-' letter to '_' letter for a sample name.
     :return: result_dict: {sample: [[r1, r1'], [r2, r2']], ...}
     """
+    result_dict = dict()
+    fastq_dirs = []
+    fastq_files = []
+    for each in fastq_info:
+        if os.path.isdir(each):
+            fastq_dirs.append(each)
+        elif os.path.isfile(each):
+            if each.endswith(('.fq', 'fq.gz', 'fastq', 'fastq.gz')):
+                fastq_files.append(each)
+            elif each.endswith('.json'):
+                with open(each) as f:
+                    result_dict.update(json.load(f))
+            else:
+                with open(each) as f:
+                    for line in f:
+                        lst = line.strip().split('\t')
+                        tmp = result_dict.setdefault(lst[0], list())
+                        tmp.append(lst[1].split(';'))
+                        if len(lst) >= 3:
+                            tmp.append(lst[2].split(';'))
+                        print(tmp)
+
     if not (fastq_dirs or fastq_files):
         raise Exception("At least one of 'fastq_files' or 'fastq_dirs' must be provided.")
     if r1_name == r2_name:
         raise Exception('read1 filename == read2 filename ?!')
-
-    result_dict = dict()
 
     if fastq_files:
         for each in fastq_files:
@@ -97,29 +116,29 @@ def get_fastq_info(fastq_files=None, fastq_dirs=None, pair_info=None, out='fastq
             for each in read2:
                 os.symlink(each, os.path.join(sample, os.path.basename(each)))
 
+    if pair_info:
+        with open(pair_info) as fr:
+            for line in fr:
+                tumor, normal = line.strip().split()
+                if tumor in new_result and normal in new_result:
+                    tr1 = ';'.join(new_result[tumor][0])
+                    tr2 = ';'.join(new_result[tumor][1])
+                    nr1 = ';'.join(new_result[normal][0])
+                    nr2 = ';'.join(new_result[normal][1])
+                    lst = [tumor, tr1, tr2, normal, nr1, nr2]
+                    f.write('\t'.join(lst) + '\n')
+                else:
+                    print(f'{tumor} or {normal} fastq is not found !')
+
     if out.endswith('.json'):
         with open(out, 'w') as f:
             json.dump(new_result, f, indent=2)
     else:
         with open(out, 'w') as f:
-            if pair_info:
-                with open(pair_info) as fr:
-                    for line in fr:
-                        tumor, normal = line.strip().split()
-                        if tumor in new_result and normal in new_result:
-                            tr1 = ';'.join(new_result[tumor][0])
-                            tr2 = ';'.join(new_result[tumor][1])
-                            nr1 = ';'.join(new_result[normal][0])
-                            nr2 = ';'.join(new_result[normal][1])
-                            lst = [tumor, tr1, tr2, normal, nr1, nr2]
-                            f.write('\t'.join(lst)+'\n')
-                        else:
-                            print(f'{tumor} or {normal} fastq is not found !')
-            else:
-                for k, v in new_result.items():
-                    read1 = ';'.join(v[0])
-                    read2 = ';'.join(v[1])
-                    f.write('{k}\t{read1}\t{read2}\n'.format(k=k, read1=read1, read2=read2))
+            for k, v in new_result.items():
+                read1 = ';'.join(v[0])
+                read2 = ';'.join(v[1])
+                f.write('{k}\t{read1}\t{read2}\n'.format(k=k, read1=read1, read2=read2))
 
     return new_result
 
@@ -127,8 +146,7 @@ def get_fastq_info(fastq_files=None, fastq_dirs=None, pair_info=None, out='fastq
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-fastq_files', required=False, nargs='+', help="target fastq file list. 'fastq_files' or 'fastq_dirs' must be provided")
-    parser.add_argument('-fastq_dirs', required=False, nargs='+', help="directory list, target fastq files should be in these directories. All target files found in 'fastq_files' or 'fastq_dirs' will be used.")
+    parser.add_argument('-fastq_info', required=True, nargs='+', help="A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json].")
     parser.add_argument('-r1_name', required=True, help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     parser.add_argument('-r2_name', required=True, help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     parser.add_argument('-out', required=False, default='fastq.info.json', help='output file that contains three columns: [sample_name, read1_abs_path, read2_abs_path]')
@@ -138,7 +156,7 @@ if __name__ == '__main__':
     parser.add_argument('--link', action='store_true', default=False, help="if to transform '-' letter to '_' letter for a sample name")
     args = parser.parse_args()
     get_fastq_info(
-        fastq_files=args.fastq_files, fastq_dirs=args.fastq_dirs,
+        fastq_info=args.fastq_info,
         r1_name=args.r1_name, r2_name=args.r2_name, pair_info=args.pair_info,
         link_data=args.link, out=args.out,
         add_s_to_numeric_name=args.add_s_to_numeric_name,
