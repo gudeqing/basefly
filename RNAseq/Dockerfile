@@ -51,8 +51,11 @@ RUN apt install -y nano
 #COPY ./dat /home/arcasHLA-master/dat
 
 # 安装graphviz
-RUN apt-get update && apt-get install python3.6-dev libgraphviz-dev --fix-missing -y
+RUN apt update && apt install python3.6-dev libgraphviz-dev graphviz --fix-missing -y
 RUN pip3 install -i $PIP_SOURCE pygraphviz
 
 # clean up
 RUN rm /usr/local/src/*gz && pip cache purge
+
+# 避免中文输出错误
+RUN export LANG="en_US.UTF-8"
