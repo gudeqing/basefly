@@ -331,6 +331,7 @@ class Workflow:
     topvars: Dict[str, TopVar] = field(default_factory=dict)
     argparser = None
     args = None
+    success = False
 
     def __post_init__(self):
         for k, v in self.topvars.items():
@@ -504,8 +505,9 @@ class Workflow:
             with open(outfile, 'w') as configfile:
                 wf.write(configfile)
             if parameters.run:
-                run_wf(outfile, timeout=parameters.wait_resource_time,
-                       plot=parameters.plot, rerun_steps=parameters.rerun_steps)
+                wf = run_wf(outfile, timeout=parameters.wait_resource_time,
+                            plot=parameters.plot, rerun_steps=parameters.rerun_steps)
+                self.success = wf.failed == 0
 
     def dump_args(self, out='arguments.json'):
         cmd_names = set()

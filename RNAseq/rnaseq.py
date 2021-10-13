@@ -327,9 +327,12 @@ def pipeline():
     wf.run()
 
     # merger result
-    merge_metrics(wf.args.outdir, filter_ref='', outdir=os.path.join(wf.args.outdir, 'merge_qc'))
-    merge_arcasHLA_genetype(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_HLA'))
-    merge_star_fusion(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_starfusion'))
+    if wf.success:
+        print('Merging Results......')
+        merge_metrics(wf.args.outdir, filter_ref='', outdir=os.path.join(wf.args.outdir, 'merge_qc'))
+        merge_arcasHLA_genetype(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_HLA'))
+        merge_star_fusion(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_starfusion'))
+        print('...end...')
 
 
 if __name__ == '__main__':
