@@ -18,3 +18,9 @@ ENV PIP_SOURCE https://mirrors.aliyun.com/pypi/simple
 RUN apt install -y python3-pip
 RUN pip3 install -i $PIP_SOURCE dataclasses typing_extensions scipy numpy pandas biopython psutil pygraphviz
 RUN pip3 install https://github.com/gudeqing/xcmds/raw/master/dist/xcmds-1.5.0-py3-none-any.whl
+
+# install hisat-genotype
+RUN wget -nv "https://cloud.biohpc.swmed.edu/index.php/s/hisat2-220-Linux_x86_64/download" && \
+    wget -nv "https://github.com/DaehwanKimLab/hisat-genotype/archive/refs/heads/master.zip"
+
+# install
