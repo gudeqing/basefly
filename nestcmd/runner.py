@@ -645,6 +645,7 @@ def run_wf(wf, plot=False, timeout=300, rerun_steps:tuple=None):
         workflow.continue_run(steps=rerun_steps)
     else:
         workflow.parallel_run()
+    return workflow
 
 
 if __name__ == '__main__':
