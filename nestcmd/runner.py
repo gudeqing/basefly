@@ -386,6 +386,7 @@ class RunCommands(CommandNetwork):
         self.task_number = len(self.state)
         self.success = 0
         self.failed = 0
+        self.is_continue = False
         # wait resource time limit
         self.timeout = timeout
         if not logger:
@@ -616,6 +617,7 @@ class RunCommands(CommandNetwork):
                         self.logger.warning(line_lst[0] + ' was skipped for it is no longer in the modified pipeline.ini')
         failed = set(self.names()) - self.ever_queued
         if failed:
+            self.is_continue = True
             self.logger.warning('Continue to run: {}'.format(failed))
             self.queue = queue.Queue()
             self._update_queue()
