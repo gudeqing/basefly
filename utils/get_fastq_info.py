@@ -39,10 +39,7 @@ def get_fastq_info(fastq_info:tuple, pair_info=None, out='fastq.info.json',
                         tmp.append(lst[1].split(';'))
                         if len(lst) >= 3:
                             tmp.append(lst[2].split(';'))
-                        print(tmp)
 
-    if not (fastq_dirs or fastq_files):
-        raise Exception("At least one of 'fastq_files' or 'fastq_dirs' must be provided.")
     if r1_name == r2_name:
         raise Exception('read1 filename == read2 filename ?!')
 
