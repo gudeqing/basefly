@@ -52,7 +52,7 @@ RUN apt install -y nano
 
 # 安装graphviz
 RUN apt update && apt install python3.6-dev libgraphviz-dev graphviz --fix-missing -y
-RUN pip3 install -i $PIP_SOURCE pygraphviz
+RUN pip3 install -i $PIP_SOURCE pygraphviz openpyxl
 
 # clean up
 RUN rm /usr/local/src/*gz && pip cache purge
