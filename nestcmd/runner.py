@@ -2,6 +2,7 @@
 __author__ = 'gudeqing'
 import time
 import os
+import shutil
 import configparser
 import psutil
 import queue
@@ -114,7 +115,10 @@ class Command(object):
 
     def run(self):
         cmd_wkdir = os.path.join(self.outdir, self.name)
-        os.makedirs(cmd_wkdir, exist_ok=True)
+        if os.path.exists(cmd_wkdir):
+            print(f'Removing already existed workdir {cmd_wkdir}')
+            shutil.rmtree(cmd_wkdir)
+        os.makedirs(cmd_wkdir)
         if self.image:
             with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
                 f.write(self.cmd + f' && chown -R {os.getuid()}:{os.getgid()} {cmd_wkdir}' + '\n')
