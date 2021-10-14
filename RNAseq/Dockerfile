@@ -58,4 +58,4 @@ RUN pip3 install -i $PIP_SOURCE pygraphviz
 RUN rm /usr/local/src/*gz && pip cache purge
 
 # 避免中文输出错误
-RUN export LANG="en_US.UTF-8"
+ENV LANG="en_US.UTF-8"
