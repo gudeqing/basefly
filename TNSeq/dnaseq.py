@@ -1,7 +1,8 @@
 import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
-from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar, get_fastq_info
+from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar
+from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
 """
@@ -50,7 +51,7 @@ def bwa_mem(sample, platform):
     cmd.args['out'] = Argument(prefix='-o ', desc='output bam file', value=f'{sample}.sorted.bam')
     cmd.args['t2'] = Argument(prefix='-t ', default=16, desc='number of threads to use')
     cmd.args['_x3'] = Argument(type='fix', value='--sam2bam -i -')
-    cmd.outputs['out'] = Output(path="{out}", type='outfile')
+    cmd.outputs['out'] = Output(value="{out}", type='outfile')
     return cmd
 
 
@@ -68,12 +69,12 @@ def get_metrics(sample):
     cmd.args['gc_metrics'] = Argument(desc='metrics file of GCBias', value=f'{sample}.gc_metrics.txt')
     cmd.args['aln_metrics'] = Argument(prefix='--algo AlignmentStat ', value=f'{sample}.aln_metrics.txt', desc='aln_metrics file of AlignmentStat')
     cmd.args['insert_metrics'] = Argument(prefix='--algo InsertSizeMetricAlgo ', value=f'{sample}.insert_metrics.txt', desc='insert_metrics file of InsertSizeMetricAlgo')
-    cmd.outputs['mq_metrics'] = Output(path='{mq_metrics}')
-    cmd.outputs['qd_metrics'] = Output(path='{qd_metrics}')
-    cmd.outputs['gc_summary'] = Output(path='{gc_summary}')
-    cmd.outputs['gc_metrics'] = Output(path='{gc_metrics}')
-    cmd.outputs['aln_metrics'] = Output(path='{aln_metrics}')
-    cmd.outputs['insert_metrics'] = Output(path='{insert_metrics}')
+    cmd.outputs['mq_metrics'] = Output(value='{mq_metrics}')
+    cmd.outputs['qd_metrics'] = Output(value='{qd_metrics}')
+    cmd.outputs['gc_summary'] = Output(value='{gc_summary}')
+    cmd.outputs['gc_metrics'] = Output(value='{gc_metrics}')
+    cmd.outputs['aln_metrics'] = Output(value='{aln_metrics}')
+    cmd.outputs['insert_metrics'] = Output(value='{insert_metrics}')
     return cmd
 
 
@@ -85,7 +86,7 @@ def plot_metrics(sample, method='GCBias'):
     cmd.args['method'] = Argument(desc='method of plot', default=method)
     cmd.args['out'] = Argument(prefix='-o ', desc='plot file', value=f'{sample}.{method}.pdf')
     cmd.args['i'] = Argument(type='infile', desc='input metrics file for plot')
-    cmd.outputs['out'] = Output(path='{out}')
+    cmd.outputs['out'] = Output(value='{out}')
     return cmd
 
 
@@ -97,7 +98,7 @@ def locus_collector(sample):
     cmd.args['t'] = Argument(prefix='-t ', default=16, desc='number of threads to use in computation, set to number of cores in the server')
     cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='input bam file')
     cmd.args['score'] = Argument(prefix='--algo LocusCollector --fun score_info ', desc='output score file', value=f'{sample}.score.txt')
-    cmd.outputs['score'] = Output(path='{score}')
+    cmd.outputs['score'] = Output(value='{score}')
     return cmd
 
 
@@ -112,8 +113,8 @@ def dedup(sample):
     cmd.args['score'] = Argument(prefix='--score_info ', type='infile', desc='score info file')
     cmd.args['dedup_metrics'] = Argument(prefix='--metrics ', desc='output metrics info file', value=f'{sample}.dedup.metrics.txt')
     cmd.args['deduped_bam'] = Argument(desc='output metrics info file', value=f'{sample}.deduped.bam')
-    cmd.outputs['dedup_metrics'] = Output(path='{dedup_metrics}')
-    cmd.outputs['out_bam'] = Output(path='{deduped_bam}')
+    cmd.outputs['dedup_metrics'] = Output(value='{dedup_metrics}')
+    cmd.outputs['out_bam'] = Output(value='{deduped_bam}')
     return cmd
 
 
@@ -127,7 +128,7 @@ def coverage_metrics(sample):
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='reference fasta file')
     cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='input bam file')
     cmd.args['coverage_metrics'] = Argument(prefix='--algo CoverageMetrics ', value=f'{sample}.cov.metrics.txt', desc='output coverage metrics file')
-    cmd.outputs['coverage_metrics'] = Output(path="{coverage_metrics}")
+    cmd.outputs['coverage_metrics'] = Output(value="{coverage_metrics}")
     return cmd
 
 
@@ -142,7 +143,7 @@ def realign(sample):
     cmd.args._x = Argument(type='fix', value='--algo Realigner')
     cmd.args['database'] = Argument(prefix='-k ', type='infile', multi_times=True, desc='known indel vcf file')
     cmd.args['realigned_bam'] = Argument(desc='output realigned bam file', value=f'{sample}.realigned.bam')
-    cmd.outputs['out_bam'] = Output(path='{realigned_bam}')
+    cmd.outputs['out_bam'] = Output(value='{realigned_bam}')
     return cmd
 
 
@@ -158,7 +159,7 @@ def recalibration(sample):
     cmd.args['_x'] = Argument(type='fix', value='--algo QualCal')
     cmd.args['database'] = Argument(prefix='-k ', type='infile', multi_times=True, desc='known indel vcf file')
     cmd.args['recal_data'] = Argument(desc="output recal_data.table", value=f'{sample}.recal_data.table')
-    cmd.outputs['recal_data'] = Output(path='{recal_data}')
+    cmd.outputs['recal_data'] = Output(value='{recal_data}')
     return cmd
 
 
@@ -189,10 +190,10 @@ def TNhaplotyper2(tumor_sample):
     cmd.args['germline_vcf2'] = Argument(prefix='--vcf ', type='infile', level='optional', desc='the location of the population germline resource')
     cmd.args['tumor_segments'] = Argument(prefix='--tumor_segments ', level='optional', default=f'{tumor_sample}.contamination.segments', desc='output file name of the file containing the tumor segments information produced by ContaminationModel')
     cmd.args['contamination_data'] = Argument(level='optional', default=f'{tumor_sample}.contamination.data', desc='output file containing the contamination information produced by ContaminationModel')
-    cmd.outputs['out_vcf'] = Output(path='{out_vcf}')
-    cmd.outputs['orientation_data'] = Output(path='{orientation_data}')
-    cmd.outputs['tumor_segments'] = Output(path='{tumor_segments}')
-    cmd.outputs['contamination_data'] = Output(path='{contamination_data}')
+    cmd.outputs['out_vcf'] = Output(value='{out_vcf}')
+    cmd.outputs['orientation_data'] = Output(value='{orientation_data}')
+    cmd.outputs['tumor_segments'] = Output(value='{tumor_segments}')
+    cmd.outputs['contamination_data'] = Output(value='{contamination_data}')
     return cmd
 
 
@@ -210,7 +211,7 @@ def TNfilter(tumor_sample):
     cmd.args['tumor_segments'] = Argument(prefix='--tumor_segments ', type='infile', level='optional', desc='file containing the tumor segments information produced by ContaminationModel')
     cmd.args['orientation_data'] = Argument(prefix='--orientation_priors ', type='infile', level='optional', desc='file containing the orientation bias information produced by OrientationBias')
     cmd.args['out_vcf'] = Argument(desc='final output vcf', value=f'{tumor_sample}.final.vcf.gz')
-    cmd.outputs['out_vcf'] = Output(path='{out_vcf}')
+    cmd.outputs['out_vcf'] = Output(value='{out_vcf}')
     return cmd
 
 
@@ -227,8 +228,8 @@ def Haplotyper(normal_sample):
     cmd.args['emit_mode'] = Argument(prefix='--emit_mode ', default='gvcf', desc='determines what calls will be emitted. possible values:variant,confident,all,gvcf')
     cmd.args['ploidy'] = Argument(prefix='--ploidy ', type='int', default=2, desc='determines the ploidy number of the sample being processed. The default value is 2.')
     cmd.args['out_vcf'] = Argument(value=f'{normal_sample}.g.vcf.gz', desc='output vcf file')
-    cmd.outputs['out_vcf'] = Output(path='{out_vcf}')
-    cmd.outputs['out_vcf_idx'] = Output(path='{out_vcf}.tbi')
+    cmd.outputs['out_vcf'] = Output(value='{out_vcf}')
+    cmd.outputs['out_vcf_idx'] = Output(value='{out_vcf}.tbi')
     return cmd
 
 
@@ -244,27 +245,8 @@ def GVCFtyper(normal_sample):
     cmd.args['call_conf'] = Argument(prefix='--call_conf ', type='int', default=30, desc="determine the threshold of variant quality to emit a variant. Variants with quality less than CONFIDENCE will be not be added to the output VCF file.")
     cmd.args['genotype_model'] = Argument(prefix='--genotype_model ', range={"coalescent", "multinomial"}, default='multinomial', desc="determines which model to use for genotyping and QUAL calculation")
     cmd.args['out_vcf'] = Argument(value=f'{normal_sample}.vcf.gz', desc='output vcf file')
-    cmd.outputs['out_vcf'] = Output(path='{out_vcf}')
-    cmd.outputs['out_vcf_idx'] = Output(path='{out_vcf}.tbi')
-    return cmd
-
-
-def snpEff(tumor_sample):
-    cmd = Command()
-    cmd.meta.name = 'snpEff'
-    cmd.runtime.image = '?'
-    cmd.runtime.tool = 'java -Xmx9g snpEff.jar ann'
-    cmd.args['genome_version'] = Argument(default='hg19', desc='human genome version')
-    cmd.args['data_dir'] = Argument(prefix='-dataDir ', type='indir',  desc='Override data_dir parameter from config file')
-    cmd.args['cancer'] = Argument(prefix='-cancer ', type='bool', default=True, desc='Perform cancer comparisons (Somatic vs Germline)')
-    cmd.args['cancerSamples'] = Argument(prefix='-cancerSamples ', level='optional', type='infile', desc="Two column TXT file defining 'oringinal derived' samples. If '-cancer' used and the file is missing, then the last sample will be assumed as tumor sample.")
-    cmd.args['canon'] = Argument(prefix='-canon ', type='bool', default=False, desc='Only use canonical transcripts')
-    cmd.args['interval'] = Argument(prefix='-interval ', type='infile', level='optional', multi_times=True, desc="Use a custom intervals in TXT/BED/BigBed/VCF/GFF file (you may use this option many times)")
-    cmd.args['other_args'] = Argument(level='optional', desc="other arguments that you want to input for the program, such as '-motif'")
-    cmd.args['in_vcf'] = Argument(desc='input variant file', type='infile')
-    cmd.args['_x'] = Argument(type='fix', value='>')
-    cmd.args['out_vcf'] = Argument(desc='output annotated file', value=f'{tumor_sample}.final.annot.vcf')
-    cmd.outputs['out_vcf'] = Output(path='{out_vcf}')
+    cmd.outputs['out_vcf'] = Output(value='{out_vcf}')
+    cmd.outputs['out_vcf_idx'] = Output(value='{out_vcf}.tbi')
     return cmd
 
 
@@ -312,8 +294,8 @@ def vep(sample):
     cmd.args['flag_pick'] = Argument(prefix='--flag_pick ', type='bool', default=True, desc="As per --pick, but adds the PICK flag to the chosen block of consequence data and retains others.")
     cmd.args['filter_common'] = Argument(prefix='--filter_common ', type='bool', default=True, desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters.")
     cmd.args['other_args'] = Argument(default='', desc='specify other arguments that you want to append to the command')
-    cmd.outputs['out_vcf'] = Output(path='{output_file}')
-    cmd.outputs['out_vcf_idx'] = Output(path='{output_file}.tbi')
+    cmd.outputs['out_vcf'] = Output(value='{output_file}')
+    cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi')
     return cmd
 
 
@@ -327,7 +309,7 @@ def CombineVariants(tumor_sample):
     cmd.args['variant'] = Argument(prefix='--variant ', multi_times=True, type='infile', desc='variant vcf file array')
     cmd.args['out_vcf'] = Argument(prefix='-o ', value=f'{tumor_sample}.combined_germline.vcf')
     cmd.args['assumeIdenticalSamples'] = Argument(prefix='--assumeIdenticalSamples', type='bool', desc='If true, assume input VCFs have identical sample sets and disjoint calls. This option allows the user to perform a simple merge (concatenation) to combine the VCFs.')
-    cmd.outputs['combined_vcf'] = Output(path='{out_vcf}')
+    cmd.outputs['combined_vcf'] = Output(value='{out_vcf}')
     return cmd
 
 
@@ -339,7 +321,7 @@ def SortVcf(tumor_sample):
     cmd.runtime.tool = 'java -jar /usr/picard/picard.jar SortVcf'
     cmd.args['in_vcf'] = Argument(prefix='I=', type='infile', desc='input vcf to sort')
     cmd.args['out_vcf'] = Argument(prefix='O=', value=f'{tumor_sample}.combined_germline.sorted.vcf', type='infile', desc='output sorted vcf')
-    cmd.outputs['sorted_vcf'] = Output(path='{out_vcf}')
+    cmd.outputs['sorted_vcf'] = Output(value='{out_vcf}')
     return cmd
 
 
@@ -354,7 +336,7 @@ def ReadBackedPhasing(tumor_sample):
     cmd.args['variant'] = Argument(prefix='--variant ', type='infile', desc='input vcf file')
     cmd.args['interval'] = Argument(prefix='-L ', type='infile', desc='input vcf file')
     cmd.args['out_vcf'] = Argument(prefix='-o ', value=f'{tumor_sample}.phased.vcf', desc='output vcf file')
-    cmd.outputs['phased_vcf'] = Output(path='{out_vcf}')
+    cmd.outputs['phased_vcf'] = Output(value='{out_vcf}')
     return cmd
 
 
@@ -371,8 +353,34 @@ def HLA_ABC_typer(sample):
     cmd.args['outdir'] = Argument(prefix='--outdir ', default='.', desc='Specifies the out directory to which all files should be written.')
     cmd.args['prefix'] = Argument(prefix='--prefix ', value=sample, desc='prefix of output files')
     cmd.args['config'] = Argument(prefix='--config ', default='config.ini', desc='config.ini file')
-    cmd.outputs['result_tsv'] = Output(path='{prefix}_result.tsv')
-    cmd.outputs['result_pdf'] = Output(path='{prefix}_coverage_plot.pdf')
+    cmd.outputs['result_tsv'] = Output(value='{prefix}_result.tsv')
+    cmd.outputs['result_pdf'] = Output(value='{prefix}_coverage_plot.pdf')
+    return cmd
+
+
+def hisat_genotype():
+    """
+    hisatgenotype --base hla --locus-list A,B,C,DRB1,DQA1 -1 ILMN/NA12892.extracted.1.fq.gz -2 ILMN/NA12892.extracted.2.fq.gz
+    hisatgenotype_toolkit parse-results --csv --in-dir hisatgenotype_out
+    """
+    cmd = Command()
+    cmd.meta.name = 'HisatGenotype'
+    cmd.meta.desc = " HLA-typing using hisat"
+    cmd.runtime.image = ''
+    cmd.runtime.tool = 'hisatgenotype'
+    cmd.args['base'] = Argument(prefix='--base ', default='hla', desc='Base file name for index, variants, haplotypes, etc. (e.g. hla, rbg, codis)')
+    cmd.args['locus'] = Argument(prefix='--locus-list ', level='optional', array=True, delimiter=',', desc='A comma-separated list of gene names (default: empty, all genes)')
+    cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 fastq file')
+    cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 fastq file')
+    cmd.args['_read_dir'] = Argument(prefix='--in-dir', value='', type='fix')
+    cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc='Number of threads')
+    cmd.args['hisat_threads'] = Argument(prefix='--pp ', default=4, desc='Number of threads')
+    cmd.args['indicies'] = Argument(prefix='--index_dir ', level='optional', type='indir', desc="Set location to use for indicies")
+    cmd.args['_outdir'] = Argument(prefix='--out-dir ', value='.', type='fix')
+    cmd.args['_parse_result'] = Argument(value='&& hisatgenotype_toolkit parse-results --csv --in-dir .', type='fix')
+    cmd.args['level'] = Argument(prefix='-t ', default=3, desc='Trim allele to specific field level (example : A*01:01:01:01 trim 2 A*01:01)')
+    cmd.args['out'] = Argument(prefix='--output-file ', desc='output of csv file')
+    cmd.outputs['out'] = Output(value='{out}', type='outfile')
     return cmd
 
 
@@ -381,8 +389,7 @@ def pipeline():
     wf.meta.name = 'DNAseqPipeline'
     wf.meta.desc = 'typical bioinformatics pipeline using sentieon TNSeq and VEP, including HLA-typing'
     wf.init_argparser()
-    wf.add_argument('-fastq_dirs', nargs='+', required=False, help='fastq file parent dir list')
-    wf.add_argument('-fastq_files', nargs='+', required=False, help='fastq file list')
+    wf.add_argument('-fastq_info', nargs='+', required=True, help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
     wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
@@ -398,6 +405,7 @@ def pipeline():
     wf.add_argument('-vep_cache_dir', required=False, help='VEP cache directory')
     wf.add_argument('-vep_plugin_dir', required=False, help='VEP plugin directory')
     wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval or vcf format")
+    wf.add_argument('-hisatgenotype_db', required=False, help='indicies dir of hisat-genotype for HLA typing')
     wf.parse_args()
 
     top_vars = dict(
@@ -410,12 +418,12 @@ def pipeline():
         germline_vcf=TopVar(value=wf.args.germline_vcf),
         vep_cache_dir=TopVar(value=wf.args.vep_cache_dir, type='indir'),
         vep_plugin_dir=TopVar(value=wf.args.vep_plugin_dir, type='indir'),
-        intervals=TopVar(value=wf.args.intervals, type='infile')
+        intervals=TopVar(value=wf.args.intervals, type='infile'),
+        hisatgenotype_db=TopVar(value=wf.args.hisatgenotype_db, type='infile')
     )
     wf.add_topvars(top_vars)
 
-    fastq_info = get_fastq_info(fastq_dirs=wf.args.fastq_dirs, fastq_files=wf.args.fastq_files,
-                                r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
+    fastq_info = get_fastq_info(fastq_info=wf.args.fastq_info, r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
 
@@ -427,7 +435,7 @@ def pipeline():
             continue
 
         read1 = r1s[0]  # 假设每个样本只有对应一对fastq文件，不存在1对多的情况
-        read2 = r2s[0]
+        read2 = r2s[0]  # 假设每个样本只有对应一对fastq文件，不存在1对多的情况
 
         # fastp
         fastp_task, args = wf.add_task(fastp(sample), name=f'fastp-{sample}')
@@ -435,8 +443,15 @@ def pipeline():
         args['read2'].value = TmpVar(name='read2', value=read2, type='infile')
 
         # optiType
-        task, args = wf.add_task(HLA_ABC_typer(sample), name=f'optiType-{sample}', depends=[fastp_task.task_id])
-        args['reads'].value = [fastp_task.outputs['out1'], fastp_task.outputs['out2']]
+        # task, args = wf.add_task(HLA_ABC_typer(sample), name=f'optiType-{sample}', depends=[fastp_task.task_id])
+        # args['reads'].value = [fastp_task.outputs['out1'], fastp_task.outputs['out2']]
+
+        # hisat-genotype
+        task, args = wf.add_task(hisat_genotype(), name=f'hisatGenotype-{sample}', depends=[fastp_task.task_id])
+        args['read1'].value = fastp_task.outputs['out1']
+        args['read2'].value = fastp_task.outputs['out2']
+        args['indicies'].value = top_vars['hisatgenotype_db']
+        args['out'].value = f'{sample}.HLA-gene-type.txt'
 
         # mapping
         mapping, args = wf.add_task(bwa_mem(sample, platform='ILLUMINA'), name=f'bwaMem-{sample}', depends=[fastp_task.task_id])
@@ -575,27 +590,7 @@ def pipeline():
             args['fasta'].value = top_vars['ref']
             args['dir_cache'].value = top_vars['vep_cache_dir']
             args['dir_plugins'].value = top_vars['vep_plugin_dir']
-
-        # ---combine germline vcf and somatic vcf---
-        # combine_task, args = wf.add_task(CombineVariants(tumor_sample), depends=[germline_task.task_id, somatic_task.task_id])
-        # args['ref'].value = top_vars['ref']
-        # args['variant'].value = [germline_task.outputs['out_vcf'], somatic_task.outputs['out_vcf']]
-        # sort_task, args = wf.add_task(SortVcf(tumor_sample), depends=[combine_task.task_id])
-        # args['in_vcf'].value = combine_task.outputs['combined_vcf']
-        # phase_task, args = wf.add_task(ReadBackedPhasing(tumor_sample), depends=[combine_task.task_id])
-        # args['ref'].value = top_vars['ref']
-        # args['variant'].value = sort_task.outputs['sorted_vcf']
-        # args['interval'].value = sort_task.outputs['sorted_vcf']
-        # args['bam'].value = bam_dict[tumor_sample].outputs['out_bam']
-        # --- vep annot phased vcf---
-        # task, args = wf.add_task(vep(tumor_sample), depends=[depend_task.task_id])
-        # task.cmd.meta.name = 'vep_phased'
-        # args['input_file'].value = phase_task.outputs['phased_vcf']
-        # args['output_file'].value = f'{tumor_sample}.phased.vep.vcf.gz'
-        # args['fasta'].value = top_vars['ref']
-        # args['dir_cache'].value = top_vars['vep_cache_dir']
-        # args['dir_plugins'].value = top_vars['vep_plugin_dir']
-
+    # run workflow
     wf.run()
 
 
