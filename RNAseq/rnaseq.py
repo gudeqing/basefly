@@ -8,7 +8,7 @@ __author__ = 'gdq'
 
 """
 1. fastp
-2. star
+2. star | sentieon star
 3. salmon-alignment-based
 4. star-fusion
 5. picard collectrnaseqmetrics QC: rRNA, mRNA percent
