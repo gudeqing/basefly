@@ -202,7 +202,7 @@ def arcas_hla(threads=4):
     cmd.runtime.memory = 5*1024**3
     cmd.runtime.cpu = 2
     # 软链接数据库
-    cmd.args['database'] = Argument(prefix='ln -s ', type='indir', level='optional', desc='database of arcas_software')
+    cmd.args['database'] = Argument(prefix='rm -r /home/arcasHLA-master/dat && ln -s ', type='indir', level='optional', desc='database of arcas_software')
     cmd.args['link'] = Argument(prefix='/home/arcasHLA-master/dat &', type='bool', default=False)
     # run software
     cmd.args['_1'] = Argument(value=f'arcasHLA extract --temp ./ --unmapped -t {threads} -o .', type='fix')
