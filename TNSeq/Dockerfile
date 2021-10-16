@@ -45,7 +45,8 @@ RUN cd /opt; wget https://github.com/DaehwanKimLab/hisat-genotype/archive/refs/h
 RUN cp -r /opt/hisat2-2.2.1/* /opt/hisat-genotype-master/hisat2/
 ENV PATH /opt/hisat2-2.2.1/:/opt/hisat-genotype-master/:/opt/hisat-genotype-master/hisat2/:$PATH
 ENV PYTHONPATH /opt/hisat-genotype-master/hisatgenotype_modules/:$PYTHONPATH
-
+# get fastp
+RUN wget http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp /usr/local/bin/
 # prepare indices for hisat-genotype
 #    wget ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat-genotype/data/genotype_genome_20180128.tar.gz
 #    tar xvzf genotype_genome_20180128.tar.gz
