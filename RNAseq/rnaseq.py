@@ -37,7 +37,7 @@ def fastp(sample):
     return cmd
 
 
-def star(sample, platform='illumina'):
+def star(sample, platform='illumina', sentieon=False):
     """
     star alignment
     """
@@ -46,7 +46,7 @@ def star(sample, platform='illumina'):
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.memory = 25*1024**3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'STAR'
+    cmd.runtime.tool = 'sentieon STAR' if sentieon else 'STAR'
     cmd.args['threads'] = Argument(prefix='--runThreadN ', default=4, desc='threads to use')
     cmd.args['genomeDir'] = Argument(prefix='--genomeDir ', type='indir', desc='genome index directory')
     cmd.args['read1'] = Argument(prefix='--readFilesIn ', type='infile', array=True, desc='input read1 fastq file list', delimiter=',')
@@ -239,6 +239,7 @@ def pipeline():
     wf.init_argparser()
     # add workflow args
     wf.add_argument('-star_index', required=True, help='star alignment index dir')
+    wf.add_argument('--sentieon', default=False, action="store_true", help='indicate to use sentieon STAR tool')
     wf.add_argument('-fusion_index', required=True, help='star-fusion database dir')
     wf.add_argument('-transcripts_fa', required=True, help='transcriptome fasta file')
     wf.add_argument('-gtf', required=True, help='genome annotation file')
@@ -281,7 +282,7 @@ def pipeline():
 
         # star alignment
         fastp_task_ids = [x.task_id for x in fastp_tasks]
-        star_task, args = wf.add_task(star(sample), name='star-'+sample, depends=fastp_task_ids)
+        star_task, args = wf.add_task(star(sample, sentieon=wf.args.sentieon), name='star-'+sample, depends=fastp_task_ids)
         args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
         args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
         args['genomeDir'].value = wf.topvars['starIndex']
