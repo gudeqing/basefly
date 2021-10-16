@@ -13,14 +13,50 @@ ENV PATH /opt/sentieon/sentieon-genomics-${VERSION}/bin/:$PATH
 ENV SENTIEON_INSTALL_DIR=/opt/sentieon-genomics-${VERSION} \
     SENTIEON_LICENSE=sentieon-lic.enigma2:8990
 
-# python packages
 ENV PIP_SOURCE https://mirrors.aliyun.com/pypi/simple
-RUN apt install -y python3-pip
-RUN pip3 install -i $PIP_SOURCE dataclasses typing_extensions scipy numpy pandas biopython psutil pygraphviz
+RUN apt install -y python3-pip graphviz
+RUN pip3 install -i $PIP_SOURCE dataclasses typing_extensions scipy numpy pandas biopython psutil pygraphviz openpyxl
 RUN pip3 install https://github.com/gudeqing/xcmds/raw/master/dist/xcmds-1.5.0-py3-none-any.whl
 
+ENV LANG="en_US.UTF-8"
+RUN ln -s /usr/bin/python3 /usr/bin/python
 # install hisat-genotype
-RUN wget -nv "https://cloud.biohpc.swmed.edu/index.php/s/hisat2-220-Linux_x86_64/download" && \
-    wget -nv "https://github.com/DaehwanKimLab/hisat-genotype/archive/refs/heads/master.zip"
+# install bcftools and samtools
+RUN apt install -y build-essential libncurses5-dev zlib1g-dev libbz2-dev liblzma-dev libcurl3-dev && \
+    apt-get clean && apt-get purge && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+ENV SAMTOOLS_VER="1.13"
+RUN cd /opt; wget https://github.com/samtools/samtools/releases/download/${SAMTOOLS_VER}/samtools-${SAMTOOLS_VER}.tar.bz2; \
+    tar -vxjf samtools-${SAMTOOLS_VER}.tar.bz2; rm samtools-${SAMTOOLS_VER}.tar.bz2; \
+    cd samtools-${SAMTOOLS_VER}; \
+    ./configure; make; make install;
 
-# install
+RUN cd /opt; wget https://github.com/samtools/htslib/releases/download/${SAMTOOLS_VER}/htslib-${SAMTOOLS_VER}.tar.bz2; \
+    tar -vxjf htslib-${SAMTOOLS_VER}.tar.bz2; rm htslib-${SAMTOOLS_VER}.tar.bz2; \
+    cd htslib-${SAMTOOLS_VER}; \
+    ./configure; make; make install;
+
+RUN cd /opt; wget https://github.com/samtools/bcftools/releases/download/${SAMTOOLS_VER}/bcftools-${SAMTOOLS_VER}.tar.bz2; \
+    tar -vxjf bcftools-${SAMTOOLS_VER}.tar.bz2; rm bcftools-${SAMTOOLS_VER}.tar.bz2; \
+    cd bcftools-${SAMTOOLS_VER}; \
+    ./configure; make; make install;
+
+RUN cd /opt; wget https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download -O hisat2-2.2.1.zip && unzip hisat2-2.2.1.zip && rm hisat2-2.2.1.zip
+RUN cd /opt; wget https://github.com/DaehwanKimLab/hisat-genotype/archive/refs/heads/master.zip -O hisat-genotype-master.zip && unzip hisat-genotype-master.zip && rm hisat-genotype-master.zip
+RUN cp -r /opt/hisat2-2.2.1/* /opt/hisat-genotype-master/hisat2/
+ENV PATH /opt/hisat2-2.2.1/:/opt/hisat-genotype-master/:/opt/hisat-genotype-master/hisat2/:$PATH
+ENV PYTHONPATH /opt/hisat-genotype-master/hisatgenotype_modules/:$PYTHONPATH
+
+# prepare indices for hisat-genotype
+#    wget ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat-genotype/data/genotype_genome_20180128.tar.gz
+#    tar xvzf genotype_genome_20180128.tar.gz
+#    rm genotype_genome_20180128.tar.gz
+#
+#    #grch38
+#    wget ftp://ftp.ccb.jhu.edu/pub/infphilo/hisat2/data/grch38.tar.gz
+#    tar xvzf grch38.tar.gz
+#    rm grch38.tar.gz
+#    hisat2-inspect grch38/genome > genome.fa
+#    samtools faidx genome.fa
+#
+#    #HISATgenotpye Database
+#    git clone https://github.com/DaehwanKimLab/hisatgenotype_db.git
