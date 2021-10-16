@@ -59,3 +59,13 @@ RUN rm /usr/local/src/*gz && pip cache purge
 
 # 避免中文输出错误
 ENV LANG="en_US.UTF-8"
+
+# 安装sentieon
+ARG VERSION=202010.02
+RUN mkdir -p /opt/sentieon/ && \
+    wget -nv -O - "https://s3.amazonaws.com/sentieon-release/software/sentieon-genomics-${VERSION}.tar.gz" | \
+      tar -zxf - -C /opt/sentieon/
+CMD ["/bin/bash"]
+ENV PATH /opt/sentieon/sentieon-genomics-${VERSION}/bin/:$PATH
+ENV SENTIEON_INSTALL_DIR=/opt/sentieon-genomics-${VERSION} \
+    SENTIEON_LICENSE=sentieon-lic.enigma2:8990
