@@ -292,7 +292,7 @@ def vep(sample):
     cmd.args['coding_only'] = Argument(prefix='--af_esp ', type='bool', default=False, desc="Only return consequences that fall in the coding regions of transcripts. Not used by default")
     cmd.args['pick'] = Argument(prefix='--pick', type='bool', default=False, desc="Pick one line or block of consequence data per variant, including transcript-specific columns. This is the best method to use if you are interested only in one consequence per variant")
     cmd.args['flag_pick'] = Argument(prefix='--flag_pick ', type='bool', default=True, desc="As per --pick, but adds the PICK flag to the chosen block of consequence data and retains others.")
-    cmd.args['filter_common'] = Argument(prefix='--filter_common ', type='bool', default=True, desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters.")
+    cmd.args['filter_common'] = Argument(prefix='--filter_common ', type='bool', default=False, desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters.")
     cmd.args['other_args'] = Argument(default='', desc='specify other arguments that you want to append to the command')
     cmd.outputs['out_vcf'] = Output(value='{output_file}')
     cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi')
