@@ -372,7 +372,7 @@ def hisat_genotype():
     cmd.args['locus'] = Argument(prefix='--locus-list ', level='optional', array=True, delimiter=',', desc='A comma-separated list of gene names (default: empty, all genes)')
     cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 fastq file')
-    cmd.args['_read_dir'] = Argument(prefix='--in-dir', value='', type='fix')
+    cmd.args['_read_dir'] = Argument(prefix='--in-dir', value='/', type='fix')
     cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc='Number of threads')
     cmd.args['hisat_threads'] = Argument(prefix='--pp ', default=4, desc='Number of threads')
     cmd.args['indicies'] = Argument(prefix='--index_dir ', level='optional', type='indir', desc="Set location to use for indicies")
@@ -447,11 +447,12 @@ def pipeline():
         # args['reads'].value = [fastp_task.outputs['out1'], fastp_task.outputs['out2']]
 
         # hisat-genotype
-        task, args = wf.add_task(hisat_genotype(), name=f'hisatGenotype-{sample}', depends=[fastp_task.task_id])
-        args['read1'].value = fastp_task.outputs['out1']
-        args['read2'].value = fastp_task.outputs['out2']
-        args['indicies'].value = top_vars['hisatgenotype_db']
-        args['out'].value = f'{sample}.HLA-gene-type.txt'
+        if wf.args.hisatgenotype_db:
+            task, args = wf.add_task(hisat_genotype(), name=f'hisatGenotype-{sample}', depends=[fastp_task.task_id])
+            args['read1'].value = fastp_task.outputs['out1']
+            args['read2'].value = fastp_task.outputs['out2']
+            args['indicies'].value = top_vars['hisatgenotype_db']
+            args['out'].value = f'{sample}.HLA-gene-type.txt'
 
         # mapping
         mapping, args = wf.add_task(bwa_mem(sample, platform='ILLUMINA'), name=f'bwaMem-{sample}', depends=[fastp_task.task_id])
@@ -493,7 +494,7 @@ def pipeline():
         args['bam'].value = mapping.outputs['out']
 
         # dedup
-        dedup_task, args = wf.add_task(dedup(sample), name=f'dedup-{sample}', depends=[mapping.task_id])
+        dedup_task, args = wf.add_task(dedup(sample), name=f'dedup-{sample}', depends=[mapping.task_id, locus_get.task_id])
         args['t'].value = top_vars['thread_number']
         args['bam'].value = mapping.outputs['out']
         args['score'].value = locus_get.outputs['score']
@@ -574,7 +575,6 @@ def pipeline():
         # filter
         depend_task = task
         filter_task, args = wf.add_task(TNfilter(tumor_sample), name=f'tnfilter-{tumor_sample}', depends=[depend_task.task_id])
-        somatic_task = task
         args['ref'].value = top_vars['ref']
         args['normal_sample'].value = normal_sample
         args['tmp_vcf'].value = depend_task.outputs['out_vcf']

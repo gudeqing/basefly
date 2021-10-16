@@ -85,7 +85,8 @@ class Argument:
                 # 对于没有默认值的bool参数，强行赋值为false，即该参数默认不参与命令行的形成
                 self.default = False
         elif self.type == 'fix':
-            if not self.value:
+            self.level = 'optional'
+            if self.value is None:
                 self.value = self.default
             else:
                 self.default = self.value
@@ -166,7 +167,7 @@ class Command:
         for arg_name, arg in self.args.items():
             # 对于极端情况:如果不小心定义了"有默认值的非必须参数"，仅当明确赋值时才参与命令行的形成
             if arg.level == 'required':
-                arg_value = arg.value or arg.default
+                arg_value = arg.value if arg.value is not None else arg.default
             else:
                 arg_value = arg.value
 
