@@ -60,6 +60,7 @@ def get_metrics(sample):
     cmd.meta.name = 'get_metrics'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
     cmd.runtime.tool = 'sentieon driver'
+    cmd.args['intervals'] = Argument(prefix='--interval ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
     cmd.args['t'] = Argument(prefix='-t ', default=16, desc='number of threads to use in computation, set to number of cores in the server')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile',  desc='reference fasta file')
     cmd.args['bam'] = Argument(prefix='-i ', type='infile',  desc='input bam file')
@@ -465,6 +466,7 @@ def pipeline():
 
         # get_metrics
         task, args = wf.add_task(get_metrics(sample), name=f'getMetrics-{sample}', depends=[mapping.task_id])
+        args['intervals'].value = [top_vars['intervals']]
         args['t'].value = top_vars['thread_number']
         args['ref'].value = top_vars['ref']
         args['bam'].value = mapping.outputs['out']
@@ -499,7 +501,7 @@ def pipeline():
         args['bam'].value = mapping.outputs['out']
         args['score'].value = locus_get.outputs['score']
 
-        # coverage
+        # coverage, 如果不提供intervals，不建议该步骤，因为耗时长，输出结果巨大
         cov_task, args = wf.add_task(coverage_metrics(sample), name=f'covMetrics-{sample}', depends=[dedup_task.task_id])
         args['t'].value = top_vars['thread_number']
         args['intervals'].value = [top_vars['intervals']]
@@ -527,69 +529,105 @@ def pipeline():
 
     for line in open(wf.args.pair_info):
         tumor_sample, normal_sample = line.strip('\n').split('\t')[:2]
-        if tumor_sample not in bam_dict:
-            print(f'Warning: tumor_sample {tumor_sample} is not in target list: {list(bam_dict.keys())}')
+        if tumor_sample not in bam_dict and tumor_sample.lower() != 'none':
+            print(f'Warning: skip tumor sample {tumor_sample} since it is not in target list: {list(bam_dict.keys())}')
             continue
-        if tumor_sample not in bam_dict:
-            print(f'Warning: tumor_sample {tumor_sample} is not in target list: {list(bam_dict.keys())}')
+        if normal_sample not in bam_dict and normal_sample.lower() != 'none':
+            print(f'Warning: skip normal sample {normal_sample} since it is not in target list: {list(bam_dict.keys())}')
             continue
 
         # germline variant calling
-        # haplotyper
-        hap_task, args = wf.add_task(Haplotyper(normal_sample), name=f'haplotyper-{normal_sample}', depends=[bam_dict[normal_sample].task_id])
-        args['ref'].value = top_vars['ref']
-        args['bam'].value = bam_dict[normal_sample].outputs['out_bam']
-        args['recal_data'].value = recal_dict[normal_sample].outputs['recal_data']
-        args['intervals'].value = [top_vars['intervals']]
+        if normal_sample.lower() != 'none':
+            # haplotyper
+            hap_task, args = wf.add_task(Haplotyper(normal_sample), name=f'haplotyper-{normal_sample}',
+                                         depends=[bam_dict[normal_sample].task_id, recal_dict[normal_sample].task_id])
+            args['ref'].value = top_vars['ref']
+            args['bam'].value = bam_dict[normal_sample].outputs['out_bam']
+            args['recal_data'].value = recal_dict[normal_sample].outputs['recal_data']
+            args['intervals'].value = [top_vars['intervals']]
 
-        # gvcf-typer
-        germline_task, args = wf.add_task(GVCFtyper(normal_sample), name=f'gvcfTyper-{normal_sample}', depends=[hap_task.task_id])
-        args['ref'].value = top_vars['ref']
-        args['known_dbsnp'].value = top_vars['known_dbsnp']
-        args['in_gvcf'].value = [hap_task.outputs['out_vcf']]
+            # gvcf-typer
+            germline_task, args = wf.add_task(GVCFtyper(normal_sample), name=f'gvcfTyper-{normal_sample}', depends=[hap_task.task_id])
+            args['ref'].value = top_vars['ref']
+            args['known_dbsnp'].value = top_vars['known_dbsnp']
+            args['in_gvcf'].value = [hap_task.outputs['out_vcf']]
 
-        # pair call
-        task, args = wf.add_task(TNhaplotyper2(tumor_sample=tumor_sample), name=f'TNhaplotyper2-{tumor_sample}')
-        task.depends = [bam_dict[normal_sample].task_id, bam_dict[tumor_sample].task_id]
-        task.depends += [recal_dict[normal_sample].task_id, recal_dict[tumor_sample].task_id]
-        args['ref'].value = top_vars['ref']
-        args['t'].value = top_vars['thread_number']
-        args['intervals'].value = [top_vars['intervals']]
-        args['bams'].value = [t.outputs['out_bam'] for t in bam_dict.values()]
-        args['recal_datas'].value = [t.outputs['recal_data'] for t in recal_dict.values()]
-        args['normal_sample'].value = normal_sample
-        # pon and germline
-        args['pon'].value = top_vars['pon']
-        args['germline_vcf'].value = top_vars['germline_vcf']
-        # orientation
-        args['orientation_sample'].value = tumor_sample
-        args['orientation_data'].value = f'{tumor_sample}.orientation.data'
-        # contamination
-        if wf.args.germline_vcf:
-            args['germline_vcf2'].value = top_vars['germline_vcf']
-            args['contamination_tumor'].value = tumor_sample
-            args['contamination_normal'].value = normal_sample
-            args['contamination_data'].value = f'{tumor_sample}.contamination.data'
-            args['tumor_segments'].value = f'{tumor_sample}.contamination.segments'
+            # vep annotation
+            if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
+                vep_task, args = wf.add_task(vep(normal_sample), name=f'vep-{normal_sample}',
+                                             depends=[germline_task.task_id])
+                args['input_file'].value = germline_task.outputs['out_vcf']
+                args['fasta'].value = top_vars['ref']
+                args['dir_cache'].value = top_vars['vep_cache_dir']
+                args['dir_plugins'].value = top_vars['vep_plugin_dir']
+                args['filter_common'].value = False
 
-        # filter
-        depend_task = task
-        filter_task, args = wf.add_task(TNfilter(tumor_sample), name=f'tnfilter-{tumor_sample}', depends=[depend_task.task_id])
-        args['ref'].value = top_vars['ref']
-        args['normal_sample'].value = normal_sample
-        args['tmp_vcf'].value = depend_task.outputs['out_vcf']
-        if wf.args.germline_vcf:
-            args['contamination'].value = depend_task.outputs['contamination_data']
-            args['tumor_segments'].value = depend_task.outputs['tumor_segments']
-        args['orientation_data'].value = depend_task.outputs['orientation_data']
+        # tumor-normal pair calling
+        if normal_sample.lower() != 'none' and tumor_sample.lower() != 'none':
+            task, args = wf.add_task(TNhaplotyper2(tumor_sample=tumor_sample), name=f'TNhaplotyper2-{tumor_sample}')
+            task.depends = [bam_dict[normal_sample].task_id, bam_dict[tumor_sample].task_id]
+            task.depends += [recal_dict[normal_sample].task_id, recal_dict[tumor_sample].task_id]
+            args['ref'].value = top_vars['ref']
+            args['t'].value = top_vars['thread_number']
+            args['intervals'].value = [top_vars['intervals']]
+            args['bams'].value = [bam_dict[normal_sample].outputs['out_bam'], bam_dict[tumor_sample].outputs['out_bam']]
+            args['recal_datas'].value = [recal_dict[normal_sample].outputs['recal_data'], recal_dict[tumor_sample].outputs['recal_data']]
+            args['normal_sample'].value = normal_sample
+            # pon and germline
+            args['pon'].value = top_vars['pon']
+            args['germline_vcf'].value = top_vars['germline_vcf']
+            # orientation
+            args['orientation_sample'].value = tumor_sample
+            args['orientation_data'].value = f'{tumor_sample}.orientation.data'
+            # contamination
+            if wf.args.germline_vcf:
+                args['germline_vcf2'].value = top_vars['germline_vcf']
+                args['contamination_tumor'].value = tumor_sample
+                args['contamination_normal'].value = normal_sample
+                args['contamination_data'].value = f'{tumor_sample}.contamination.data'
+                args['tumor_segments'].value = f'{tumor_sample}.contamination.segments'
 
-        # annotation of somatic variant with VEP
-        if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-            vep_task, args = wf.add_task(vep(tumor_sample), name=f'vep-{tumor_sample}', depends=[filter_task.task_id])
-            args['input_file'].value = filter_task.outputs['out_vcf']
-            args['fasta'].value = top_vars['ref']
-            args['dir_cache'].value = top_vars['vep_cache_dir']
-            args['dir_plugins'].value = top_vars['vep_plugin_dir']
+            # filter
+            depend_task = task
+            filter_task, args = wf.add_task(TNfilter(tumor_sample), name=f'tnfilter-{tumor_sample}', depends=[depend_task.task_id])
+            args['ref'].value = top_vars['ref']
+            args['normal_sample'].value = normal_sample
+            args['tmp_vcf'].value = depend_task.outputs['out_vcf']
+            if wf.args.germline_vcf:
+                args['contamination'].value = depend_task.outputs['contamination_data']
+                args['tumor_segments'].value = depend_task.outputs['tumor_segments']
+            args['orientation_data'].value = depend_task.outputs['orientation_data']
+
+            # annotation of somatic variant with VEP
+            if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
+                vep_task, args = wf.add_task(vep(tumor_sample), name=f'vep-{tumor_sample}', depends=[filter_task.task_id])
+                args['input_file'].value = filter_task.outputs['out_vcf']
+                args['fasta'].value = top_vars['ref']
+                args['dir_cache'].value = top_vars['vep_cache_dir']
+                args['dir_plugins'].value = top_vars['vep_plugin_dir']
+
+        # tumor only analysis
+        if normal_sample.lower() == 'none' and tumor_sample.lower() != 'none':
+            task, args = wf.add_task(TNhaplotyper2(tumor_sample=tumor_sample), name=f'TNhaplotyper2-{tumor_sample}')
+            task.depends = [bam_dict[tumor_sample].task_id]
+            task.depends += [recal_dict[tumor_sample].task_id]
+            args['ref'].value = top_vars['ref']
+            args['t'].value = top_vars['thread_number']
+            args['intervals'].value = [top_vars['intervals']]
+            args['bams'].value = [bam_dict[tumor_sample].outputs['out_bam']]
+            args['recal_datas'].value = [recal_dict[tumor_sample].outputs['recal_data']]
+            # pon and germline
+            args['pon'].value = top_vars['pon']
+            args['germline_vcf'].value = top_vars['germline_vcf']
+
+            # annotation of somatic variant with VEP
+            if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
+                vep_task, args = wf.add_task(vep(tumor_sample), name=f'vep-{tumor_sample}', depends=[task.task_id])
+                args['input_file'].value = task.outputs['out_vcf']
+                args['fasta'].value = top_vars['ref']
+                args['dir_cache'].value = top_vars['vep_cache_dir']
+                args['dir_plugins'].value = top_vars['vep_plugin_dir']
+
     # run workflow
     wf.run()
 
