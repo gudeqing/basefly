@@ -33,17 +33,20 @@ def _kill_processes_when_exit():
         for proc, cmd_name in living_processes:
             if psutil.pid_exists(proc.pid):
                 print('Stop running task(pid={}): {}'.format(proc.pid, cmd_name))
+                for subproc in proc.children(recursive=True):
+                    print(f'stopping children process of {cmd_name} with pid:{subproc.pid}')
+                    subproc.kill()
                 proc.kill()
             PROCESS_local.pop(proc)
         living_processes = list(PROCESS_local.items())
     # 取消计时器
-    living_timers = list(TIMERS.items())
-    while living_timers:
-        for tmp_timer, cmd_name in living_timers:
-            # print(f'Cancel running timer of task {cmd_name}')
-            tmp_timer.cancel()
-            TIMERS.pop(tmp_timer)
-        living_timers = list(TIMERS.items())
+    # living_timers = list(TIMERS.items())
+    # while living_timers:
+    #     for tmp_timer, cmd_name in living_timers:
+    #         # print(f'Cancel running timer of task {cmd_name}')
+    #         tmp_timer.cancel()
+    #         TIMERS.pop(tmp_timer)
+    #     living_timers = list(TIMERS.items())
 
 
 def shutdown(signum, frame):
@@ -100,15 +103,22 @@ class Command(object):
     def _monitor_resource(self):
         while psutil.pid_exists(self.proc.pid) and self.proc.is_running():
             try:
-                used_cpu = self.proc.cpu_percent(interval=3)
-                if used_cpu > self.max_used_cpu:
-                    self.max_used_cpu = used_cpu
-                # 获取进程占用的memory信息
-                memory = self.proc.memory_full_info().uss/1024/1024
+                memory = self.proc.memory_full_info().uss
+                used_cpu = self.proc.cpu_percent(interval=0.5)
+                for subproc in self.proc.children(recursive=True):
+                    # 获取进程占用的memory信息
+                    memory += subproc.memory_full_info().uss
+                    # 获取cpu信息
+                    used_cpu += subproc.cpu_percent(interval=1)
+                    print(self.cmd.name, subproc.pid, used_cpu, memory, subproc.num_threads())
+
                 if memory > self.max_used_mem:
                     self.max_used_mem = memory
-                # 获取进程的线程数量
+                if used_cpu > self.max_used_cpu:
+                    self.max_used_cpu = used_cpu
+                # 获取主进程的线程数量
                 self.threads_num = self.proc.num_threads()
+                time.sleep(2)
 
             except Exception as e:
                 # print('Failed to capture cpu/mem info for: ', e)
@@ -140,6 +150,8 @@ class Command(object):
         else:
             self.logger.info("> {}".format(self.cmd))
             self.proc = psutil.Popen(self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
+            # add ‘exec’ will cause cmd to inherit the shell process, instead of having the shell launch a child process
+            # self.proc = psutil.Popen("exec " + self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
 
         # tracing process
         PROCESS_local[self.proc] = self.name
@@ -148,15 +160,21 @@ class Command(object):
             thread = threading.Thread(target=self._monitor_resource, daemon=True)
             thread.start()
 
-        timer = Timer(self.timeout, self.proc.kill)
-        TIMERS[timer] = self.name
+        # timer = Timer(self.timeout, self.proc.kill)
+        # TIMERS[timer] = self.name
+        # try:
+        #     timer.start()
+        #     self.stdout, self.stderr = self.proc.communicate()
+        #     if self.monitor:
+        #         thread.join()
+        # finally:
+        #     timer.cancel()
+        # 使用自带参数timeout计时
         try:
-            timer.start()
+            self.stdout, self.stderr = self.proc.communicate(timeout=self.timeout)
+        except psutil.TimeoutExpired:
+            self.proc.kill()
             self.stdout, self.stderr = self.proc.communicate()
-            if self.monitor:
-                thread.join()
-        finally:
-            timer.cancel()
 
         self._write_log()
         end_time = time.time()
@@ -178,9 +196,9 @@ class Command(object):
             with open(prefix+'.stdout.txt', 'wb') as f:
                 f.write(self.stdout)
         with open(prefix+'.resource.txt', 'w') as f:
-            f.write('max_cpu (percent): {}\n'.format(self.max_used_cpu))
-            f.write('max_mem (byte): {}\n'.format(self.max_used_mem))
-            f.write('thread_num (number): {}\n'.format(self.threads_num))
+            f.write('max_cpu (cpu_percent): {}\n'.format(self.max_used_cpu))
+            f.write('max_mem (.uss; byte): {}\n'.format(self.max_used_mem))
+            f.write('thread_num (num_threads): {}\n'.format(self.threads_num))
 
 
 class CommandNetwork(object):
