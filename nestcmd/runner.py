@@ -87,6 +87,7 @@ class Command(object):
         self.used_time = 0
         self.max_used_mem = 0
         self.max_used_cpu = 0
+        self.threads_num = 0
         self.monitor = monitor_resource
         self.monitor_time_step = int(monitor_time_step)
         self.outdir = outdir
@@ -99,16 +100,16 @@ class Command(object):
     def _monitor_resource(self):
         while psutil.pid_exists(self.proc.pid) and self.proc.is_running():
             try:
-                cpu_percent = self.proc.cpu_percent()
-                time.sleep(self.monitor_time_step)
-                cpu_percent = self.proc.cpu_percent()
-                used_cpu = round(cpu_percent*0.01, 4)
+                used_cpu = self.proc.cpu_percent(interval=3)
                 if used_cpu > self.max_used_cpu:
                     self.max_used_cpu = used_cpu
-                memory_obj = self.proc.memory_full_info()
-                memory = round(memory_obj.uss/1024/1024, 4)
+                # 获取进程占用的memory信息
+                memory = self.proc.memory_full_info().uss/1024/1024
                 if memory > self.max_used_mem:
                     self.max_used_mem = memory
+                # 获取进程的线程数量
+                self.threads_num = self.proc.num_threads()
+
             except Exception as e:
                 # print('Failed to capture cpu/mem info for: ', e)
                 break
@@ -176,10 +177,10 @@ class Command(object):
         if self.stdout:
             with open(prefix+'.stdout.txt', 'wb') as f:
                 f.write(self.stdout)
-        if self.max_used_cpu or self.max_used_mem:
-            with open(prefix+'.resource.txt', 'w') as f:
-                f.write('max_cpu: {}\n'.format(self.max_used_cpu))
-                f.write('max_mem: {}M\n'.format(round(self.max_used_mem, 4)))
+        with open(prefix+'.resource.txt', 'w') as f:
+            f.write('max_cpu (percent): {}\n'.format(self.max_used_cpu))
+            f.write('max_mem (byte): {}\n'.format(self.max_used_mem))
+            f.write('thread_num (number): {}\n'.format(self.threads_num))
 
 
 class CommandNetwork(object):
