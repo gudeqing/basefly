@@ -436,11 +436,6 @@ class Workflow:
         wf.optionxform = str
         parameters = self.argparser.parse_args()
         outdir = os.path.abspath(parameters.outdir)
-        with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
-            f.write('python ' + ' '.join(sys.argv) + '\n')
-            # print(sys.argv)
-            f.write('>>>Argument Detail\n')
-            f.write('{}\n'.format(dict(parameters.__dict__.items())))
 
         wf['mode'] = dict(
             outdir=outdir,
@@ -507,6 +502,11 @@ class Workflow:
             self.list_task()
         else:
             os.makedirs(outdir, exist_ok=True)
+            with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
+                f.write('python ' + ' '.join(sys.argv) + '\n')
+                # print(sys.argv)
+                f.write('>>>Argument Detail\n')
+                f.write('{}\n'.format(dict(parameters.__dict__.items())))
             outfile = os.path.join(outdir, f'{self.meta.name}.ini')
             with open(outfile, 'w') as configfile:
                 wf.write(configfile)
