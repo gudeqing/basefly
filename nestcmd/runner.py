@@ -34,8 +34,9 @@ def _kill_processes_when_exit():
             if psutil.pid_exists(proc.pid):
                 print('Stop running task(pid={}): {}'.format(proc.pid, cmd_name))
                 for subproc in proc.children(recursive=True):
-                    print(f'stopping children process of {cmd_name} with pid:{subproc.pid}')
-                    subproc.kill()
+                    if psutil.pid_exists(subproc.pid):
+                        print(f'stopping children process of pid={proc.pid}: pid={subproc.pid}')
+                        subproc.kill()
                 proc.kill()
             PROCESS_local.pop(proc)
         living_processes = list(PROCESS_local.items())
@@ -103,32 +104,37 @@ class Command(object):
     def _monitor_resource(self):
         while psutil.pid_exists(self.proc.pid) and self.proc.is_running():
             try:
-                memory = self.proc.memory_full_info().uss
-                used_cpu = self.proc.cpu_percent(interval=0.5)
-                for subproc in self.proc.children(recursive=True):
-                    # 获取进程占用的memory信息
-                    memory += subproc.memory_full_info().uss
-                    # 获取cpu信息
-                    used_cpu += subproc.cpu_percent(interval=1)
-                    print(self.cmd.name, subproc.pid, used_cpu, memory, subproc.num_threads())
-
-                if memory > self.max_used_mem:
-                    self.max_used_mem = memory
-                if used_cpu > self.max_used_cpu:
-                    self.max_used_cpu = used_cpu
+                self.max_used_mem = self.proc.memory_full_info().vms
+                self.max_used_cpu = self.proc.cpu_percent(interval=0.5)
+                for subproc in self.proc.children(recursive=False):
+                    if psutil.pid_exists(subproc.pid):
+                        # 获取进程占用的memory信息
+                        memory = subproc.memory_full_info().vms
+                        # 获取cpu信息
+                        used_cpu = subproc.cpu_percent(interval=1)
+                        # print(self.name, subproc.pid, memory, used_cpu, subproc.num_threads())
+                        if memory > self.max_used_mem:
+                            self.max_used_mem = memory
+                        if used_cpu > self.max_used_cpu:
+                            self.max_used_cpu = used_cpu
                 # 获取主进程的线程数量
                 self.threads_num = self.proc.num_threads()
-                time.sleep(2)
-
+                time.sleep(self.monitor_time_step)
             except Exception as e:
                 # print('Failed to capture cpu/mem info for: ', e)
                 break
+            finally:
+                # print(self.proc.pid, self.max_used_cpu, self.max_used_mem, self.threads_num)
+                pass
 
     def run(self):
         cmd_wkdir = os.path.join(self.outdir, self.name)
         if os.path.exists(cmd_wkdir):
-            print(f'Removing already existed workdir {cmd_wkdir}')
-            shutil.rmtree(cmd_wkdir)
+            try:
+                print(f'Removing already existed workdir {cmd_wkdir}')
+                shutil.rmtree(cmd_wkdir)
+            except Exception as e:
+                print(f'Failed to remove {cmd_wkdir}: {e}')
         os.makedirs(cmd_wkdir)
         if self.image:
             with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
@@ -196,8 +202,8 @@ class Command(object):
             with open(prefix+'.stdout.txt', 'wb') as f:
                 f.write(self.stdout)
         with open(prefix+'.resource.txt', 'w') as f:
-            f.write('max_cpu (cpu_percent): {}\n'.format(self.max_used_cpu))
-            f.write('max_mem (.uss; byte): {}\n'.format(self.max_used_mem))
+            f.write('max_cpu (cpu_percent*0.01): {:.2f}\n'.format(self.max_used_cpu*0.01))
+            f.write('max_mem (Virtual Memory Size; M): {:.2f}\n'.format(self.max_used_mem/1024**2))
             f.write('thread_num (num_threads): {}\n'.format(self.threads_num))
 
 
