@@ -201,10 +201,11 @@ class Command(object):
         if self.stdout:
             with open(prefix+'.stdout.txt', 'wb') as f:
                 f.write(self.stdout)
-        with open(prefix+'.resource.txt', 'w') as f:
-            f.write('max_cpu (cpu_percent*0.01): {:.2f}\n'.format(self.max_used_cpu*0.01))
-            f.write('max_mem (Virtual Memory Size; M): {:.2f}\n'.format(self.max_used_mem/1024**2))
-            f.write('thread_num (num_threads): {}\n'.format(self.threads_num))
+        if self.monitor:
+            with open(prefix+'.resource.txt', 'w') as f:
+                f.write('max_cpu (cpu_percent*0.01): {:.2f}\n'.format(self.max_used_cpu*0.01))
+                f.write('max_mem (Virtual Memory Size; M): {:.2f}\n'.format(self.max_used_mem/1024**2))
+                f.write('thread_num (num_threads): {}\n'.format(self.threads_num))
 
 
 class CommandNetwork(object):
