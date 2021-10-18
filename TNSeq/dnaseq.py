@@ -394,7 +394,7 @@ def pipeline():
     wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
-    wf.add_argument('-pair_info', required=True, help='tumor normal pair info, two-column txt file, first column is tumor sample name')
+    wf.add_argument('-pair_info', required=True, help='tumor normal pair info, two-column txt file, first column is tumor sample name. sample not in pair info will be skipped')
     wf.add_argument('-sentieon_threads', default=4, help='threads number used in sentieon')
     wf.add_argument('--realign', default=False, action='store_true', help='if to realign indel region')
     wf.add_argument('-ref', required=True, help='reference fasta file, require bwa index being created')
