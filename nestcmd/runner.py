@@ -598,6 +598,7 @@ class RunCommands(CommandNetwork):
 
     def parallel_run(self):
         atexit.register(self._update_status_when_exit)
+        start_time = time.time()
         pool_size = self.parser.getint('mode', 'threads')
         threads = list()
         for _ in range(pool_size):
@@ -617,6 +618,7 @@ class RunCommands(CommandNetwork):
         _ = [x.join() for x in threads]
         percent = f'{self.success/self.task_number:.2%}'
         failed = self.task_number - self.success
+        self.logger.warning("Total time: {}s".format(time.time() - start_time))
         self.logger.warning(f'Finished {percent}: Success={self.success}, Failed={failed}, Total={self.task_number}')
         return self.success, len(self.state)
 
