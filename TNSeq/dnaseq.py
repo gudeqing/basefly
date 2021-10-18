@@ -428,11 +428,21 @@ def pipeline():
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
 
+    pair_list = []
+    sample_list = []
+    if wf.args.pair_info:
+        with open(wf.args.pai_info) as f:
+            for line in f:
+                if line.strip():
+                    pairs = line.strip('\n').split('\t')[:2]
+                    pair_list.append(pairs)
+                    sample_list.extend(pairs)
+
     recal_dict = dict()
     bam_dict = dict()
     # batch是分组信息，用于wdl的scatter判断
     for sample, (r1s, r2s) in fastq_info.items():
-        if sample in wf.args.exclude_samples:
+        if sample in wf.args.exclude_samples or (sample not in sample_list):
             continue
 
         read1 = r1s[0]  # 假设每个样本只有对应一对fastq文件，不存在1对多的情况
@@ -527,8 +537,7 @@ def pipeline():
         recal_dict[sample] = recal_task
         bam_dict[sample] = depend_task
 
-    for line in open(wf.args.pair_info):
-        tumor_sample, normal_sample = line.strip('\n').split('\t')[:2]
+    for tumor_sample, normal_sample in pair_list:
         if tumor_sample not in bam_dict and tumor_sample.lower() != 'none':
             print(f'Warning: skip tumor sample {tumor_sample} since it is not in target list: {list(bam_dict.keys())}')
             continue
