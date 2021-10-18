@@ -441,7 +441,7 @@ class Workflow:
             outdir=outdir,
             threads=parameters.threads,
             retry=parameters.retry,
-            monitor_resource=not parameters.monitor_resource,
+            monitor_resource=parameters.monitor_resource,
             monitor_time_step=3,
             check_resource_before_run=not parameters.no_check_resource_before_run,
         )
