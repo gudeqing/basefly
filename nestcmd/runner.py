@@ -647,7 +647,7 @@ class RunCommands(CommandNetwork):
         failed = set(self.names()) - self.ever_queued
         if failed:
             self.is_continue = True
-            self.logger.warning('Continue to run: {}'.format(failed))
+            self.logger.warning('Continue to run {} tasks: {}'.format(len(failed), failed))
             self.queue = queue.Queue()
             self._update_queue()
             self._draw_state()
