@@ -114,7 +114,7 @@ def get_fastq_info(fastq_info:tuple, pair_info=None, out='fastq.info.json',
                 os.symlink(each, os.path.join(sample, os.path.basename(each)))
 
     if pair_info:
-        with open(pair_info) as fr:
+        with open(pair_info) as fr, open(out+'.pair', 'w') as f:
             for line in fr:
                 tumor, normal = line.strip().split()
                 if tumor in new_result and normal in new_result:
