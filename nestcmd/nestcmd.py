@@ -480,7 +480,7 @@ class Workflow:
                 max_mem=task.cmd.runtime.max_memory,
                 max_cpu=task.cmd.runtime.max_cpu,
                 timeout=task.cmd.runtime.timeout,
-                image='' if parameters.no_docker else (task.cmd.runtime.image or ''),
+                image='' if not parameters.docker else (task.cmd.runtime.image or ''),
                 wkdir=cmd_wkdir,
                 mount_vols=';'.join(mount_vols)
             )
@@ -587,10 +587,10 @@ class Workflow:
         )
         wf_args = parser.add_argument_group('Arguments for controlling running mode')
         wf_args.add_argument('--run', default=False, action='store_true', help="运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动需跑")
-        wf_args.add_argument('--no_docker', default=False, action='store_true', help="do not use docker even if docker image is provided")
+        wf_args.add_argument('--docker', default=False, action='store_true', help="default won't use docker even if docker image is provided.")
         wf_args.add_argument('--plot', default=False, action='store_true', help="generate directed acyclic graph for whole workflow timely")
         wf_args.add_argument('-dump_args', metavar='dump-args', required=False, help="输出参数配置json文件, 其包含流程所有软件需要的参数")
-        wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, 其包含流程所有软件需要的参数")
+        wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, 其包含流程所有软件需要的参数，该配置文件设置的参数值将是流程中最后实际用的值")
         wf_args.add_argument('-threads', metavar='max-workers', default=5, type=int, help="允许的最大并行的cmd数目, 默认5")
         wf_args.add_argument('-outdir', metavar='workdir', default=os.path.join(os.getcwd(), 'Result'), help='分析目录或结果目录')
         wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
