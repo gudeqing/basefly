@@ -492,7 +492,7 @@ class Workflow:
             self.update_args(parameters.update_args)
 
         if parameters.dump_args:
-            self.dump_args()
+            self.dump_args(out=parameters.dump_args)
 
         if parameters.list_cmd:
             self.list_cmd()
@@ -526,7 +526,10 @@ class Workflow:
                     if arg.level == 'required' and (arg.default is None):
                         continue
                     if arg.type not in ['infile', 'indir', 'fix']:
-                        tmp_dict[arg_name] = arg.value or arg.default
+                        if type(arg.value) not in [TopVar, TmpVar]:
+                            tmp_dict[arg_name] = arg.value or arg.default
+                        else:
+                            tmp_dict[arg_name] = arg.value.value
             cmd_names.add(cmd_name)
 
         with open(out, 'w') as f:

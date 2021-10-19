@@ -262,7 +262,7 @@ def vep(sample):
     cmd.args['output_format'] = Argument(prefix='--', range={'vcf', 'json', 'tab'}, default='vcf', desc="If we choose to write output in VCF format. Consequences are added in the INFO field of the VCF file, using the key 'CSQ'. Data fields are encoded separated by '|'; the order of fields is written in the VCF header. Output fields in the 'CSQ' INFO field can be selected by using --fields.")
     cmd.args['compress_output'] = Argument(prefix='--compress_output ', default='bgzip', desc="Writes output compressed using either gzip or bgzip")
     cmd.args['force_overwrite'] = Argument(prefix="--force_overwrite ", type='bool', default=True, desc="Force overwriting of output file")
-    cmd.args['fork'] = Argument(prefix='--fork ', type='int', default=4, desc='Use forking(multi-cpu/threads) to improve script runtime')
+    cmd.args['fork'] = Argument(prefix='--fork ', type='int', default=7, desc='Use forking(multi-cpu/threads) to improve script runtime')
     cmd.args['species'] = Argument(prefix='--species ', default='homo_sapiens', desc='Species for your data. This can be the latin name e.g. homo_sapiens or any Ensembl alias e.g. mouse.')
     cmd.args['assembly_version'] = Argument(prefix='--assembly ', default='GRCh37', desc='Select the assembly version to use if more than one available.')
     cmd.args['dir_cache'] = Argument(prefix='--dir_cache ', type='indir', desc='Specify the cache directory to use')
@@ -369,13 +369,15 @@ def hisat_genotype():
     cmd.meta.desc = " HLA-typing using hisat"
     cmd.runtime.image = ''
     cmd.runtime.tool = 'hisatgenotype'
+    cmd.runtime.cpu = 6
+    cmd.runtime.memory = 8*1024**3
     cmd.args['base'] = Argument(prefix='--base ', default='hla', desc='Base file name for index, variants, haplotypes, etc. (e.g. hla, rbg, codis)')
     cmd.args['locus'] = Argument(prefix='--locus-list ', level='optional', array=True, delimiter=',', desc='A comma-separated list of gene names (default: empty, all genes)')
     cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 fastq file')
     cmd.args['_read_dir'] = Argument(prefix='--in-dir ', value='/', type='fix')
-    cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc='Number of threads')
-    cmd.args['hisat_threads'] = Argument(prefix='--pp ', default=4, desc='Number of threads')
+    cmd.args['threads'] = Argument(prefix='--threads ', default=5, desc='Number of threads')
+    cmd.args['hisat_threads'] = Argument(prefix='--pp ', default=7, desc='Number of threads')
     cmd.args['indicies'] = Argument(prefix='--index_dir ', level='optional', type='indir', desc="Set location to use for indicies")
     cmd.args['_outdir'] = Argument(prefix='--out-dir ', value='./', type='fix')
     cmd.args['_parse_result'] = Argument(value='&& hisatgenotype_toolkit parse-results --csv --in-dir .', type='fix')
@@ -431,7 +433,7 @@ def pipeline():
     pair_list = []
     sample_list = []
     if wf.args.pair_info:
-        with open(wf.args.pai_info) as f:
+        with open(wf.args.pair_info) as f:
             for line in f:
                 if line.strip():
                     pairs = line.strip('\n').split('\t')[:2]
