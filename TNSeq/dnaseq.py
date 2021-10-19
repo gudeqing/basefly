@@ -537,6 +537,9 @@ def pipeline():
         recal_dict[sample] = recal_task
         bam_dict[sample] = depend_task
 
+    if not bam_dict:
+        raise Exception('No sample found in Pair info file')
+
     for tumor_sample, normal_sample in pair_list:
         if tumor_sample not in bam_dict and tumor_sample.lower() != 'none':
             print(f'Warning: skip tumor sample {tumor_sample} since it is not in target list: {list(bam_dict.keys())}')
