@@ -32,11 +32,11 @@ def _kill_processes_when_exit():
     while living_processes:
         for proc, cmd_name in living_processes:
             if psutil.pid_exists(proc.pid):
-                print('Stop running task(pid={}): {}'.format(proc.pid, cmd_name))
+                print('Stop running task {} with pid={}:'.format(cmd_name, proc.pid))
                 subprocs = list(proc.children(recursive=True))[::-1]
-                for subproc in subprocs:
+                for ind, subproc in enumerate(subprocs, start=1):
                     if psutil.pid_exists(subproc.pid):
-                        print(f'--stopping children process with pid={subproc.pid}')
+                        print(f'...terminate {ind}th children process with pid={subproc.pid}')
                         subproc.kill()
                 proc.kill()
             PROCESS_local.pop(proc)
