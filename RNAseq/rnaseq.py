@@ -24,6 +24,7 @@ def fastp(sample):
     cmd.runtime.tool = 'fastp'
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
+    cmd.args['threads'] = Argument(prefix='-w ', default=5, desc='thread number')
     cmd.args['other_args'] = Argument(prefix='', default='', desc="other arguments you want to use, such as '-x val'")
     cmd.args['out1'] = Argument(prefix='-o ', value=TmpVar(value=f'{sample}.clean.R1.fq.gz', name='~{sample}.clean.R1.fq.gz'), type='str', desc='clean read1 output fastq file')
     cmd.args['out2'] = Argument(prefix='-O ', value=TmpVar(value=f'{sample}.clean.R2.fq.gz', name='~{sample}.clean.R2.fq.gz'), type='str', desc='clean read2 output fastq file')

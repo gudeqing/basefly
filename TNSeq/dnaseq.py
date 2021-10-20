@@ -21,6 +21,7 @@ def fastp(sample):
     # 可以直接用访问属性的方式添加参数，这个得益于使用Munch对象而不是原生字典
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
+    cmd.args['threads'] = Argument(prefix='-w ', default=7, desc='thread number')
     cmd.args['other_args'] = Argument(prefix='', default='', desc="other arguments you want to use, such as '-x val'")
     # 当然，可以直接用字典的方式添加参数
     cmd.args['out1'] = Argument(prefix='-o ', value=TmpVar(value=f'{sample}.clean.R1.fq.gz', name='~{sample}.clean.R1.fq.gz'), type='str', desc='clean read1 output fastq file')
