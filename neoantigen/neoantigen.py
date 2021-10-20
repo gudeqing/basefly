@@ -114,6 +114,8 @@ def pipeline(inputs=None, outdir='.', run=False, no_docker=False, workers=3, ret
     wf = Workflow()
     wf.meta.name = 'neoantigen-pipeline'
     wf.meta.desc = 'neoantigen prediction pipeline for multiple samples'
+    wf.init_argparser()
+    wf.add_argument('-input')
 
     if inputs is None:
         print('this a simple test')
