@@ -106,7 +106,7 @@ class Command(object):
             try:
                 self.max_used_mem = self.proc.memory_full_info().vms
                 self.max_used_cpu = self.proc.cpu_percent(interval=0.5)
-                for subproc in self.proc.children(recursive=False):
+                for subproc in self.proc.children(recursive=True):
                     if psutil.pid_exists(subproc.pid):
                         # 获取进程占用的memory信息
                         memory = subproc.memory_full_info().vms
