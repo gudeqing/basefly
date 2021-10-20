@@ -36,7 +36,7 @@ def _kill_processes_when_exit():
                 subprocs = list(proc.children(recursive=True))[::-1]
                 for subproc in subprocs:
                     if psutil.pid_exists(subproc.pid):
-                        print(f'stopping children process of pid={proc.pid}: pid={subproc.pid}')
+                        print(f'--stopping children process with pid={subproc.pid}')
                         subproc.kill()
                 proc.kill()
             PROCESS_local.pop(proc)
