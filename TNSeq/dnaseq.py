@@ -296,6 +296,7 @@ def vep(sample):
     cmd.args['flag_pick'] = Argument(prefix='--flag_pick ', type='bool', default=True, desc="As per --pick, but adds the PICK flag to the chosen block of consequence data and retains others.")
     cmd.args['filter_common'] = Argument(prefix='--filter_common ', type='bool', default=False, desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters.")
     cmd.args['other_args'] = Argument(default='', desc='specify other arguments that you want to append to the command')
+    cmd.args['_create_index'] = Argument(value='tabix *vcf.gz', type='fix')
     cmd.outputs['out_vcf'] = Output(value='{output_file}')
     cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi')
     return cmd
