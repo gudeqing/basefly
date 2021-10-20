@@ -408,7 +408,7 @@ def pipeline():
     wf.add_argument('-germline_vcf', required=False, help='germline vcf, will be used for germline variant filtering and contamination analysis')
     wf.add_argument('-vep_cache_dir', required=False, help='VEP cache directory')
     wf.add_argument('-vep_plugin_dir', required=False, help='VEP plugin directory')
-    wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval or vcf format")
+    wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval or vcf format. 如果不提供该参数，建议跳过coverage分析")
     wf.add_argument('-hisatgenotype_db', required=False, help='indicies dir of hisat-genotype for HLA typing')
     wf.parse_args()
 
