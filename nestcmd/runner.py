@@ -79,7 +79,7 @@ def set_logger(name='workflow.log', logger_id='x'):
 
 
 class Command(object):
-    def __init__(self, cmd, name, timeout=3600*24*1, outdir=os.getcwd(), image=None, mount_vols=None,
+    def __init__(self, cmd, name, timeout=3600*24*3, outdir=os.getcwd(), image=None, mount_vols=None,
                  monitor_resource=True, monitor_time_step=2, logger=None, **kwargs):
         self.name = name
         self.cmd = cmd
