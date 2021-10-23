@@ -422,7 +422,7 @@ class RunCommands(CommandNetwork):
         self.timeout = timeout
         if not logger:
             os.makedirs(self.outdir, exist_ok=True)
-            self.logger = set_logger(name=os.path.join(self.outdir, 'workflow.log'))
+            self.logger = set_logger(name=os.path.join(self.outdir, f'workflow.{time.time()}.log'))
         else:
             self.logger = logger
         # draw state graph
@@ -564,6 +564,7 @@ class RunCommands(CommandNetwork):
                 if tmp_dict['check_resource_before_run']:
                     if not CheckResource().is_enough(tmp_dict['cpu'], tmp_dict['mem'], self.timeout):
                         enough = False
+                        self.logger.warning(f"No resource to start task {name} at {self.state[name]['times']}'th time!")
                         if self.state[name]['times'] < int(tmp_dict['retry']):
                             # 把任务在再放回任务队列
                             self.queue.put(name, block=True)
@@ -583,6 +584,8 @@ class RunCommands(CommandNetwork):
                 # 最后一次尝试运行，且执行失败，则判定任务执行失败
                 if (not success) and self.state[name]['times'] == int(tmp_dict['retry']):
                     self.logger.warning(f'Failed to complete task {name}!')
+                    if cmd.stderr:
+                        self.logger.warning(cmd.stderr)
                 # 只有本次执行任务成功，或者最是后一次尝试执行任务时，才去更新状态
                 if success or self.state[name]['times'] == int(tmp_dict['retry']):
                     if not enough:
