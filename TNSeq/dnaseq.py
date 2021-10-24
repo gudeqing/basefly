@@ -26,8 +26,8 @@ def fastp(sample):
     # 当然，可以直接用字典的方式添加参数
     cmd.args['out1'] = Argument(prefix='-o ', value=TmpVar(value=f'{sample}.clean.R1.fq.gz', name='~{sample}.clean.R1.fq.gz'), type='str', desc='clean read1 output fastq file')
     cmd.args['out2'] = Argument(prefix='-O ', value=TmpVar(value=f'{sample}.clean.R2.fq.gz', name='~{sample}.clean.R2.fq.gz'), type='str', desc='clean read2 output fastq file')
-    cmd.args['html'] = Argument(prefix='-h ', value=TmpVar(value=f'{sample}.qc.html', name='~{sample}.qc.html'), type='str', desc='html report file')
-    cmd.args['json'] = Argument(prefix='-j ', value=TmpVar(value=f'{sample}.qc.json', name='~{sample}.qc.json') , type='str', desc='html report file')
+    cmd.args['html'] = Argument(prefix='-h ', value=TmpVar(value=f'{sample}.fastp.html', name='~{sample}.fastp.html'), type='str', desc='html report file')
+    cmd.args['json'] = Argument(prefix='-j ', value=TmpVar(value=f'{sample}.fastp.json', name='~{sample}.fastp.json') , type='str', desc='html report file')
     # 下面的outputs设置起初是为了能够生成wdl设置,
     cmd.outputs['out1'] = Output(value="{out1}", type='outfile')  # 这里使用”{}“引用其他Argument对象作为输入
     cmd.outputs['out2'] = Output(value="{out2}")
