@@ -212,7 +212,7 @@ def TNfilter(tumor_sample):
     cmd.args['contamination'] = Argument(prefix='--contamination ', type='infile', level='optional', desc='file containing the contamination information produced by ContaminationModel')
     cmd.args['tumor_segments'] = Argument(prefix='--tumor_segments ', type='infile', level='optional', desc='file containing the tumor segments information produced by ContaminationModel')
     cmd.args['orientation_data'] = Argument(prefix='--orientation_priors ', type='infile', level='optional', desc='file containing the orientation bias information produced by OrientationBias')
-    cmd.args['out_vcf'] = Argument(desc='final output vcf', value=f'{tumor_sample}.final.vcf.gz')
+    cmd.args['out_vcf'] = Argument(desc='final output vcf', value=f'{tumor_sample}.somatic.vcf.gz')
     cmd.outputs['out_vcf'] = Output(value='{out_vcf}')
     return cmd
 
@@ -246,7 +246,7 @@ def GVCFtyper(normal_sample):
     cmd.args['known_dbsnp'] = Argument(prefix='-d ', type='infile', desc='dbsnp file')
     cmd.args['call_conf'] = Argument(prefix='--call_conf ', type='int', default=30, desc="determine the threshold of variant quality to emit a variant. Variants with quality less than CONFIDENCE will be not be added to the output VCF file.")
     cmd.args['genotype_model'] = Argument(prefix='--genotype_model ', range={"coalescent", "multinomial"}, default='multinomial', desc="determines which model to use for genotyping and QUAL calculation")
-    cmd.args['out_vcf'] = Argument(value=f'{normal_sample}.vcf.gz', desc='output vcf file')
+    cmd.args['out_vcf'] = Argument(value=f'{normal_sample}.germline.vcf.gz', desc='output vcf file')
     cmd.outputs['out_vcf'] = Output(value='{out_vcf}')
     cmd.outputs['out_vcf_idx'] = Output(value='{out_vcf}.tbi')
     return cmd
