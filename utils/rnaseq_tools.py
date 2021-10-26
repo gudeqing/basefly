@@ -11,7 +11,7 @@ def find_files(query_dir, names:tuple):
     for root, dirs, files in os.walk(query_dir):
         for each in files:
             for ind, target in enumerate(names):
-                if re.match(target, each):
+                if re.fullmatch(target, each):
                     results[ind].append(os.path.join(root, each))
     return results
 
