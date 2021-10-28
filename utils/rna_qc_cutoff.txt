@@ -1,6 +1,6 @@
 Field	Description	unit	type	lower_limit	upper_limit
-Number of input reads	总paired-read数目	read	int	none	none
-PCT_mapped_reads	总体比对率	percent	float	0.8	1
+Number of input reads	总paired-read数目	read	int	20000000	none
+PCT_mapped_reads	总体比对率	percent	float	0.75	1
 Average input read length	平均paired-read长度	base	int	none	none
 Uniquely mapped reads number	能唯一比对到基因组的read数目	read	int	none	none
 Uniquely mapped reads %	能唯一比对到基因组的read占总reads的比例	percent	float	0.65	1
@@ -11,14 +11,14 @@ Number of reads mapped to too many loci	能比对到基因组的位置数超过2
 % of reads unmapped: too many mismatches	由于错配太多而无法比对到基因组的read总占比	percent	float	none	none
 % of reads unmapped: too short	不能较好地比对到参考基因组的reads总占比，一条read的比对质量差的原因主要有两种，一种是trimmed后的序列太短，第二种是read中能比对到参考基因组的部分占整条read的比例太少，如150bp的read中仅有50个碱基能比对到参考基因组。	percent	float	none	none
 % of reads unmapped: other	由于其他原因而不能比对到参考基因组的read总占比	percent	float	none	none
-STRAND_BALANCE	比对平衡率，比对到正链的reads的总占比	percent	float	0.45	0.55
+STRAND_BALANCE	比对平衡率，比对到正链的reads的总占比	percent	float	none	none
 Duplication_rate	重复reads总占比，如果两条reads比对到基因组的位置是一样的，则认为是重复(duplication)的	percent	float	0	0.75
 PF_ALIGNED_BASES	The total number of aligned PF bases. Non-primary alignments are not counted. Bases in aligned reads that do not correspond to reference (e.g. soft clips, insertions) are not counted.	base	int	none	none
-PCT_RIBOSOMAL_BASES	Fraction of PF_ALIGNED_BASES that mapped to regions encoding ribosomal RNA, RIBOSOMAL_BASES/PF_ALIGNED_BASES	percent	float	0	0.3
+PCT_RIBOSOMAL_BASES	Fraction of PF_ALIGNED_BASES that mapped to regions encoding ribosomal RNA, RIBOSOMAL_BASES/PF_ALIGNED_BASES	percent	float	0	0.15
 PCT_CODING_BASES	Fraction of PF_ALIGNED_BASES that mapped to protein coding regions of genes, CODING_BASES/PF_ALIGNED_BASES	percent	float	0.35	1
 PCT_INTERGENIC_BASES	Fraction of PF_ALIGNED_BASES that mapped to intergenic regions of genomic DNA, INTERGENIC_BASES/PF_ALIGNED_BASES	percent	float	none	none
 PCT_INTRONIC_BASES	Fraction of PF_ALIGNED_BASES that correspond to gene introns, INTRONIC_BASES/PF_ALIGNED_BASES	percent	float	none	none
-PCT_UTR_BASES	Fraction of PF_ALIGNED_BASES that mapped to untranslated regions (UTR) of genes, UTR_BASES/PF_ALIGNED_BASES	percent	float	0	0.6
+PCT_UTR_BASES	Fraction of PF_ALIGNED_BASES that mapped to untranslated regions (UTR) of genes, UTR_BASES/PF_ALIGNED_BASES	percent	float	0	0.8
 PCT_MRNA_BASES	Sum of bases mapped to regions corresponding to UTRs and coding regions of mRNA transcripts, PCT_UTR_BASES + PCT_CODING_BASES	percent	float	0.6	1
 MEDIAN_3PRIME_BIAS	The median 3 prime bias of the 1000 most highly expressed transcripts, where 3 prime bias is calculated per transcript as: mean coverage of the 3 prime-most 100 bases divided by the mean coverage of the whole transcript.	bias	float	0.1	1
 MEDIAN_5PRIME_BIAS	The median 5 prime bias of the 1000 most highly expressed transcripts. The 5 prime bias is calculated per transcript as: mean coverage of the 5 prime-most 100 bases divided by the mean coverage of the whole transcript.	bias	float	0.1	1
