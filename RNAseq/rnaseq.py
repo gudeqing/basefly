@@ -13,6 +13,8 @@ __author__ = 'gdq'
 4. star-fusion
 5. picard collectrnaseqmetrics QC: rRNA, mRNA percent
 6. arcasHLA
+to do list:
+7. https://icbi-lab.github.io/immunedeconv/
 """
 
 
