@@ -22,7 +22,7 @@ def add_exp_to_vcf():
     cmd.args['expression-column'] = Argument(prefix='--expression-column ',  default='TPM', desc='The column header in the expression_file for the column containing expression data.')
     cmd.args['sample-name'] = Argument(prefix='--sample-name ',  desc='If the input_vcf contains multiple samples, the name of the sample to annotate')
     cmd.args['output-vcf'] = Argument(prefix='--output-vcf ', desc='Path to write the output VCF file.')
-    cmd.args['ignore-ensembl-id-version'] = Argument(prefix='--ignore-ensembl-id-version', type='bool', default=False, desc='Assumes that the final period and number denotes the Ensembl ID version and ignores it ')
+    cmd.args['ignore-ensembl-id-version'] = Argument(prefix='--ignore-ensembl-id-version', type='bool', default=True, desc='Assumes that the final period and number denotes the Ensembl ID version and ignores it ')
     cmd.args['input-vcf'] = Argument(prefix='', type='infile', desc='A VEP-annotated VCF file')
     cmd.args['expression-file'] = Argument(prefix='', type='infile', desc='A TSV file containing expression estimates')
     cmd.args['_x'] = Argument(value='custom', type='fix')
@@ -113,6 +113,27 @@ def generate_aggregated_report():
     return cmd
 
 
+def get_2digits_hla_genetype(table, sample, alleles):
+    """prepare for pvacseq tool"""
+    df = pd.read_table(table, index_col=0)
+    targets = list()
+    for each in df.loc[sample]:
+        a, b = each.split('|')[:2]
+        if a.startswith(alleles):
+            allele_2_digit = ':'.join(a.split(':')[:2])
+            if allele_2_digit not in targets:
+                if allele_2_digit.startswith(('A*', 'B*', 'C*', 'E*', 'F*', 'G*')):
+                    allele_2_digit = 'HLA-' + allele_2_digit
+                targets.append(allele_2_digit)
+        if b.startswith(alleles):
+            allele_2_digit = ':'.join(b.split(':')[:2])
+            if allele_2_digit not in targets:
+                if allele_2_digit.startswith(('A*', 'B*', 'C*', 'E*', 'F*', 'G*')):
+                    allele_2_digit = 'HLA-' + allele_2_digit
+                targets.append(allele_2_digit)
+    return targets
+
+
 def phasing_vcf():
     # hapcut2 to phase unzipped vcf with bam
     pass
@@ -151,21 +172,6 @@ def pipeline():
                 lst = line.strip().split('\t')
                 vcf_dict[lst[0]] = lst[1]
 
-    def get_2digits_hla_genetype(table, sample, alleles):
-        df = pd.read_table(table, index_col=0)
-        targets = list()
-        for each in df.loc[sample]:
-            a, b = each.split('|')[:2]
-            if a.startswith(alleles):
-                allele_2_digit = ':'.join(a.split(':')[:2])
-                if allele_2_digit not in targets:
-                    targets.append(allele_2_digit)
-            if b.startswith(alleles):
-                allele_2_digit = ':'.join(b.split(':')[:2])
-                if allele_2_digit not in targets:
-                    targets.append(allele_2_digit)
-        return targets
-
     for tumor, normal in pair_list:
         # add gene exp to vcf
         add_exp_task, args = wf.add_task(add_exp_to_vcf(), name=f'addGeneExp-{tumor}')
@@ -192,6 +198,7 @@ def pipeline():
         args['input_file'].value = add_exp_task.outputs['output-vcf']
         args['tumor-sample-name'].value = tumor
         args['normal-sample-name'].value = normal
+        # use HLA gene-type from tumor or normal??
         args['allele'].value = ','.join(get_2digits_hla_genetype(wf.args.hla_genotype, tumor, alleles=wf.args.alleles))
 
     wf.run()
