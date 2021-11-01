@@ -253,6 +253,9 @@ class Task:
             self.cmd.outputs[key].name = key
         # 继承 cmd 的outputs
         self.outputs = self.cmd.outputs
+        for each in self.depends:
+            if type(each) != uuid4:
+                raise Exception(f'you did not provide a valid "depends" for task {self.name} !')
 
     def argo_template(self, wf_tasks):
         # 仅输入文件需要作处理，其他参数如数字或字符串已经在command中硬编码好了
