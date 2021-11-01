@@ -186,7 +186,10 @@ class Command:
                         value_dict[k] = v.value or v.default
                     else:
                         value_dict[k] = v.value.value
-                arg_value = arg_value.value.replace('~', '').format(**value_dict)
+                try:
+                    arg_value = arg_value.value.replace('~', '').format(**value_dict)
+                except KeyError as e:
+                    print(e, f'=> failed to format value of {arg_name}')
             elif type(arg_value) == TopVar or type(arg_value) == TmpVar:
                 arg_value = arg_value.value
             elif type(arg_value) == list:
