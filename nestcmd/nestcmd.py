@@ -256,8 +256,10 @@ class Task:
             self.cmd.outputs[key].name = key
         # 继承 cmd 的outputs
         self.outputs = self.cmd.outputs
-        for each in self.depends:
-            if type(each) != UUID:
+        for ind, each in enumerate(self.depends):
+            if hasattr(each, 'task_id'):
+                self.depends[ind] = each.task_id
+            elif type(each) != UUID:
                 raise Exception(f'valid "depends" for task {self.name} should be UUID object !')
 
     def argo_template(self, wf_tasks):
