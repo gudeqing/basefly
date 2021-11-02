@@ -4,7 +4,7 @@ import json
 import sys
 import argparse
 from functools import partial
-from uuid import uuid4
+from uuid import uuid4, UUID
 from dataclasses import dataclass, field
 # from typing import Any, List, Dict, Literal
 from typing import Any, List, Dict
@@ -257,8 +257,8 @@ class Task:
         # 继承 cmd 的outputs
         self.outputs = self.cmd.outputs
         for each in self.depends:
-            if type(each) != uuid4:
-                raise Exception(f'you did not provide a valid "depends" for task {self.name} !')
+            if type(each) != UUID:
+                raise Exception(f'valid "depends" for task {self.name} should be UUID object !')
 
     def argo_template(self, wf_tasks):
         # 仅输入文件需要作处理，其他参数如数字或字符串已经在command中硬编码好了
