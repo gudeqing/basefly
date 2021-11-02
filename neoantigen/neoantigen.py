@@ -166,7 +166,7 @@ def mutscan():
     cmd.runtime.tool = '/opt/mutscan'
     cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 file name')
     cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 file name')
-    cmd.args['vcf'] = Argument(prefix='-mutation ', type='infile', desc='mutation file name, can be a CSV format or a VCF format')
+    cmd.args['vcf'] = Argument(prefix='-m ', type='infile', desc='mutation file name, can be a CSV format or a VCF format')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='reference fasta file name (only needed when mutation file is a VCF)')
     cmd.args['html'] = Argument(prefix='-h ', desc='html report')
     cmd.args['json'] = Argument(prefix='-j ', desc='json report')
