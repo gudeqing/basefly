@@ -31,6 +31,38 @@ def add_exp_to_vcf():
     return cmd
 
 
+def bam_read_count():
+    cmd = Command()
+    cmd.meta.name = 'bamReadCount'
+    cmd.runtime.image = 'gudeqing/neoantigen:1.0'
+    cmd.runtime.tool = 'python /opt/bam_readcount_helper.py'
+    cmd.args['vcf'] = Argument(prefix='-vcf_file ', type='infile', desc='somatic vcf file')
+    cmd.args['bam'] = Argument(prefix='-bam_file ', type='infile', desc='rnaseq bam file')
+    cmd.args['sample'] = Argument(prefix='-sample ', desc='sample name, will be used as prefix of output file')
+    cmd.args['ref_fasta'] = Argument(prefix='-ref_fasta ', type='infile', desc='reference sequence in the fasta format.')
+    cmd.args['min-base-quality'] = Argument(prefix='-min_base_qual ', default=20, desc='minimum base quality at a position to use the read for counting.')
+    cmd.args['output_dir'] = Argument(prefix='-output_dir ', default='./', desc='output dir')
+    cmd.args['not_only_pass'] = Argument(prefix='-not_only_pass', type='bool', default=False, desc='indicate if to only include filter="PASS" variant')
+    cmd.outputs['indel_readcount'] = Output(value='{sample}.bam_readcount.indel.tsv')
+    cmd.outputs['snv_readcount'] = Output(value='{sample}.bam_readcount.snv.tsv')
+    return cmd
+
+
+def add_read_count_to_vcf():
+    cmd = Command()
+    cmd.meta.name = 'vcf-readcount-annotator'
+    cmd.runtime.image = 'gudeqing/neoantigen:1.0'
+    cmd.runtime.tool = 'vcf-readcount-annotator'
+    cmd.args['sample'] = Argument(prefix='-s ', desc='sample to annotate')
+    cmd.args['out_vcf'] = Argument(prefix='-o ', desc='output vcf')
+    cmd.args['variant_type'] = Argument(prefix='-t ', default='all', desc='The type of variant to process.')
+    cmd.args['in_vcf'] = Argument(type='infile', desc='input vcf file')
+    cmd.args['read_count_file'] = Argument(type='infile', desc='input bam_readcount file')
+    cmd.args['seq_type'] = Argument(default='RNA', desc='The type of data in the bam_readcount_file. If `DNA` is chosen, the readcounts will be written to the AD, AF, and DP fields. If `RNA` is chosen, the readcounts will be written to the RAD, RAF, and RDP fields.')
+    cmd.outputs['output-vcf'] = Output(value='{out_vcf}')
+    return cmd
+
+
 def pvacseq():
     """
     usage: pvacseq run [-h] [-e1 CLASS_I_EPITOPE_LENGTH]
@@ -102,15 +134,15 @@ def pvacseq():
     return cmd
 
 
-def generate_aggregated_report():
-    cmd = Command()
-    cmd.meta.name = 'pvacseq'
-    cmd.runtime.image = 'griffithlab/pvactools:latest'
-    cmd.runtime.tool = 'pvacseq generate_aggregated_report'
-    cmd.args['input_file'] = Argument(desc='A pVACseq .all_epitopes.tsv report file')
-    cmd.args['output_file'] = Argument(desc='The file path to write the aggregated report tsv to')
-    cmd.outputs['output_file'] = Output(value='{output_file}', type='outfile')
-    return cmd
+# def generate_aggregated_report():
+#     cmd = Command()
+#     cmd.meta.name = 'pvacseq'
+#     cmd.runtime.image = 'griffithlab/pvactools:latest'
+#     cmd.runtime.tool = 'pvacseq generate_aggregated_report'
+#     cmd.args['input_file'] = Argument(desc='A pVACseq .all_epitopes.tsv report file')
+#     cmd.args['output_file'] = Argument(desc='The file path to write the aggregated report tsv to')
+#     cmd.outputs['output_file'] = Output(value='{output_file}', type='outfile')
+#     return cmd
 
 
 def get_2digits_hla_genetype(table, sample, alleles):
@@ -155,6 +187,8 @@ def pipeline():
     wf.add_argument('-pair_info', required=True, help='tumor-normal pair info without header, first column is tumor sample name')
     wf.add_argument('-hla_genotype', required=True, help='HLA genetype table with header consiting of HLA gene name, index is tumor sample name. Each element data is genetype detail.')
     wf.add_argument('-alleles', default=('A', 'B', 'C', 'DRA', 'DRB', 'DQA', 'DQB'), nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
+    wf.add_argument('-rna_bams', required=False, help='rnaseq bam list file with two columns, first column is normal sample name, second column is bam path')
+    wf.add_argument('-ref_fasta', required=False, help='reference fasta file')
     wf.parse_args()
 
     pair_list = []
@@ -169,8 +203,15 @@ def pipeline():
     if wf.args.vcfs:
         with open(wf.args.vcfs) as f:
             for line in f:
-                lst = line.strip().split('\t')
+                lst = line.strip().split('\t')[:2]
                 vcf_dict[lst[0]] = lst[1]
+
+    bam_dict = dict()
+    if wf.args.rna_bams:
+        with open(wf.args.rna_bams) as f:
+            for line in f:
+                lst = line.strip().split('\t')[:2]
+                bam_dict[lst[0]] = lst[1]
 
     for tumor, normal in pair_list:
         # add gene exp to vcf
@@ -193,13 +234,38 @@ def pipeline():
             args['exp-type'].value = 'transcript'
             args['output-vcf'].value = f'{tumor}.somatic.gx.tx.vcf'
 
+        add_readcount_indel = None
+        if wf.args.rna_bams:
+            readcount_task, args = wf.add_task(bam_read_count(), name=f'bamReadCount-{tumor}')
+            args['vcf'].value = os.path.abspath(vcf_dict[tumor])
+            args['bam'].value = os.path.abspath(bam_dict[tumor])
+            args['sample'].value = tumor
+            if not wf.args.ref_fasta:
+                raise Exception('ref_fasta is not provided!')
+            args['ref_fasta'].value = os.path.abspath(wf.args.ref_fasta)
+
+            add_readcount_snv, args = wf.add_task(add_read_count_to_vcf(), name=f'addRnaSNV-{tumor}', depends=[readcount_task.task_id, add_exp_task.task_id])
+            args['sample'].value = tumor
+            args['variant_type'].value = 'snv'
+            args['in_vcf'].value = add_exp_task.outputs['output-vcf']
+            args['out_vcf'].value = f'{tumor}.somatic.withRNAsnv.vcf.gz'
+            args['read_count_file'].value = readcount_task.outputs['snv_readcount']
+
+            add_readcount_indel, args = wf.add_task(add_read_count_to_vcf(), name=f'addRnaIndel-{tumor}', depends=[readcount_task.task_id, add_readcount_snv.task_id])
+            args['sample'].value = tumor
+            args['variant_type'].value = 'indel'
+            args['in_vcf'].value = add_readcount_snv.outputs['output-vcf']
+            args['out_vcf'].value = f'{tumor}.somatic.final.vcf.gz'
+            args['read_count_file'].value = readcount_task.outputs['indel_readcount']
+
         # pvacseq
-        predict_task, args = wf.add_task(pvacseq(), name=f'pvacseq-{tumor}', depends=[add_exp_task.task_id])
-        args['input_file'].value = add_exp_task.outputs['output-vcf']
+        depend_task = add_readcount_indel or add_exp_task
+        predict_task, args = wf.add_task(pvacseq(), name=f'pvacseq-{tumor}', depends=[depend_task.task_id])
+        args['input_file'].value = depend_task.outputs['output-vcf']
         args['tumor-sample-name'].value = tumor
         args['normal-sample-name'].value = normal
         # use HLA gene-type from tumor or normal??
-        args['allele'].value = ','.join(get_2digits_hla_genetype(wf.args.hla_genotype, tumor, alleles=wf.args.alleles))
+        args['allele'].value = ','.join(get_2digits_hla_genetype(wf.args.hla_genotype, normal, alleles=wf.args.alleles))
 
     wf.run()
 
