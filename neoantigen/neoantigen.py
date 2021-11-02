@@ -172,7 +172,7 @@ def mutscan():
     cmd.args['json'] = Argument(prefix='-j ', desc='json report')
     cmd.args['threads'] = Argument(prefix='-t ', default=4, desc='worker thread number, default is 4')
     cmd.args['support'] = Argument(prefix='-S ', default=3, desc='min read support required to report a mutation')
-    cmd.args['mark'] = Argument(prefix='-k ', default='PASS', desc='when mutation file is a vcf file, --mark means only process the records with FILTER column is M')
+    cmd.args['mark'] = Argument(prefix='-k ', level='optional', desc='when mutation file is a vcf file, --mark means only process the records with FILTER column is M')
     cmd.outputs['html'] = Output(value='{html}')
     cmd.outputs['json'] = Output(value='{json}')
     return cmd
@@ -250,8 +250,8 @@ def pipeline():
             args['read2'].value = os.path.abspath(fastq_dict[tumor][1])
             args['vcf'].value = os.path.abspath(vcf_dict[tumor])
             args['ref'].value = os.path.abspath(wf.args.ref_fasta)
-            args['html'].value = f'{sample}.mutscan.html'
-            args['json'].value = f'{sample}.mutscan.json'
+            args['html'].value = f'{tumor}.mutscan.html'
+            args['json'].value = f'{tumor}.mutscan.json'
 
         add_readcount_indel = None
         if bam_dict:
