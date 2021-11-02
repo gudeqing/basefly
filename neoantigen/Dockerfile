@@ -32,3 +32,15 @@ ENV LD_LIBRARY_PATH /opt/htslib-1.13/
 ENV HAPCUT2_URL=https://github.com/vibansal/HapCUT2/archive/refs/tags/v.1.3.3.tar.gz
 RUN cd /opt && curl -L $HAPCUT2_URL | tar -xz && cd HapCUT* && make && make install
 
+# install bam-readcount
+RUN apt update && apt install -y cmake
+RUN cd /opt && wget https://github.com/genome/bam-readcount/archive/refs/heads/master.zip && \
+    unzip master.zip && rm master.zip && \
+    cd bam-readcount-master && mkdir build && cd build && \
+    cmake .. && make && make install
+
+WORKDIR /opt
+COPY bam_readcount_helper.py /opt/bam_readcount_helper.py
+ENV PS1="\[\e[37;40m\][\[\e[32;40m\]\u\[\e[37;40m\]@\t \[\e[36;40m\]\w\[\e[0m\]]\\n$ "
+RUN echo "alias ls='ls --color=auto'" >> ~/.bashrc && echo "alias ll='ls --color=auto -l'" >> ~/.bashrc
+RUN cd /opt && wget http://opengene.org/MutScan/mutscan && chmod a+x ./mutscan

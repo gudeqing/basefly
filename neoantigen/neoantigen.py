@@ -9,7 +9,8 @@ __author__ = 'gdq'
 1. recommend to input vep annotated Vcf
 2. add transcript expression info to Vcf
 3. run pvacseq
-4. aggregate
+4. run mutscan to get rnaseq variant support read number which could be further used to sort or filter neoantigen
+当前测试发现 bam readcount的步骤存在问题, 选择使用mutscan
 """
 
 
@@ -120,11 +121,14 @@ def pvacseq():
     cmd.args['normal-sample-name'] = Argument(prefix='--normal-sample-name ', level='optional', desc="In a multi-sample VCF, the name of the matched normal sample")
     cmd.args['phased-proximal-variants-vcf'] = Argument(prefix='--phased-proximal-variants-vcf ', type='infile', level='optional', desc='A VCF with phased proximal variant information. Must be gzipped and tabix indexed.')
     cmd.args['minimum-fold-change'] = Argument(prefix='--minimum-fold-change ', default=1.0, desc='Minimum fold change between mutant (MT) binding score and wild-type (WT) score (fold change = WT/MT). The default is 0, which filters no results, but 1 is often a sensible choice (requiring that binding is better to the MT than WT peptide). This fold change is sometimes referred to as a differential agretopicity index.')
-    cmd.args['normal-cov'] = Argument(prefix='--normal-cov ', default=5, desc='Normal Coverage Cutoff')
+    # 如果使用normal cov去筛选突变，意味normal样本必需在该位点也能检测到，考虑到分析结果中，新抗原的结果并不多，将该值设为0
+    cmd.args['normal-cov'] = Argument(prefix='--normal-cov ', default=0, desc='Normal Coverage Cutoff')
     cmd.args['tdna-cov'] = Argument(prefix='--tdna-cov ', default=15, desc='Tumor DNA Coverage Cutoff.')
-    cmd.args['trna-cov'] = Argument(prefix='--trna-cov ', default=15, desc='Tumor RNA Coverage Cutoff. Only sites above this read depth cutoff will be considered')
+    cmd.args['trna-cov'] = Argument(prefix='--trna-cov ', default=5, desc='Tumor RNA Coverage Cutoff. Only sites above this read depth cutoff will be considered')
     cmd.args['tdna-vaf'] = Argument(prefix='--tdna-vaf ', default=0.05, desc='Tumor DNA VAF Cutoff. Only sites above this cutoff will be considered')
     cmd.args['trna-vaf'] = Argument(prefix='--trna-vaf ', default=0.0, desc='Tumor RNA VAF Cutoff. Only sites above this cutoff will be considered')
+    # 下面这个条件放松，如果正常样本存在一定的肿瘤样本污染，还是有可能出现较高vaf
+    cmd.args['normal-vaf'] = Argument(prefix='--normal-vaf ', default=0.2, desc='Normal VAF Cutoff. Only sites BELOW this cutoff in normal will be considered')
     cmd.args['expn-val'] = Argument(prefix='--expn-val ', default=1.0, desc='Gene and Transcript Expression cutoff. Only sites above this cutoff will be considered.')
     cmd.args['maximum-transcript-support-level'] = Argument(prefix='--maximum-transcript-support-level ', default=1, range=[1,2,3,4,5], desc="The threshold to use for filtering epitopes on the Ensembl transcript support level (TSL). Keep all epitopes with a transcript support level <= to this cutoff")
     cmd.args['pass-only'] = Argument(prefix='--pass-only', type='bool', default=True, desc='Only process VCF entries with a PASS status.')
@@ -132,17 +136,6 @@ def pvacseq():
     cmd.outputs['all_epitopes'] = Output(value='{output_dir}/*.all_epitopes.tsv', type='outfile')
     cmd.outputs['aggregated_epitopes'] = Output(value='{output_dir}/*.aggregated.tsv', type='outfile')
     return cmd
-
-
-# def generate_aggregated_report():
-#     cmd = Command()
-#     cmd.meta.name = 'pvacseq'
-#     cmd.runtime.image = 'griffithlab/pvactools:latest'
-#     cmd.runtime.tool = 'pvacseq generate_aggregated_report'
-#     cmd.args['input_file'] = Argument(desc='A pVACseq .all_epitopes.tsv report file')
-#     cmd.args['output_file'] = Argument(desc='The file path to write the aggregated report tsv to')
-#     cmd.outputs['output_file'] = Output(value='{output_file}', type='outfile')
-#     return cmd
 
 
 def get_2digits_hla_genetype(table, sample, alleles):
@@ -166,20 +159,29 @@ def get_2digits_hla_genetype(table, sample, alleles):
     return targets
 
 
-def phasing_vcf():
-    # hapcut2 to phase unzipped vcf with bam
-    pass
-
-
-def combine_germline_somatic_vcf():
-    # bcftools
-    pass
+def mutscan():
+    cmd = Command()
+    cmd.meta.name = 'mutscan'
+    cmd.runtime.image = 'gudeqing/neoantigen:1.0'
+    cmd.runtime.tool = '/opt/mutscan'
+    cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 file name')
+    cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 file name')
+    cmd.args['vcf'] = Argument(prefix='-mutation ', type='infile', desc='mutation file name, can be a CSV format or a VCF format')
+    cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='reference fasta file name (only needed when mutation file is a VCF)')
+    cmd.args['html'] = Argument(prefix='-h ', desc='html report')
+    cmd.args['json'] = Argument(prefix='-j ', desc='json report')
+    cmd.args['threads'] = Argument(prefix='-t ', default=4, desc='worker thread number, default is 4')
+    cmd.args['support'] = Argument(prefix='-S ', default=3, desc='min read support required to report a mutation')
+    cmd.args['mark'] = Argument(prefix='-k ', default='PASS', desc='when mutation file is a vcf file, --mark means only process the records with FILTER column is M')
+    cmd.outputs['html'] = Output(value='{html}')
+    cmd.outputs['json'] = Output(value='{json}')
+    return cmd
 
 
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'neoantigen-pipeline'
-    wf.meta.desc = 'neoantigen prediction pipeline for multiple samples'
+    wf.meta.desc = 'neoantigen prediction pipeline for multiple samples using pvactools'
     wf.init_argparser()
     wf.add_argument('-gene_expr', required=True, help='gene expression table with header consisting of tumor sample name')
     wf.add_argument('-trans_expr', required=False, help='transcript expression table with header consisting of tumor sample name')
@@ -187,8 +189,9 @@ def pipeline():
     wf.add_argument('-pair_info', required=True, help='tumor-normal pair info without header, first column is tumor sample name')
     wf.add_argument('-hla_genotype', required=True, help='HLA genetype table with header consiting of HLA gene name, index is tumor sample name. Each element data is genetype detail.')
     wf.add_argument('-alleles', default=('A', 'B', 'C', 'DRA', 'DRB', 'DQA', 'DQB'), nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
-    wf.add_argument('-rna_bams', required=False, help='rnaseq bam list file with two columns, first column is normal sample name, second column is bam path')
-    wf.add_argument('-ref_fasta', required=False, help='reference fasta file')
+    wf.add_argument('-rna_bams', required=False, help='rnaseq bam list file with two columns, first column is normal sample name, second column is bam path. This bam will be used to add RNA coverage and RNA VAF using bam_readcount.')
+    wf.add_argument('-ref_fasta', required=False, help='reference fasta file, which is need when rna_bams provided or fastq info provided')
+    wf.add_argument('-fastq_info', required=False, help='a file with three columns: [sample_name, read1_path, read2_path]')
     wf.parse_args()
 
     pair_list = []
@@ -213,6 +216,13 @@ def pipeline():
                 lst = line.strip().split('\t')[:2]
                 bam_dict[lst[0]] = lst[1]
 
+    fastq_dict = dict()
+    if wf.args.fastq_info:
+        with open(wf.args.fastq_info) as f:
+            for line in f:
+                sample, r1, r2 = line.strip().split()
+                fastq_dict[sample] = [r1, r2]
+
     for tumor, normal in pair_list:
         # add gene exp to vcf
         add_exp_task, args = wf.add_task(add_exp_to_vcf(), name=f'addGeneExp-{tumor}')
@@ -234,8 +244,17 @@ def pipeline():
             args['exp-type'].value = 'transcript'
             args['output-vcf'].value = f'{tumor}.somatic.gx.tx.vcf'
 
+        if fastq_dict:
+            mutscan_task, args = wf.add_task(mutscan(), name=f'mutscan-{tumor}')
+            args['read1'].value = os.path.abspath(fastq_dict[tumor][0])
+            args['read2'].value = os.path.abspath(fastq_dict[tumor][1])
+            args['vcf'].value = os.path.abspath(vcf_dict[tumor])
+            args['ref'].value = os.path.abspath(wf.args.ref_fasta)
+            args['html'].value = f'{sample}.mutscan.html'
+            args['json'].value = f'{sample}.mutscan.json'
+
         add_readcount_indel = None
-        if wf.args.rna_bams:
+        if bam_dict:
             readcount_task, args = wf.add_task(bam_read_count(), name=f'bamReadCount-{tumor}')
             args['vcf'].value = os.path.abspath(vcf_dict[tumor])
             args['bam'].value = os.path.abspath(bam_dict[tumor])
@@ -273,8 +292,3 @@ def pipeline():
 if __name__ == '__main__':
     from xcmds import xcmds
     xcmds.xcmds(locals(), include=['pipeline'])
-
-
-
-
-
