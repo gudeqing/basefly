@@ -258,6 +258,7 @@ def merge_hisat_genotype(query_dir, outdir='.', name_pattern='.*.HLA-gene-type.t
                 return 'unknown|unknown'
 
     df2 = df[[x for x in df.columns if x.startswith('EM:')]].applymap(apply_diploid_split)
+    df2.columns = [x.split()[1] for x in df.columns]
     df2.to_csv(os.path.join(outdir, 'hisat_genotype.diploid.txt'), sep='\t')
 
 
