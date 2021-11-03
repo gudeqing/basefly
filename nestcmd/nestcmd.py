@@ -118,7 +118,7 @@ class RunTime:
     max_memory: int = 0
     max_cpu: int = 0
     # 运行时间上线
-    timeout: int = 3600*24
+    timeout: int = 3600*24*3
 
 @dataclass()
 class Output:
