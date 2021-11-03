@@ -120,6 +120,7 @@ class RunTime:
     # 运行时间上线
     timeout: int = 3600*24*3
 
+
 @dataclass()
 class Output:
     path: str = None  # will be deprecated, replace with value
