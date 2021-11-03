@@ -30,6 +30,10 @@ def pipeline():
     wf.add_argument('-ref_fasta', required=False, help='reference fasta file, which is need when rna_bams provided or fastq info provided')
     wf.parse_args()
 
+    sample_has_expr = []
+    with open(wf.args.gene_expr) as f:
+        sample_has_expr = f.readline().strip().split()
+
     pair_list = []
     if wf.args.pair_info:
         with open(wf.args.pair_info) as f:
@@ -52,20 +56,24 @@ def pipeline():
                 lst = line.strip().split('\t')[:2]
                 bam_dict[lst[0]] = lst[1]
 
-    fastq_dict = dict()
-    if wf.args.fastq_info:
-        with open(wf.args.fastq_info) as f:
-            for line in f:
-                sample, r1, r2 = line.strip().split()
-                fastq_dict[sample] = [r1, r2]
+    no_exp_samples = set(x[0] for x in pair_list) - set(sample_has_expr)
+    if no_exp_samples:
+        print('these samples are not in expression matrix', no_exp_samples)
 
     for tumor, normal in pair_list:
+        tumor_exp_sample_name = tumor
+        if tumor not in sample_has_expr:
+            tmp_dict = {'P48_L': 'P48_L1', 'P31_L': 'P31_L1'}
+            if tumor in tmp_dict:
+                tumor_exp_sample_name = tmp_dict[tumor]
+            else:
+                print(f'{tumor} is not in expression matrix and the pair({tumor} vs {normal}) will be skipped for neoantigen analysis')
         # add gene exp to vcf
         add_exp_task, args = wf.add_task(add_exp_to_vcf(), name=f'addGeneExp-{tumor}')
         args['input-vcf'].value = os.path.abspath(vcf_dict[tumor])
         args['expression-file'].value = os.path.abspath(wf.args.gene_expr)
         args['sample-name'].value = tumor
-        args['expression-column'].value = tumor
+        args['expression-column'].value = tumor_exp_sample_name
         args['exp-type'].value = 'gene'
         args['id-column'].value = 'Name'
         args['output-vcf'].value = f'{tumor}.somatic.gx.vcf'
@@ -75,7 +83,7 @@ def pipeline():
             args['input-vcf'].value = out_vcf
             args['expression-file'].value = os.path.abspath(wf.args.trans_expr)
             args['sample-name'].value = tumor
-            args['expression-column'].value = tumor
+            args['expression-column'].value = tumor_exp_sample_name
             args['id-column'].value = 'Name'
             args['exp-type'].value = 'transcript'
             args['output-vcf'].value = f'{tumor}.somatic.gx.tx.vcf'
