@@ -236,7 +236,7 @@ def TNfilter(tumor_sample):
     return cmd
 
 
-def Haplotyper(normal_sample):
+def Haplotyper(sample):
     cmd = Command()
     cmd.meta.name = 'Haplotyper'
     cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02'
@@ -246,9 +246,12 @@ def Haplotyper(normal_sample):
     cmd.args['recal_data'] = Argument(prefix='-q ', type='infile', desc='tumor and normal recal data list')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='reference fasta file')
     cmd.args['method'] = Argument(type='fix', value='--algo Haplotyper')
-    cmd.args['emit_mode'] = Argument(prefix='--emit_mode ', default='gvcf', desc='determines what calls will be emitted. possible values:variant,confident,all,gvcf')
+    cmd.args['emit_mode'] = Argument(prefix='--emit_mode ', level='optional', desc='determines what calls will be emitted. possible values:variant,confident,all,gvcf')
     cmd.args['ploidy'] = Argument(prefix='--ploidy ', type='int', default=2, desc='determines the ploidy number of the sample being processed. The default value is 2.')
-    cmd.args['out_vcf'] = Argument(value=f'{normal_sample}.g.vcf.gz', desc='output vcf file')
+    cmd.args['trim_soft_clip'] = Argument(prefix='--trim_soft_clip', type='bool', default=False, desc='used for rnaseq variant calling')
+    cmd.args['call_conf'] = Argument(prefix='--call_conf ', default=30, desc='determine the threshold of variant quality to call a variant. Recommend 20 for rnaseq')
+    cmd.args['emit_conf'] = Argument(prefix='--emit_conf ', default=30, desc='determine the threshold of variant quality to emit a variant.')
+    cmd.args['out_vcf'] = Argument(value=f'{sample}.vcf.gz', desc='output vcf file')
     cmd.outputs['out_vcf'] = Output(value='{out_vcf}')
     cmd.outputs['out_vcf_idx'] = Output(value='{out_vcf}.tbi')
     return cmd
@@ -743,4 +746,22 @@ def quant_merge():
     cmd.args['genes'] = Argument(prefix='--genes ', type='bool', default=False, desc='indicate if to merge gene data, default to merge transcript data')
     cmd.args['out'] = Argument(prefix='--output ', desc='merged result file')
     cmd.outputs['out'] = Output(path="{out}")
+    return cmd
+
+
+def RNASplitReadsAtJunction(sample):
+    cmd = Command()
+    cmd.meta.name = 'RNASplitReadsAtJunction'
+    cmd.meta.desc = 'Perform the splitting of reads into exon segments and reassigning the mapping qualities from STAR'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'sentieon driver'
+    cmd.args['t'] = Argument(prefix='-t ', default=4, desc='number of threads to use in computation')
+    cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='reference fasta file')
+    cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='input bam file')
+    cmd.args['_x'] = Argument(type='fix', value='--algo RNASplitReadsAtJunction')
+    cmd.args['reassign_mapq'] = Argument(prefix='--reassign_mapq ', default='255:60', desc='reassign mapq expression')
+    cmd.args['out_bam'] = Argument(value=f'{sample}.junctionSplit.bam', desc='output bam file')
+    cmd.outputs['out_bam'] = Output(value='{out_bam}')
     return cmd

@@ -4,6 +4,7 @@ import sys; sys.path.append(script_path)
 from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar
 from utils.tidy_tools import merge_metrics, merge_star_fusion, merge_arcasHLA_genetype
 from utils.get_fastq_info import get_fastq_info
+from nestcmd.commands import RNASplitReadsAtJunction, recalibration, Haplotyper
 __author__ = 'gdq'
 
 """
@@ -245,6 +246,7 @@ def pipeline():
     wf.add_argument('--sentieon', default=False, action="store_true", help='indicate to use sentieon STAR tool')
     wf.add_argument('-fusion_index', required=True, help='star-fusion database dir')
     wf.add_argument('-transcripts_fa', required=True, help='transcriptome fasta file')
+    wf.add_argument('-genome_fa', required=False, help='genome fasta file, need for variant calling')
     wf.add_argument('-gtf', required=True, help='genome annotation file')
     wf.add_argument('-ref_flat', required=True, help='gene model file')
     wf.add_argument('-rRNA_interval', required=True, help='picard interval file of rRNA')
@@ -253,6 +255,9 @@ def pipeline():
     wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
+    wf.add_argument('-dbsnp', required=False, help='dbsnp vcf file')
+    wf.add_argument('-known_indels', required=False, help='high confidence known indel vcf file')
+    wf.add_argument('-known_mills', required=False, help='high confidence known indel vcf file')
     wf.parse_args()
 
     # add top_vars
@@ -262,7 +267,11 @@ def pipeline():
         transcripts=TopVar(value=wf.args.transcripts_fa, type='infile'),
         gtf=TopVar(value=wf.args.gtf, type='infile'),
         ref_flat=TopVar(value=wf.args.ref_flat, type='infile'),
-        rRNA_interval=TopVar(value=wf.args.rRNA_interval, type='infile')
+        rRNA_interval=TopVar(value=wf.args.rRNA_interval, type='infile'),
+        genome_fa=TopVar(value=wf.args.genome_fa, type='infile'),
+        known_dbsnp=TopVar(value=wf.args.dbsnp, type='infile'),
+        known_indels=TopVar(value=wf.args.known_indels, type='infile'),
+        known_mills=TopVar(value=wf.args.known_mills)
     ))
     if wf.args.hla_db:
         wf.topvars['hla_database'] = TopVar(value=wf.args.hla_db, type='indir')
@@ -315,6 +324,26 @@ def pipeline():
         if wf.args.hla_db:
             args['database'].value = wf.topvars['hla_database']
             args['link'].value = True
+
+        # split bam
+        split_task, args = wf.add_task(RNASplitReadsAtJunction(sample), name=f'splitBam-{sample}', depends=[star_task.task_id])
+        args['bam'].value = star_task.outputs['bam']
+        args['ref'].value = wf.topvars['genome_fa']
+
+        # recalibration
+        recal_task, args = wf.add_task(recalibration(sample), name=f'recal-{sample}', depends=[split_task.task_id])
+        args['bam'].value = split_task.outputs['out_bam']
+        args['ref'].value = wf.topvars['genome_fa']
+        args['database'].value = [wf.topvars['known_dbsnp'], wf.topvars['known_indels'], wf.topvars['known_mills']]
+
+        # haplotyper
+        hap_task, args = wf.add_task(Haplotyper(sample), name=f'haplotyper-{sample}', depends=[recal_task.task_id])
+        args['ref'].value = wf.topvars['genome_fa']
+        args['bam'].value = recal_task.outputs['out_bam']
+        args['recal_data'].value = recal_task.outputs['recal_data']
+        args['trim_soft_clip'].value = True
+        args['call_conf'].value = 20
+        args['emit_conf'].value = 20
 
     # merge transcript/gene TPM/Count
     depends = [k for k, v in wf.tasks.items() if v.name.startswith('salmon')]
