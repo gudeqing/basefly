@@ -561,6 +561,7 @@ def pipeline():
             args['bam'].value = bam_dict[normal_sample].outputs['out_bam']
             args['recal_data'].value = recal_dict[normal_sample].outputs['recal_data']
             args['intervals'].value = [top_vars['intervals']]
+            args['emit_mode'].value = 'gvcf'
 
             # gvcf-typer
             germline_task, args = wf.add_task(GVCFtyper(normal_sample), name=f'gvcfTyper-{normal_sample}', depends=[hap_task.task_id])
