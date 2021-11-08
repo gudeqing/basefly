@@ -283,6 +283,25 @@ def get_2digits_hla_genetype(table, sample, alleles):
     return targets
 
 
+def merge_epitopes(query_dir, outdir='.'):
+    patterns = ('*.filtered.tsv', )
+    files_list = find_files(query_dir, patterns)
+    for pattern, files in zip(patterns, files_list):
+        print(f'we found there are {len(files)} {pattern} files')
+        if not files:
+            return
+        os.makedirs(outdir, exist_ok=True)
+        tables = []
+        for each in files:
+            sample = os.path.basename(each).split('.filter')[0]
+            tmp = pd.read_table(each)
+            tmp['Sample'] = sample
+            tables.append(tmp.set_index('Sample'))
+        data = pd.concat(tables)
+        out_name = os.path.join(outdir, 'merged.epitopes.txt')
+        data.to_csv(out_name, sep='\t')
+
+
 if __name__ == '__main__':
     from xcmds import xcmds
     xcmds.xcmds(locals())
