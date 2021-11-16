@@ -1,4 +1,4 @@
-#! /data/users/dqgu/anaconda3/bin/python
+#! /usr/local/bin/python
 import os
 import plotly.graph_objs as go
 from plotly.offline import plot as plt
