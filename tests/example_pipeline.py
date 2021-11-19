@@ -1,5 +1,5 @@
 import sys; sys.path.append('..')
-from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar, get_fastq_info
+from basefly.basefly import Argument, Output, Command, Workflow, TopVar, TmpVar, get_fastq_info
 
 """
 注意:

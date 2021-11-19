@@ -1,4 +1,4 @@
-from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar
+from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 
 """
 参考：https://github.com/Sentieon/sentieon-scripts/blob/master/example_pipelines/somatic/TNseq/tumor_normal.sh

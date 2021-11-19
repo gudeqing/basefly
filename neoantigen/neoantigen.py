@@ -1,8 +1,8 @@
 import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
-from nestcmd.nestcmd import Workflow, Argument, Output, Command,  TopVar, TmpVar
-from nestcmd.commands import add_exp_to_vcf, bam_read_count, add_read_count_to_vcf, pvacseq
+from basefly.basefly import Workflow, Argument, Output, Command,  TopVar, TmpVar
+from basefly.commands import add_exp_to_vcf, bam_read_count, add_read_count_to_vcf, pvacseq
 from utils.tidy_tools import get_2digits_hla_genetype
 import pandas as pd
 __author__ = 'gdq'

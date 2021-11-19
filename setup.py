@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-      name='nestcmd',
+      name='basefly',
       version='1.0.0',
       url='https://github.com/gudeqing/nestcmd',
       license='MIT',

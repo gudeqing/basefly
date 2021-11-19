@@ -1,5 +1,5 @@
 import sys; sys.path.append('..')
-from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar
+from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 
 
 def stepA():

@@ -33,7 +33,7 @@ __author__ = 'gdq'
     
 5. 定义方法: 依据Task对象生成具体的cmd信息。
 6. 定义方法: 将Command/Task对象转换成wdl脚本
-7. 定义方法将workflow转换成wdl流程等、argo_workflow、nestcmd（我自定义的流程）
+7. 定义方法将workflow转换成wdl流程等、argo_workflow、basefly（我自定义的流程）
 
 注意：
 1. python3.6以后的 dict有序性对于cmd的正确解析非常重要，因为定义Argument的顺序非常重要，很多命令行要求参数有序。

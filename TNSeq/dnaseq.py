@@ -1,7 +1,7 @@
 import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
-from nestcmd.nestcmd import Argument, Output, Command, Workflow, TopVar, TmpVar
+from basefly.basefly import Argument, Output, Command, Workflow, TopVar, TmpVar
 from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
