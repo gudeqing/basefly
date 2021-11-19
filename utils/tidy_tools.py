@@ -286,11 +286,11 @@ def get_2digits_hla_genetype(table, sample, alleles):
 def merge_epitopes(query_dir, outdir='.'):
     patterns = ('.*.filtered.tsv', )
     files_list = find_files(query_dir, patterns)
+    os.makedirs(outdir, exist_ok=True)
     for pattern, files in zip(patterns, files_list):
         print(f'we found there are {len(files)} {pattern} files')
         if not files:
             return
-        os.makedirs(outdir, exist_ok=True)
         tables = []
         for each in files:
             if 'MHC_Class_I' in each:
@@ -302,6 +302,7 @@ def merge_epitopes(query_dir, outdir='.'):
         out_name = os.path.join(outdir, 'MHC_I.merged.epitopes.txt')
         data.to_csv(out_name, sep='\t')
 
+        tables = []
         for each in files:
             if 'MHC_Class_II' in each:
                 sample = os.path.basename(each).split('.filter')[0]
@@ -310,6 +311,17 @@ def merge_epitopes(query_dir, outdir='.'):
                 tables.append(tmp.set_index('Sample'))
         data = pd.concat(tables)
         out_name = os.path.join(outdir, 'MHC_II.merged.epitopes.txt')
+        data.to_csv(out_name, sep='\t')
+
+        tables = []
+        for each in files:
+            if 'combined' in each:
+                sample = os.path.basename(each).split('.filter')[0]
+                tmp = pd.read_table(each)
+                tmp['Sample'] = sample
+                tables.append(tmp.set_index('Sample'))
+        data = pd.concat(tables)
+        out_name = os.path.join(outdir, 'All.merged.epitopes.txt')
         data.to_csv(out_name, sep='\t')
 
 
