@@ -495,7 +495,7 @@ class Workflow:
             )
 
         if parameters.skip:
-            self.skip_steps(parameters.skip)
+            self.skip_steps(parameters.skip, skip_depend=not parameters.no_skip_depend)
 
         if parameters.update_args:
             self.update_args(parameters.update_args)
@@ -553,29 +553,31 @@ class Workflow:
                 if (cmd_name in cfg) and (arg_name in cfg[cmd_name]):
                     arg.value = cfg[cmd_name][arg_name]
 
-    def skip_steps(self, steps):
+    def skip_steps(self, steps, skip_depend=True):
         """
         :param steps: list containing cmd.meta.name or task.name
+        :param skip_depend: if also skip steps that depend on the steps
         :return:
         """
         task_copy = self.tasks.copy()
         skip_tasks = [tid for tid, x in self.tasks.items() if x.name in steps or x.cmd.meta.name in steps]
         # pop task
         _ = [self.tasks.pop(x) for x in skip_tasks]
-        # find out depending task
-        total_deduced_skips = list()
-        while True:
-            to_be_skip = list()
-            for tid in self.tasks.keys():
-                # print(self.tasks[tid].depends, self.tasks[tid].name)
-                if set(self.tasks[tid].depends) - set(self.tasks.keys()):
-                    to_be_skip.append(tid)
-                    total_deduced_skips.append(tid)
-            _ = [self.tasks.pop(x) for x in to_be_skip]
-            # judge if all dependencies are available
-            if all(len(set(self.tasks[x].depends) - set(self.tasks.keys())) == 0 for x in self.tasks):
-                break
-        skip_tasks += total_deduced_skips
+        if skip_depend:
+            # find out depending task
+            total_deduced_skips = list()
+            while True:
+                to_be_skip = list()
+                for tid in self.tasks.keys():
+                    # print(self.tasks[tid].depends, self.tasks[tid].name)
+                    if set(self.tasks[tid].depends) - set(self.tasks.keys()):
+                        to_be_skip.append(tid)
+                        total_deduced_skips.append(tid)
+                _ = [self.tasks.pop(x) for x in to_be_skip]
+                # judge if all dependencies are available
+                if all(len(set(self.tasks[x].depends) - set(self.tasks.keys())) == 0 for x in self.tasks):
+                    break
+            skip_tasks += total_deduced_skips
         print('All skipped tasks are:', [task_copy[tid].name for tid in skip_tasks])
 
     def list_cmd(self):
@@ -605,7 +607,8 @@ class Workflow:
         wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, 其包含流程所有软件需要的参数，该配置文件设置的参数值将是流程中最后实际用的值")
         wf_args.add_argument('-threads', metavar='max-workers', default=5, type=int, help="允许的最大并行的cmd数目, 默认5")
         wf_args.add_argument('-outdir', metavar='workdir', default=os.path.join(os.getcwd(), 'Result'), help='分析目录或结果目录')
-        wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
+        wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
+        wf_args.add_argument('--no_skip_depend', default=False, action='store_true', help="当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤")
         wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可以是: 你重新设置了参数. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task")
         wf_args.add_argument('-retry', metavar='max-retry', default=1, type=int, help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
         wf_args.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 且已经排除指定跳过的步骤")
