@@ -598,7 +598,7 @@ class Workflow:
             description=self.meta.desc
         )
         wf_args = parser.add_argument_group('Arguments for controlling running mode')
-        wf_args.add_argument('--run', default=False, action='store_true', help="运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动需跑")
+        wf_args.add_argument('--run', default=False, action='store_true', help="运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动续跑")
         wf_args.add_argument('--docker', default=False, action='store_true', help="default won't use docker even if docker image is provided.")
         wf_args.add_argument('--plot', default=False, action='store_true', help="generate directed acyclic graph for whole workflow timely")
         wf_args.add_argument('-dump_args', metavar='dump-args', required=False, help="输出参数配置json文件, 其包含流程所有软件需要的参数")
