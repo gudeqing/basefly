@@ -578,7 +578,7 @@ class Workflow:
                 if all(len(set(self.tasks[x].depends) - set(self.tasks.keys())) == 0 for x in self.tasks):
                     break
             skip_tasks += total_deduced_skips
-        print('All skipped tasks are:', [task_copy[tid].name for tid in skip_tasks])
+        print(f'total {len(skip_tasks)} tasks will be skipped', [task_copy[tid].name for tid in skip_tasks])
 
     def list_cmd(self):
         print(sorted({tsk.cmd.meta.name for _, tsk in self.tasks.items()}))

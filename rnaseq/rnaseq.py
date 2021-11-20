@@ -339,7 +339,7 @@ def pipeline():
         # haplotyper
         hap_task, args = wf.add_task(Haplotyper(sample), name=f'haplotyper-{sample}', depends=[recal_task.task_id])
         args['ref'].value = wf.topvars['genome_fa']
-        args['bam'].value = recal_task.outputs['out_bam']
+        args['bam'].value = split_task.outputs['out_bam']
         args['recal_data'].value = recal_task.outputs['recal_data']
         args['trim_soft_clip'].value = True
         args['call_conf'].value = 20
