@@ -455,9 +455,35 @@ class Workflow:
             check_resource_before_run=not parameters.no_check_resource_before_run,
         )
 
+        if parameters.skip:
+            self.skip_steps(parameters.skip, skip_depend=not parameters.no_skip_depend)
+
+        if parameters.update_args:
+            self.update_args(parameters.update_args)
+
+        if parameters.dump_args:
+            self.dump_args(out=parameters.dump_args)
+
         for task_id, task in self.tasks.items():
             cmd_wkdir = os.path.join(outdir, task.name)
             mount_vols = {cmd_wkdir}
+
+            if (task.name in parameters.assume_success_steps) or task.cmd.meta.name in parameters.assume_success_steps:
+                task.depends = None
+                wf[task.name] = dict(
+                    depend='',
+                    cmd="using previous result",
+                    mem=task.cmd.runtime.memory,
+                    cpu=task.cmd.runtime.cpu,
+                    max_mem=task.cmd.runtime.max_memory,
+                    max_cpu=task.cmd.runtime.max_cpu,
+                    timeout=task.cmd.runtime.timeout,
+                    image='' if not parameters.docker else (task.cmd.runtime.image or ''),
+                    wkdir=cmd_wkdir,
+                    mount_vols=';'.join(mount_vols)
+                )
+                continue
+
             for k, v in task.cmd.args.items():
                 if type(v.value) in [list, tuple]:
                     values = v.value
@@ -466,7 +492,11 @@ class Workflow:
                 for value in values:
                     if type(value) == Output and value.type in ['outfile', 'outdir']:
                         if not value.value.startswith('${{mode:'):
-                            value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
+                            try:
+                                value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
+                            except Exception as e:
+                                print(e, value, task.name)
+                                print(f'you may skip this step {task.name} by --assume_success_step')
                         mount_vols.add(os.path.join(outdir, self.tasks[value.task_id].name))
                     elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir'] and value.value is not None:
                         if value.type == 'infile':
@@ -494,15 +524,6 @@ class Workflow:
                 mount_vols=';'.join(mount_vols)
             )
 
-        if parameters.skip:
-            self.skip_steps(parameters.skip, skip_depend=not parameters.no_skip_depend)
-
-        if parameters.update_args:
-            self.update_args(parameters.update_args)
-
-        if parameters.dump_args:
-            self.dump_args(out=parameters.dump_args)
-
         if parameters.list_cmd:
             self.list_cmd()
         elif parameters.show_cmd:
@@ -521,6 +542,7 @@ class Workflow:
                 wf.write(configfile)
             if parameters.run:
                 wf = run_wf(outfile, timeout=parameters.wait_resource_time,
+                            assume_success_steps=parameters.assume_success_steps,
                             plot=parameters.plot, rerun_steps=parameters.rerun_steps)
                 self.success = wf.failed == 0
 
@@ -610,6 +632,7 @@ class Workflow:
         wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
         wf_args.add_argument('--no_skip_depend', default=False, action='store_true', help="当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤")
         wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可以是: 你重新设置了参数. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task")
+        wf_args.add_argument('-assume_success_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task")
         wf_args.add_argument('-retry', metavar='max-retry', default=1, type=int, help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
         wf_args.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 且已经排除指定跳过的步骤")
         wf_args.add_argument('-show_cmd', metavar='cmd-query', help="提供一个cmd名称,输出该cmd的样例")

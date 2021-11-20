@@ -600,8 +600,18 @@ class RunCommands(CommandNetwork):
                     with self.__LOCK__:
                         self.state[name]['times'] += 1
 
-    def parallel_run(self):
+    def parallel_run(self, assume_success_steps=tuple()):
         atexit.register(self._update_status_when_exit)
+        if assume_success_steps:
+            detail_steps = []
+            for each in assume_success_steps:
+                detail_steps += [x for x in self.names() if x.startswith(each)]
+            for each in detail_steps:
+                self.ever_queued.add(each)
+                self.state[each]['state'] = 'success'
+                self.state[each]['used_time'] = 'unknown'
+            self.queue = queue.Queue()
+            self._update_queue()
         start_time = time.time()
         pool_size = self.parser.getint('mode', 'threads')
         threads = list()
@@ -626,11 +636,10 @@ class RunCommands(CommandNetwork):
         self.logger.warning(f'Finished {percent}: Success={self.success}, Failed={failed}, Total={self.task_number}')
         return self.success, len(self.state)
 
-    def continue_run(self, steps=None):
+    def continue_run(self, rerun_steps=tuple(), assume_success_steps=tuple()):
         detail_steps = []
-        if steps:
-            for each in steps:
-                detail_steps += [x for x in self.names() if x.startswith(each)]
+        for each in rerun_steps:
+            detail_steps += [x for x in self.names() if x.startswith(each)]
 
         self.ever_queued = set()
         # 使用已有状态信息更新状态
@@ -642,7 +651,8 @@ class RunCommands(CommandNetwork):
             for line in f:
                 line_lst = line.strip().split('\t')
                 fields = ['state', 'used_time', 'mem', 'cpu', 'pid', 'depend', 'cmd']
-                if line_lst[1] == 'success':
+                if line_lst[1] == 'success' or (line_lst[0] in assume_success_steps):
+                    line_lst[1] = 'success'
                     if line_lst[0] in detail_steps:
                         continue
                     self.ever_queued.add(line_lst[0])
@@ -667,7 +677,7 @@ def draw_state(cmd_state, out='state.svg'):
     StateGraph(cmd_state).draw(img_file=out)
 
 
-def run_wf(wf, plot=False, timeout=300, rerun_steps:tuple=None):
+def run_wf(wf, plot=False, timeout=300, rerun_steps:tuple=None, assume_success_steps:tuple=None):
     """
     :param wf: pipeline configuration file
     :param plot: if set, running state will be visualized if pygraphviz installed
@@ -678,9 +688,9 @@ def run_wf(wf, plot=False, timeout=300, rerun_steps:tuple=None):
     workflow = RunCommands(wf, timeout=timeout, draw_state_graph=plot)
     state = os.path.join(workflow.outdir, 'cmd_state.txt')
     if os.path.exists(state):
-        workflow.continue_run(steps=rerun_steps)
+        workflow.continue_run(rerun_steps=rerun_steps, assume_success_steps=assume_success_steps)
     else:
-        workflow.parallel_run()
+        workflow.parallel_run(assume_success_steps=assume_success_steps)
     return workflow
 
 
