@@ -272,7 +272,6 @@ def get_tsg(tsg_file, value_type='Ensembl'):
     return targets
 
 
-
 def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=3, min_depth=20, max_pop_freq=1e-6):
     """
     vcf "AD" style = [ref_depth, alt1_depth, alt2_depth]
@@ -381,8 +380,7 @@ def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=3, min_depth
         plt.close()
 
 
-
-def get_tmb(vcfs:tuple, bed_size=34, tumor_idx=None, min_af=0.05, min_alt_depth=3, min_depth=15, max_pop_freq=1e-3,
+def get_tmb(vcfs:tuple, bed_size=34, tumor_index=None, min_af=0.05, min_alt_depth=3, min_depth=15, max_pop_freq=1e-3,
             pick=True, tsg_file=None, synonymous=False, tag='CSQ'):
     # sample = os.path.basename(vcf).split('.')[0]
     tsg = get_tsg(tsg_file, value_type='Ensembl') if tsg_file else set()
@@ -391,7 +389,7 @@ def get_tmb(vcfs:tuple, bed_size=34, tumor_idx=None, min_af=0.05, min_alt_depth=
     sample_lst = []
     for vcf in vcfs:
         count = 0
-        tumor_idx = guess_tumor_idx(vcf) if tumor_idx is None else tumor_idx
+        tumor_idx = guess_tumor_idx(vcf) if tumor_index is None else tumor_index
         with VariantFile(vcf) as f:
             # get csq format
             csq_format = f.header.info['CSQ'].description.split('Format: ')[1]
@@ -425,7 +423,7 @@ def get_tmb(vcfs:tuple, bed_size=34, tumor_idx=None, min_af=0.05, min_alt_depth=
                     # population frequency filter
                     if 'MAX_AF' in csq_dict:
                         if csq_dict['MAX_AF'] and (float(csq_dict['MAX_AF']) > max_pop_freq):
-                            print('max pop af', csq_dict['MAX_AF'], csq_dict['MAX_AF_POPS'])
+                            # print('max pop af', csq_dict['MAX_AF'], csq_dict['MAX_AF_POPS'])
                             continue
                     if not csq_dict['EXON']:
                         continue
@@ -436,7 +434,7 @@ def get_tmb(vcfs:tuple, bed_size=34, tumor_idx=None, min_af=0.05, min_alt_depth=
                 if include:
                     count += 1
         tmb_value = count/bed_size
-        print(f'TMB value: {count}/{bed_size} = {tmb_value:.2f} variant/M')
+        print(f'TMB value of {sample}: {count}/{bed_size} = {tmb_value:.2f} variant/M')
         count_lst.append(count)
         tmb_lst.append(tmb_value)
         sample_lst.append(sample)
