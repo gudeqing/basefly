@@ -1,8 +1,19 @@
 import os
 from collections import Counter
 from pysam import VariantFile
+import matplotlib
+# matplotlib.use('agg')
+from matplotlib import pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.gridspec import GridSpec
 import pandas as pd
-import gzip
+import numpy as np
+from pandas.core.frame import DataFrame
+import scipy.stats as stats
+import seaborn as sns
+from matplotlib.backends.backend_pdf import PdfPages
+matplotlib.rcParams['hatch.linewidth'] = 0.1
+color_pool = plt.get_cmap('tab10').colors
 
 """
 %3A : (colon)
@@ -198,6 +209,241 @@ def pick_flag(vcf, out):
                             break
                     r.info['CSQ'] = [each]
                     fw.write(r)
+
+
+def guess_tumor_idx(vcf_file):
+    tumor_is_first = 0
+    tumor_is_second = 0
+
+    with VariantFile(vcf_file, ignore_truncation=True) as fr:
+        samples = list(fr.header.samples)
+        if len(samples) == 1:
+            tumor_idx = 0
+        else:
+            formats = list(fr.header.formats)
+            if 'AF' not in formats:
+                raise Exception('No AF in format info to detect tumor sample')
+            for record in fr:
+                try:
+                    if record.samples[0]['AF'][0] > record.samples[1]['AF'][0]:
+                        tumor_is_first += 1
+                    else:
+                        tumor_is_second += 1
+                except Exception as e:
+                    print(vcf_file, e)
+
+            tumor_idx = tumor_is_second >= tumor_is_first
+    print(f'we guess tumor sample is {samples[tumor_idx]} ')
+    return tumor_idx
+
+
+def format_alts(r):
+    alts = list(r.alts)
+    """
+    snp: A > T
+    insertion: A > AGG; A > AAA
+    deletion: AG > A; AGT > A
+    substitution（same length between ref and alt): AT > TG
+    indel: AC > TAA
+    """
+    for ind, each in enumerate(r.alts):
+        if len(each) != len(r.ref):
+            if len(r.ref) < len(each) and each.startswith(r.ref):
+                # insertion
+                alts[ind] = each.split(r.ref, 1)[1]
+            elif len(r.ref) > len(each) and r.ref.startswith(each):
+                # deletion
+                alts[ind] = '-'
+    return alts
+
+
+def get_tsg(tsg_file, value_type='Ensembl'):
+    """
+    :param tsg_file: from https://bioinfo.uth.edu/TSGene/
+    :return:
+    """
+    table = pd.read_table(tsg_file, index_col=0)
+    targets = set()
+    for x in table['Links']:
+        if value_type + ':' in x:
+            targets.add(x.split(value_type+':', 1)[1].split('|', 1)[0])
+        else:
+            print(f'Ignore tsg for not match value_type {value_type}', x)
+    return targets
+
+
+
+def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=3, min_depth=20, max_pop_freq=1e-6):
+    """
+    vcf "AD" style = [ref_depth, alt1_depth, alt2_depth]
+    :param vcfs:
+    :param out:
+    :param min_af:
+    :param min_alt_depth:
+    :param min_depth:
+    :param max_pop_freq:
+    :return:
+    """
+    results = []
+    samples = []
+    for vcf_file in vcfs:
+        tumor_idx = guess_tumor_idx(vcf_file)
+        with VariantFile(vcf_file, ignore_truncation=True) as fr:
+            # get csq format
+            sample = fr.header.samples[tumor_idx]
+            if sample in samples:
+                raise Exception(f'we find duplicated sample {sample}')
+            else:
+                samples.append(sample)
+            csq_header = fr.header.info['CSQ'].description.split('Format: ')[1]
+
+            # parse line by line
+            for r in fr:
+                alt_depth_dict = dict(zip(format_alts(r), r.samples[tumor_idx]['AD'][1:]))
+                # pass and depth filter
+                dp = r.samples[tumor_idx]['DP']
+                if list(r.filter)[0] != "PASS" or (dp < min_depth):
+                    continue
+
+                # pick 1 filter
+                for each in r.info['CSQ']:
+                    csq_dict = dict(zip(csq_header.split('|'), each.split('|')))
+                    if csq_dict['PICK'] == "1":
+                        break
+
+                # ad and af filter
+                ad = alt_depth_dict[csq_dict['Allele']]
+                af = ad / dp
+                if (af < min_af) or (ad < min_alt_depth):
+                    continue
+
+                # population af filter
+                if 'MAX_AF' in csq_dict:
+                    if csq_dict['MAX_AF'] and (float(csq_dict['MAX_AF']) > max_pop_freq):
+                        continue
+                # save record
+                target_info = [
+                    sample,
+                    r.contig,
+                    r.pos,
+                    r.ref,
+                    # '|'.join(r.alts),
+                    csq_dict['Allele'],
+                    round(af, 3),
+                    ad,
+                    dp,
+                    csq_dict['SYMBOL'],
+                    csq_dict['Gene'],
+                    csq_dict['EXON'],
+                    csq_dict['HGVSc'].replace('%3D', '='),
+                    csq_dict['HGVSp'].replace('%3D', '='),
+                    csq_dict['Consequence'],
+                    csq_dict['VARIANT_CLASS'],
+                    csq_dict['CANONICAL'],
+                    csq_dict['Existing_variation'],
+                    csq_dict['SOMATIC']
+                ]
+                if 'MAX_AF' in csq_dict:
+                    target_info.append(csq_dict['MAX_AF'])
+                else:
+                    target_info.append('')
+                results.append(target_info)
+    header = ['sample', 'contig', 'position', 'ref', 'alt',
+              'AF', 'AD', 'DP', 'SYMBOL', 'Gene',
+              'EXON', 'HGVSc', 'HGVSp', 'Consequence',
+              'VARIANT_CLASS', 'CANONICAL', 'Existing_variation', 'SOMATIC', 'MAX_POP_AF']
+    df = pd.DataFrame(results, columns=header)
+    df.to_csv(out, sep='\t', index=False)
+    print(df.head())
+    if len(set(df['sample'])) >= 2:
+        # af boxplot
+        sns.boxplot(data=df, x='sample', y='AF')
+        plt.savefig('AF.boxplot.pdf', bbox_inches="tight")
+        plt.close()
+        # af density plot
+        sns.kdeplot(data=df, x='AF', hue='sample')
+        plt.minorticks_on()
+        plt.savefig('AF.density.pdf', bbox_inches="tight")
+        plt.close()
+        # variant_class stack bar
+        target_cols = ['sample', 'VARIANT_CLASS', 'AF']
+        df2 = df[target_cols].groupby(['sample', 'VARIANT_CLASS']).count()
+        df3 = df2.reset_index().pivot(index='sample', columns='VARIANT_CLASS', values='AF')
+        df3.plot.bar(stacked=True)
+        plt.ylabel('Variant count')
+        plt.savefig('variant_class_count.boxplot.pdf', bbox_inches="tight")
+        plt.close()
+        # variant_class percent stack bar
+        df4 = df3.div(df3.sum(axis=1), axis=0)
+        df4.plot.bar(stacked=True)
+        plt.ylabel('Variant percent')
+        plt.savefig('variant_class_percent.boxplot.pdf', bbox_inches="tight")
+        plt.close()
+
+
+
+def get_tmb(vcfs:tuple, bed_size=34, tumor_idx=None, min_af=0.05, min_alt_depth=3, min_depth=15, max_pop_freq=1e-3,
+            pick=True, tsg_file=None, synonymous=False, tag='CSQ'):
+    # sample = os.path.basename(vcf).split('.')[0]
+    tsg = get_tsg(tsg_file, value_type='Ensembl') if tsg_file else set()
+    count_lst = []
+    tmb_lst = []
+    sample_lst = []
+    for vcf in vcfs:
+        count = 0
+        tumor_idx = guess_tumor_idx(vcf) if tumor_idx is None else tumor_idx
+        with VariantFile(vcf) as f:
+            # get csq format
+            csq_format = f.header.info['CSQ'].description.split('Format: ')[1]
+            # parse line by line
+            sample = f.header.samples[tumor_idx]
+            for r in f:
+                alt_depth_dict = dict(zip(format_alts(r), r.samples[tumor_idx]['AD'][1:]))
+                dp = r.samples[tumor_idx]['DP']
+                if list(r.filter)[0] != "PASS" or (dp < min_depth):
+                    continue
+                include = False
+                for each in r.info[tag]:
+                    csq_dict = dict(zip(csq_format.split('|'), each.split('|')))
+                    symbol = csq_dict['SYMBOL']
+                    gene = csq_dict['Gene']
+                    if pick and csq_dict['PICK'] != "1":
+                        continue
+                    # ad and af
+                    ad = alt_depth_dict[csq_dict['Allele']]
+                    af = ad / dp
+                    if (af < min_af) or (ad < min_alt_depth):
+                        continue
+                    # ignore serious tumor suppressor gene mutation
+                    if symbol in tsg or gene in tsg:
+                        if csq_dict['Consequence'] in ['stop_gained', 'start_lost']:
+                            continue
+                    # ignore synonymous mutation
+                    if not synonymous:
+                        if csq_dict['Consequence'] in ['synonymous_variant']:
+                            continue
+                    # population frequency filter
+                    if 'MAX_AF' in csq_dict:
+                        if csq_dict['MAX_AF'] and (float(csq_dict['MAX_AF']) > max_pop_freq):
+                            print('max pop af', csq_dict['MAX_AF'], csq_dict['MAX_AF_POPS'])
+                            continue
+                    if not csq_dict['EXON']:
+                        continue
+                    # skip out of loop once hit
+                    include = True
+                    break
+
+                if include:
+                    count += 1
+        tmb_value = count/bed_size
+        print(f'TMB value: {count}/{bed_size} = {tmb_value:.2f} variant/M')
+        count_lst.append(count)
+        tmb_lst.append(tmb_value)
+        sample_lst.append(sample)
+
+    df = pd.DataFrame({'sample': sample_lst, 'variant_count': count_lst, 'TMB': tmb_lst})
+    df.to_csv('TMB.txt', index=False, sep='\t')
+    return sample_lst, count_lst, tmb_lst
 
 
 if __name__ == '__main__':

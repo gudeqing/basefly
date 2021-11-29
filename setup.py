@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 setup(
       name='basefly',
       version='1.0.0',
-      url='https://github.com/gudeqing/nestcmd',
+      url='https://github.com/gudeqing/basefly',
       license='MIT',
       author='gudeqing',
       author_email='822466659@qq.com',
@@ -18,6 +18,6 @@ setup(
             "Intended Audience :: Science/Research",
             "Topic :: Scientific/Engineering :: bio informatics"
         ],
-      install_requires=["argparse>=1.1.0", "munch>=2.5.0"],
+      install_requires=["argparse>=1.1"],
       setup_requires=[],
 )
