@@ -3,7 +3,7 @@ from collections import Counter
 import statistics as sts
 from pysam import VariantFile
 import matplotlib
-# matplotlib.use('agg')
+matplotlib.use('agg')
 from matplotlib import pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.gridspec import GridSpec
@@ -444,7 +444,7 @@ def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=3, min_depth
         plt.close()
 
 
-def get_tmb(vcfs:tuple, bed_size=34, tumor_index=None, min_af=0.05, min_alt_depth=3, min_depth=15, max_pop_freq=1e-3,
+def get_tmb(vcfs:tuple, bed_size=60456963, tumor_index=None, min_af=0.05, min_alt_depth=3, min_depth=15, max_pop_freq=1e-3,
             pick=True, tsg_file=None, synonymous=False, tag='CSQ'):
     # sample = os.path.basename(vcf).split('.')[0]
     tsg = get_tsg(tsg_file, value_type='Ensembl') if tsg_file else set()
@@ -497,7 +497,7 @@ def get_tmb(vcfs:tuple, bed_size=34, tumor_index=None, min_af=0.05, min_alt_dept
 
                 if include:
                     count += 1
-        tmb_value = count/bed_size
+        tmb_value = count/bed_size*1e6
         print(f'TMB value of {sample}: {count}/{bed_size} = {tmb_value:.2f} mutations/Mb')
         count_lst.append(count)
         tmb_lst.append(tmb_value)
