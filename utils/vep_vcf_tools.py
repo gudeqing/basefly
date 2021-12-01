@@ -1,5 +1,6 @@
 import os
 from collections import Counter
+import statistics as sts
 from pysam import VariantFile
 import matplotlib
 # matplotlib.use('agg')
@@ -195,7 +196,70 @@ def demo_four():
     print(cases_durations)
 
 
-def pick_flag(vcf, out):
+def get_top_mutated_genes(vcfs:tuple, top=20, tumor_index=None):
+    gene_mutations = dict()
+    mutation_af_dict = dict()
+    mutation_hgvsp_dict = dict()
+    gene_symbol_dict = dict()
+    # {gene: {sample: set(muations)}}
+    for vcf in vcfs:
+        # sample = os.path.basename(vcf).split('.')[0]
+        tumor_idx = guess_tumor_idx(vcf) if tumor_index is None else tumor_index
+        with VariantFile(vcf) as f:
+            sample = f.header.samples[tumor_idx]
+            # get csq format
+            csq_format = f.header.info['CSQ'].description.split('Format: ')[1]
+            # parse line by line
+            for r in f:
+                if list(r.filter)[0] == "PASS":
+                    alt_af_dict = dict(zip(format_alts(r), r.samples[tumor_idx]['AF']))
+                    for each in r.info['CSQ']:
+                        record_dict = dict(zip(csq_format.split('|'), each.split('|')))
+                        if record_dict['PICK'] == "1":
+                            if not record_dict['Gene']:
+                                # print(f'Off gene mutation:{record_dict["HGVSc"]}')
+                                continue
+                            tmp_dict = gene_mutations.setdefault(record_dict['Gene'], dict())
+                            mut_id = record_dict['HGVSc'].replace('%3D', '=')
+                            mutation_hgvsp_dict[mut_id] = record_dict['HGVSp'].replace('%3D', '=')
+                            try:
+                                mutation_af_dict.setdefault(mut_id, []).append(alt_af_dict[record_dict['Allele']])
+                            except:
+                                print(alt_af_dict, r.alts)
+                            gene_symbol_dict[record_dict['Gene']] = record_dict['SYMBOL']
+                            tmp_dict.setdefault(sample, set()).add(mut_id)
+                            break
+    # statistic: 按照共有突变出现频次排序
+    top_n = sorted([(k, len(v)) for k, v in gene_mutations.items()], key=lambda x: x[1], reverse=True)[:top]
+    table = []
+    # total_case_number = len(lung_cancer_sample_case_id_list)
+    total_case_number = len(vcfs)
+    for gene, case_number in top_n:
+        hgvsc_lst = []
+        _ = [hgvsc_lst.extend(list(x)) for x in gene_mutations[gene].values()]
+        gene_symbol = gene_symbol_dict[gene]
+        # print(hgvsc_lst)
+        top5_mutation = Counter(hgvsc_lst).most_common(5)
+        table.append([
+            gene,  # Top10:Genes gene_id
+            gene_symbol,  # symbol
+            case_number,  # Case_number
+            case_number / total_case_number,  # Frequency
+            '|'.join(x[0] or "None" for x in top5_mutation),  # Top5_mutation
+            '|'.join(f'{mutation_hgvsp_dict[x[0]] or "None"}' for x in top5_mutation),  # Top5_mutation hgvsp
+            '|'.join(str(x[1]) for x in top5_mutation),  # Top5_mutation freq
+            '|'.join(f'{sts.mean(mutation_af_dict[x[0]]):.3f}' for x in top5_mutation),  # Top5_mutation vaf
+            '|'.join(gene_mutations[gene].keys())
+        ])
+    # 输出
+    df = pd.DataFrame(table)
+    df.columns = [f'Top{top}:Genes', 'Symbol', 'Case_number', 'Frequency', 'Top5_mut_hgvsc', 'Top5_mut_hgvsp',
+                  'Top5_mut_freq', 'Top5_mut_meanAF', 'samples']
+    df.to_csv(f'top{top}.mutated_genes.txt', sep='\t', index=False)
+    print(df)
+
+
+def filter_by_pick_flag(vcf, out):
     with VariantFile(vcf) as fr:
         with VariantFile(out, 'w', header=fr.header) as fw:
             # get csq format
@@ -434,7 +498,7 @@ def get_tmb(vcfs:tuple, bed_size=34, tumor_index=None, min_af=0.05, min_alt_dept
                 if include:
                     count += 1
         tmb_value = count/bed_size
-        print(f'TMB value of {sample}: {count}/{bed_size} = {tmb_value:.2f} variant/M')
+        print(f'TMB value of {sample}: {count}/{bed_size} = {tmb_value:.2f} mutations/Mb')
         count_lst.append(count)
         tmb_lst.append(tmb_value)
         sample_lst.append(sample)
