@@ -336,7 +336,7 @@ def get_tsg(tsg_file, value_type='Ensembl'):
     return targets
 
 
-def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=3, min_depth=20, max_pop_freq=1e-6):
+def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=2, min_depth=20, max_pop_freq=1e-6):
     """
     vcf "AD" style = [ref_depth, alt1_depth, alt2_depth]
     :param vcfs:
@@ -420,7 +420,9 @@ def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=3, min_depth
     print(df.head())
     if len(set(df['sample'])) >= 2:
         # af boxplot
-        sns.boxplot(data=df, x='sample', y='AF')
+        ax = sns.boxplot(data=df, x='sample', y='AF')
+        if len(set(df['sample'])) > 6:
+            ax.xaxis.set_tick_params(labelsize=7, labelrotation=90)
         plt.savefig('AF.boxplot.pdf', bbox_inches="tight")
         plt.close()
         # af density plot
@@ -434,18 +436,21 @@ def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=3, min_depth
         df3 = df2.reset_index().pivot(index='sample', columns='VARIANT_CLASS', values='AF')
         df3.plot.bar(stacked=True)
         plt.ylabel('Variant count')
+        plt.tick_params(labelsize=7)
         plt.savefig('variant_class_count.boxplot.pdf', bbox_inches="tight")
         plt.close()
         # variant_class percent stack bar
         df4 = df3.div(df3.sum(axis=1), axis=0)
         df4.plot.bar(stacked=True)
+        plt.tick_params(labelsize=7)
         plt.ylabel('Variant percent')
         plt.savefig('variant_class_percent.boxplot.pdf', bbox_inches="tight")
         plt.close()
 
 
-def get_tmb(vcfs:tuple, bed_size=60456963, tumor_index=None, min_af=0.05, min_alt_depth=3, min_depth=15, max_pop_freq=1e-3,
-            pick=True, tsg_file=None, synonymous=False, tag='CSQ'):
+def get_tmb(vcfs:tuple, out='TMB.txt', bed_size=59464418, tumor_index=None, min_af=0.05,
+            min_alt_depth=3, min_depth=15, max_pop_freq=1e-3, pick=True,
+            tsg_file=None, synonymous=False, tag='CSQ'):
     # sample = os.path.basename(vcf).split('.')[0]
     tsg = get_tsg(tsg_file, value_type='Ensembl') if tsg_file else set()
     count_lst = []
@@ -504,7 +509,7 @@ def get_tmb(vcfs:tuple, bed_size=60456963, tumor_index=None, min_af=0.05, min_al
         sample_lst.append(sample)
 
     df = pd.DataFrame({'sample': sample_lst, 'variant_count': count_lst, 'TMB': tmb_lst})
-    df.to_csv('TMB.txt', index=False, sep='\t')
+    df.to_csv(out, index=False, sep='\t')
     return sample_lst, count_lst, tmb_lst
 
 
