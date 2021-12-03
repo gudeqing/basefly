@@ -3,7 +3,7 @@ script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from basefly.basefly import Workflow, Argument, Output, Command,  TopVar, TmpVar
 from basefly.commands import add_exp_to_vcf, bam_read_count, add_read_count_to_vcf, pvacseq
-from utils.tidy_tools import get_2digits_hla_genetype
+from utils.tidy_tools import get_2digits_hla_genetype, merge_epitopes
 import pandas as pd
 __author__ = 'gdq'
 
@@ -22,7 +22,7 @@ def pipeline():
     wf.init_argparser()
     wf.add_argument('-gene_expr', required=True, help='gene expression table with header consisting of tumor sample name')
     wf.add_argument('-trans_expr', required=False, help='transcript expression table with header consisting of tumor sample name')
-    wf.add_argument('-vcfs', required=True, help='somatic vcf list file with two columns, first column is tumor sample name, second column is vcf path')
+    wf.add_argument('-vcfs', required=True, help='somatic vep-annotated vcf list file with two columns, first column is tumor sample name, second column is vcf path')
     wf.add_argument('-pair_info', required=True, help='tumor-normal pair info without header, first column is tumor sample name')
     wf.add_argument('-hla_genotype', required=True, help='HLA genetype table with header consiting of HLA gene name, index is tumor sample name. Each element data is genetype detail.')
     wf.add_argument('-alleles', default=('A', 'B', 'C', 'DRA', 'DRB', 'DQA', 'DQB'), nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
@@ -120,6 +120,9 @@ def pipeline():
         args['normal-sample-name'].value = normal
         # use HLA gene-type from tumor or normal??
         args['allele'].value = ','.join(get_2digits_hla_genetype(wf.args.hla_genotype, normal, alleles=wf.args.alleles))
+
+    # merge
+    merge_epitopes(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_epitopes'))
 
     wf.run()
 
