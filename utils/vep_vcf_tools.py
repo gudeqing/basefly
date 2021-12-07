@@ -302,14 +302,15 @@ def guess_tumor_idx(vcf_file):
 
 
 def format_alts(r):
-    alts = list(r.alts)
     """
+    把vcf格式的alt转换为txt格式的alt
     snp: A > T
     insertion: A > AGG; A > AAA
     deletion: AG > A; AGT > A
     substitution（same length between ref and alt): AT > TG
     indel: AC > TAA
     """
+    alts = list(r.alts)
     for ind, each in enumerate(r.alts):
         if len(each) != len(r.ref):
             if len(r.ref) < len(each) and each.startswith(r.ref):
