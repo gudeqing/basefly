@@ -14,4 +14,4 @@
     2. 当然也可以给workflow对象添加outputs对象, task的outputs继承自Command的outputs
 5. 定义方法: 依据Task对象生成具体的cmd信息。
 6. 定义方法: 将Command/Task对象转换成wdl脚本
-7. 定义方法将workflow转换为第三方格式流程: (1) WDL（暂停开发） (2) argo_workflow（待测试）
+7. 定义方法将workflow转换为第三方格式流程: (1) WDL（暂停开发） (2) argo_workflow（暂停）
