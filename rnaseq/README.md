@@ -25,7 +25,7 @@ The workflow has the following main steps:
 
 ## Install
 
-This workflow is developed to be run on XDP without any installation. But it is also can be run locally with needed tools installed.
+This workflow is developed to be run on [XDP](https://platform.xdp.basebit.me/user/login) without any installation. But it is also can be run locally with needed tools installed.
 
 ## Tools
 * fastp:0.23.0
