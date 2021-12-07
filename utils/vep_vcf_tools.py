@@ -2,19 +2,23 @@ import os
 from collections import Counter
 import statistics as sts
 from pysam import VariantFile
-import matplotlib
-matplotlib.use('agg')
-from matplotlib import pyplot as plt
-import matplotlib.patches as mpatches
-from matplotlib.gridspec import GridSpec
+try:
+    import matplotlib
+    matplotlib.use('agg')
+    from matplotlib import pyplot as plt
+    import matplotlib.patches as mpatches
+    from matplotlib.gridspec import GridSpec
+    import seaborn as sns
+    from matplotlib.backends.backend_pdf import PdfPages
+    matplotlib.rcParams['hatch.linewidth'] = 0.1
+    color_pool = plt.get_cmap('tab10').colors
+except Exception as e:
+    print(e)
+
 import pandas as pd
 import numpy as np
 from pandas.core.frame import DataFrame
 import scipy.stats as stats
-import seaborn as sns
-from matplotlib.backends.backend_pdf import PdfPages
-matplotlib.rcParams['hatch.linewidth'] = 0.1
-color_pool = plt.get_cmap('tab10').colors
 
 """
 %3A : (colon)
@@ -259,8 +263,11 @@ def get_top_mutated_genes(vcfs:tuple, top=20, tumor_index=None):
     print(df)
 
 
-def filter_by_pick_flag(vcf, out):
+def filter_by_pick_flag(vcf, out=None):
+    tumor_idx = guess_tumor_idx(vcf)
     with VariantFile(vcf) as fr:
+        sample = fr.header.samples[tumor_idx]
+        out = out if out else f'{sample}.pick1.vcf.gz'
         with VariantFile(out, 'w', header=fr.header) as fw:
             # get csq format
             csq_format = fr.header.info['CSQ'].description.split('Format: ')[1]
