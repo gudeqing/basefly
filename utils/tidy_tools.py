@@ -238,28 +238,36 @@ def merge_hisat_genotype(query_dir, outdir='.', name_pattern='.*.HLA-gene-type.t
     df.to_csv(os.path.join(outdir, 'hisat_genotype.raw.txt'), sep='\t')
     # 进一步将等位基因提取成2列，即按照二倍体的方式区分
 
-    def apply_diploid_split(cell):
+    def apply_diploid_simplify(cell):
         if cell is None or type(cell) == float:
-            return 'unknown|unknown'
-        genes = [x.split(' (')[0] for x in cell.split(',')]
-        abundances = list(map(float, re.findall(r'abundance: (\d+\.\d+)%', cell)))
+            return 'missed|missed'
+        genes = [x.split()[0] for x in cell.split(',')]
+        # scores = list(map(float, re.findall(r'abundance: (\d+\.\d+)%', cell)))
+        scores = list(map(float, re.findall(r'score: (\d+\.\d+)', cell)))
+        # print(scores)
         if len(genes) == 1:
-            if abundances[0] > 30:
-                return genes[0] + '|' + genes[0]
+            if sum(scores) > 0.3:
+                genes = genes*2
             else:
-                return 'unknown|unknown'
+                genes = ['lowScore']*2
         else:
-            # print(abundances, genes)
-            if abundances[0]/abundances[1] > 3 and sum(abundances[:2]) > 60:
-                return genes[0] + '|' + genes[0]
-            elif sum(abundances[:2]) > 0.75:
-                return '|'.join(sorted(genes[:2]))
+            # print(scores)
+            if scores[0]/scores[1] > 3 and sum(scores[:2]) > 60:
+                genes = genes*2
+            elif sum(scores[:2]) > 0.75:
+                pass
+            elif scores[0] > 0.45:
+                genes = [genes[0]]*2
             else:
-                return 'unknown|unknown'
+                genes = ['lowScore']*2
 
-    df2 = df[[x for x in df.columns if x.startswith('EM:')]].applymap(apply_diploid_split)
-    df2.columns = [x.split()[1] for x in df.columns]
+        return '|'.join(sorted(genes[:2]))
+
+    # df2 = df[[x for x in df.columns if x.startswith('EM:')]].applymap(apply_diploid_simplify_with_EM)
+    df2 = df[[x for x in df.columns if x.startswith('Allele splitting:')]].applymap(apply_diploid_simplify)
+    df2.columns = [x.split(': ')[1] for x in df2.columns]
     df2.to_csv(os.path.join(outdir, 'hisat_genotype.diploid.txt'), sep='\t')
+    # stat distribution
 
 
 def get_2digits_hla_genetype(table, sample, alleles):
