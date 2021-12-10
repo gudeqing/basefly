@@ -252,9 +252,11 @@ def merge_hisat_genotype(query_dir, outdir='.', name_pattern='.*.HLA-gene-type.t
                 genes = ['lowScore']*2
         else:
             # print(scores)
-            if scores[0]/scores[1] > 3 and sum(scores[:2]) > 60:
+            if scores[0]/scores[1] > 3 and sum(scores[:2]) > 0.75:
                 genes = genes*2
-            elif sum(scores[:2]) > 0.75:
+            elif sum(scores[:2]) > 0.5 and (genes[0].startswith('DPB1') or genes[0].startswith('DRB1')):
+                pass
+            elif sum(scores[:2]) > 0.6:
                 pass
             elif scores[0] > 0.45:
                 genes = [genes[0]]*2
