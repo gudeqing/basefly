@@ -461,8 +461,6 @@ class Workflow:
         if parameters.update_args:
             self.update_args(parameters.update_args)
 
-        self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
-
         for task_id, task in self.tasks.items():
             cmd_wkdir = os.path.join(outdir, task.name)
             mount_vols = {cmd_wkdir}
@@ -531,6 +529,7 @@ class Workflow:
             self.list_task()
         else:
             os.makedirs(outdir, exist_ok=True)
+            self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
             with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
                 f.write('python ' + ' '.join(sys.argv) + '\n')
                 # print(sys.argv)
