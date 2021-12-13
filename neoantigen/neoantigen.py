@@ -25,7 +25,7 @@ def pipeline():
     wf.add_argument('-vcfs', required=True, help='somatic vep-annotated vcf list file with two columns, first column is tumor sample name, second column is vcf path')
     wf.add_argument('-pair_info', required=True, help='tumor-normal pair info without header, first column is tumor sample name')
     wf.add_argument('-hla_genotype', required=True, help='HLA genetype table with header consiting of HLA gene name, index is tumor sample name. Each element data is genetype detail.')
-    wf.add_argument('-alleles', default=('A', 'B', 'C', 'DRA', 'DRB', 'DQA', 'DQB'), nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
+    wf.add_argument('-alleles', default=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'), nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
     wf.add_argument('-rna_bams', required=False, help='rnaseq bam list file with two columns, first column is normal sample name, second column is bam path. This bam will be used to add RNA coverage and RNA VAF using bam_readcount.')
     wf.add_argument('-ref_fasta', required=False, help='reference fasta file, which is need when rna_bams provided or fastq info provided')
     wf.parse_args()
