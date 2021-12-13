@@ -121,10 +121,10 @@ def pipeline():
         # use HLA gene-type from tumor or normal??
         args['allele'].value = ','.join(get_2digits_hla_genetype(wf.args.hla_genotype, normal, alleles=wf.args.alleles))
 
-    # merge
-    merge_epitopes(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_epitopes'))
-
     wf.run()
+    # merge
+    if wf.success:
+        merge_epitopes(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_epitopes'))
 
 
 if __name__ == '__main__':
