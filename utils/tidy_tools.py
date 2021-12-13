@@ -237,7 +237,12 @@ def merge_hisat_genotype(query_dir, outdir='.', name_pattern='.*.HLA-gene-type.t
     df = pd.concat(tables)
     df.to_csv(os.path.join(outdir, 'hisat_genotype.raw.txt'), sep='\t')
     # 进一步将等位基因提取成2列，即按照二倍体的方式区分
+    simplify_hisat_genotype(df, outdir=outdir)
 
+
+def simplify_hisat_genotype(df, outdir='.'):
+    if type(df) == str:
+        df = pd.read_table(df, index_col=0)
     def apply_diploid_simplify(cell):
         if cell is None or type(cell) == float:
             return 'missed|missed'
@@ -272,12 +277,15 @@ def merge_hisat_genotype(query_dir, outdir='.', name_pattern='.*.HLA-gene-type.t
     # stat distribution
 
 
-def get_2digits_hla_genetype(table, sample, alleles):
+def get_2digits_hla_genetype(table, sample, alleles=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2')):
     """prepare for pvacseq tool based on result of merge_hisat_genotype"""
-    df = pd.read_table(table, index_col=0)
+    df = pd.read_table(table, index_col=0, header=0)
     targets = list()
     for each in df.loc[sample]:
-        a, b = each.split('|')[:2]
+        try:
+            a, b = each.split('|')[:2]
+        except Exception as e:
+            raise Exception('???', sample, each, e)
         if a.startswith(alleles):
             allele_2_digit = ':'.join(a.split(':')[:2])
             if allele_2_digit not in targets:
@@ -290,7 +298,7 @@ def get_2digits_hla_genetype(table, sample, alleles):
                 if allele_2_digit.startswith(('A*', 'B*', 'C*', 'E*', 'F*', 'G*')):
                     allele_2_digit = 'HLA-' + allele_2_digit
                 targets.append(allele_2_digit)
-    return targets
+    return sorted(set(targets))
 
 
 def merge_epitopes(query_dir, outdir='.'):
