@@ -311,7 +311,7 @@ def merge_epitopes(query_dir, outdir='.'):
             return
         tables = []
         for each in files:
-            if 'MHC_Class_I' in each:
+            if '/MHC_Class_I/' in each:
                 sample = os.path.basename(each).split('.filter')[0]
                 tmp = pd.read_table(each)
                 tmp['Sample'] = sample
@@ -322,7 +322,7 @@ def merge_epitopes(query_dir, outdir='.'):
 
         tables = []
         for each in files:
-            if 'MHC_Class_II' in each:
+            if '/MHC_Class_II/' in each:
                 sample = os.path.basename(each).split('.filter')[0]
                 tmp = pd.read_table(each)
                 tmp['Sample'] = sample
@@ -333,7 +333,7 @@ def merge_epitopes(query_dir, outdir='.'):
 
         tables = []
         for each in files:
-            if 'combined' in each:
+            if '/combined/' in each:
                 sample = os.path.basename(each).split('.filter')[0]
                 tmp = pd.read_table(each)
                 tmp['Sample'] = sample
