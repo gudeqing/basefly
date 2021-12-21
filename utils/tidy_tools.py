@@ -6,9 +6,9 @@ import pandas as pd
 import numpy as np
 
 
-def find_files(query_dir, names:tuple):
+def find_files(query_dir, names:tuple, followlinks=True):
     results = [[] for x in names]
-    for root, dirs, files in os.walk(query_dir):
+    for root, dirs, files in os.walk(query_dir, followlinks=followlinks):
         for each in files:
             for ind, target in enumerate(names):
                 if re.fullmatch(target, each):
