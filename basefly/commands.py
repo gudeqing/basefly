@@ -766,3 +766,59 @@ def RNASplitReadsAtJunction(sample):
     cmd.args['out_bam'] = Argument(value=f'{sample}.junctionSplit.bam', desc='output bam file')
     cmd.outputs['out_bam'] = Output(value='{out_bam}')
     return cmd
+
+
+def fastv():
+    """"""
+    cmd = Command()
+    cmd.meta.name = 'fastv'
+    cmd.runtime.image = 'viurs-fastv-tool:002'
+    cmd.runtime.tool = '/data_analysis/software/fastv-0.8.1/fastv'
+    cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
+    cmd.args['read2'] = Argument(prefix='-I ', level='optional', type='infile', desc='read2 fastq file')
+    cmd.args['threads'] = Argument(prefix='-w ', default=4, desc='thread number')
+    cmd.args['other_args'] = Argument(prefix='', default='', desc="other arguments you want to use, such as '-x val'")
+    cmd.args['kmer'] = Argument(prefix='-k ', type='infile', default='/data_analysis/software/fastv-0.8.1/data/SARS-CoV-2.kmer.fa', desc='the unique k-mer file of the detection target in fasta format. data/SARS-CoV-2.kmer.fa will be used if none of k-mer/Genomes/k-mer_Collection file is specified ')
+    cmd.args['genomes'] = Argument(prefix='-g ', type='infile', default='/data_analysis/software/fastv-0.8.1/data/SARS-CoV-2.genomes.fa', desc='the genomes file of the detection target in fasta format. data/SARS-CoV-2.genomes.fa will be used if none of k-mer/Genomes/k-mer_Collection file is specified')
+    cmd.args['out1'] = Argument(prefix='-o ', desc='file name to store read1 with on-target sequences')
+    cmd.args['out2'] = Argument(prefix='-O ', level='optional', desc='file name to store read2 with on-target sequences')
+    cmd.args['html'] = Argument(prefix='-h ', desc='html report file')
+    cmd.args['json'] = Argument(prefix='-j ', desc='json report file')
+    # 下面的outputs设置起初是为了能够生成wdl设置, 这里使用”{}“引用其他Argument对象作为输入
+    cmd.outputs['out1'] = Output(value="{out1}", type='outfile')
+    cmd.outputs['out2'] = Output(value="{out2}")
+    cmd.outputs['html'] = Output(value="{html}")
+    cmd.outputs['json'] = Output(value="{json}")
+    return cmd
+
+
+def cnvkit():
+    cmd = Command()
+    cmd.meta.name = 'cnvkit'
+    cmd.meta.source = 'https://github.com/etal/cnvkit'
+    cmd.meta.version = '0.9.9'
+    cmd.meta.desc = 'detecting copy number variants and alterations genome-wide from high-throughput sequencing'
+    cmd.runtime.image = 'etal/cnvkit:latest'
+    cmd.runtime.tool = 'cnvkit.py batch'
+    cmd.runtime.cpu = 2
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['seq_method'] = Argument(prefix='-m ', default='hybrid', range=['hybrid', 'amplicon', 'wgs'], desc='Sequencing assay type')
+    cmd.args['segment_method'] = Argument(prefix='--segment-method ', default='cbs', range=['cbs', 'flasso', 'haar', 'none', 'hmm', 'hmm-tumor','hmm-germline'], desc='method used in segment step')
+    cmd.args['drop_low_cov'] = Argument(prefix='--drop-low-coverage', type='bool', default=True, desc='Drop very-low-coverage bins before segmentation to avoid false-positive deletions in poor-quality tumor')
+    cmd.args['processes'] = Argument(prefix='-p ', default=5, desc='Number of subprocesses used to running each of the BAM files in parallel')
+    cmd.args['rscript_path'] = Argument(prefix='--rscript-path ', default='Rscript', desc='Use this option to specify a non-default R')
+    cmd.args['normal'] = Argument(prefix='-n ', level='optional', desc='Normal samples (.bam) used to construct the pooled, paired, or flat reference.')
+    cmd.args['genome'] = Argument(prefix='-f ', type='infile', desc='Reference genome, FASTA format (e.g. UCSC hg19.fa)')
+    cmd.args['targets'] = Argument(prefix='-t ', type='infile', level='optional', desc='Target intervals (.bed or .list)')
+    cmd.args['antitargets'] = Argument(prefix='-a ', type='infile', level='optional', desc='Antitarget intervals (.bed or .list)')
+    cmd.args['annotate'] = Argument(prefix='--annotate ', type='infile', level='optional', desc='Use gene models from this file to assign names to the target regions. Format: UCSC refFlat.txt or ensFlat.txt file (preferred), or BED, interval list, GFF, or similar.')
+    cmd.args['access'] = Argument(prefix='--access', type='infile', level='optional', desc='Regions of accessible sequence on chromosomes (.bed), as output by the <access> command.')
+    cmd.args['output_reference'] = Argument(prefix='--output-reference ', level='optional', desc='Output filename/path for the new reference file being created')
+    cmd.args['cluster'] = Argument(prefix='--cluster', type='bool', default=False, desc='Calculate and use cluster-specific summary stats in the reference pool to normalize samples')
+    cmd.args['reference'] = Argument(prefix='-r ', type='infile', level='optional', desc='Copy number reference file (.cnn)')
+    cmd.args['outdir'] = Argument(prefix='-d ', default='.', desc='output directory')
+    cmd.args['scatter'] = Argument(prefix='--scatter', type='bool', default=True, desc='Create a whole-genome copy ratio profile as a PDF scatter plot.')
+    cmd.args['diagram'] = Argument(prefix='--diagram', type='bool', default=True, desc='Create an ideogram of copy ratios on chromosomes as a PDF')
+    cmd.outputs['cnr_file'] = Output(value='*.cnr')
+    return cmd
+
