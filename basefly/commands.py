@@ -823,3 +823,46 @@ def cnvkit():
     cmd.outputs['cnr_file'] = Output(value='*.cnr')
     return cmd
 
+
+def stringtie():
+    cmd = Command()
+    cmd.meta.name = 'StringTie'
+    cmd.meta.source = 'https://ccb.jhu.edu/software/stringtie/index.shtml'
+    cmd.meta.version = '2.2.0'
+    cmd.meta.desc = 'StringTie is a fast and highly efficient assembler of RNA-Seq alignments into potential transcripts.'
+    cmd.runtime.image = '?'
+    cmd.runtime.tool = 'stringtie'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.args['L'] = Argument(prefix='-L', type='bool', default=False, desc='long reads processing mode; also enforces -s 1.5 -g 0 (default:false)')
+    cmd.args['mix'] = Argument(prefix='--mix', type='bool', default=False, desc='mixed reads processing mode; both short and long read data alignments are expected (long read alignments must be given as the 2nd BAM/CRAM input file)')
+    cmd.args['e'] = Argument(prefix='-e', type='bool', default=False, desc='mixed reads processing mode; both short and long read data alignments are expected (long read alignments must be given as the 2nd BAM/CRAM input file)')
+    cmd.args['v'] = Argument(prefix='-v', type='bool', default=False, desc='Turns on verbose mode, printing bundle processing details.')
+    cmd.args['out_gtf'] = Argument(prefix='-o ', desc='Sets the name of the output GTF file where StringTie will write the assembled transcripts. This can be specified as a full path, in which case directories will be created as needed.')
+    cmd.args['p'] = Argument(prefix='-p ', type='int', default=4, desc='Specify the number of processing threads (CPUs) to use for transcript assembly.')
+    cmd.args['ref_model'] = Argument(prefix='-G ', type='infile', level='optional', desc='Use a reference annotation file (in GTF or GFF3 format) to guide the assembly process. The output will include expressed reference transcripts as well as any novel transcripts that are assembled. This option is required by options -B, -b, -e, -C')
+    cmd.args['fr-firststrand'] = Argument(prefix='--rf', type='bool', default=False, desc='Assumes a stranded library fr-firststrand.')
+    cmd.args['fr-secondstrand'] = Argument(prefix='--fr', type='bool', default=False, desc='Assumes a stranded library fr-secondstrand.')
+    cmd.args['ptf'] = Argument(prefix='--ptf ', type='infile', level='optional', desc='Loads a list of point-features from a text feature file <f_tab> to guide the transcriptome assembly. Accepted point features are transcription start sites (TSS) and polyadenylation sites (CPAS). There are four tab-delimited columns in the feature file. The first three define the location of the point feature on the cromosome (sequence name, coordinate and strand), and the last is the type of the feature (TSS or CPAS)')
+    cmd.args['label'] = Argument(prefix='-l', default='STRG', desc='Sets <label> as the prefix for the name of the output transcripts')
+    cmd.args['f'] = Argument(prefix='-f ', type='float', default=0.01, desc='Sets the minimum isoform abundance of the predicted transcripts as a fraction of the most abundant transcript assembled at a given locus. Lower abundance transcripts are often artifacts of incompletely spliced precursors of processed transcripts')
+    cmd.args['m'] = Argument(prefix='-m ', type='int', default=200, desc='Sets the minimum length allowed for the predicted transcripts')
+    cmd.args['A'] = Argument(prefix='-A ', level='optional', desc='Gene abundances will be reported (tab delimited format) in the output file with the given name.')
+    cmd.args['C'] = Argument(prefix='-C ', level='optional', desc='StringTie outputs a file with the given name with all transcripts in the provided reference file that are fully covered by reads (requires -G)')
+    cmd.args['a'] = Argument(prefix='-a ', type='int', default=10, desc="Junctions that don't have spliced reads that align across them with at least this amount of bases on both sides are filtered out")
+    cmd.args['j'] = Argument(prefix='-j ', type='float', default=1.0, desc="There should be at least this many spliced reads that align across a junction (i.e. junction coverage). This number can be fractional, since some reads align in more than one place. A read that aligns in n places will contribute 1/n to the junction coverage.")
+    cmd.args['t'] = Argument(prefix='-t', type='bool', default=False, desc="This parameter disables trimming at the ends of the assembled transcripts. By default StringTie adjusts the predicted transcript's start and/or stop coordinates based on sudden drops in coverage of the assembled transcript")
+    cmd.args['c'] = Argument(prefix='-c ', type='int', default=1, desc="Sets the minimum read coverage allowed for the predicted transcripts. A transcript with a lower coverage than this value is not shown in the output")
+    cmd.args['s'] = Argument(prefix='-s', type='float', default=4.75, desc='Sets the minimum read coverage allowed for single-exon transcripts')
+    cmd.args['conservative'] = Argument(prefix='--conservative', type='bool', default=False, desc='Assembles transcripts in a conservative mode. Same as -t -c 1.5 -f 0.05')
+    cmd.args['g'] = Argument(prefix='-g ', type='int', default=50, desc='Minimum locus gap separation value. Reads that are mapped closer than this distance are merged together in the same processing bundle')
+    cmd.args['B'] = Argument(prefix='-B', type='bool', default=False, desc='This switch enables the output of Ballgown input table files (*.ctab) containing coverage data for the reference transcripts given with the -G option.')
+    cmd.args['b'] = Argument(prefix='-b ', level='optional', desc='Just like -B this option enables the output of *.ctab files for Ballgown, but these files will be created in the provided directory <path> instead of the directory specified by the -o option. Note: adding the -e option is recommended with the -B/-b options, unless novel transcripts are still wanted in the StringTie GTF output.')
+    cmd.args['M'] = Argument(prefix='-M ', type='float', default=0.95, desc='Sets the maximum fraction of muliple-location-mapped reads that are allowed to be present at a given locus')
+    cmd.args['x'] = Argument(prefix='-x ', level='optional', desc="Ignore all read alignments (and thus do not attempt to perform transcript assembly) on the specified reference sequences. Parameter <seqid_list> can be a single reference sequence name (e.g. -x chrM) or a comma-delimited list of sequence names (e.g. -x 'chrM,chrX,chrY'). This can speed up StringTie especially in the case of excluding the mitochondrial genome, whose genes may have very high coverage in some cases, even though they may be of no interest for a particular RNA-Seq analysis. The reference sequence names are case sensitive, they must match identically the names of chromosomes/contigs of the target genome against which the RNA-Seq reads were aligned in the first place.")
+    cmd.args['u'] = Argument(prefix='-u', type='bool', default=False, desc='Turn off multi-mapping correction. In the default case this correction is enabled, and each read that is mapped in n places only contributes 1/n to the transcript coverage instead of 1')
+    cmd.args['cram_ref'] = Argument(prefix='--cram-ref ', type='infile', level='optional', desc="for CRAM input files, the reference genome sequence can be provided as a multi-FASTA file the same chromosome sequences that were used when aligning the reads. This option is optional but recommended as StringTie can make use of some alignment/junction quality data (mismatches around the junctions) that can be more accurately assessed in the case of CRAM files when the reference genome sequence is also provided")
+    cmd.args['merge'] = Argument(prefix='--merge', type='bool', default=False, desc=' In the merge mode, StringTie takes as input a list of GTF/GFF files and merges/assembles these transcripts into a non-redundant set of transcripts. This mode is used in the new differential analysis pipeline to generate a global, unified set of transcripts (isoforms) across multiple RNA-Seq samples.')
+    cmd.outputs['out_gtf'] = Output(value='{out_gtf}')
+    return cmd
+
