@@ -819,6 +819,7 @@ def cnvkit():
     cmd.args['outdir'] = Argument(prefix='-d ', default='.', desc='output directory')
     cmd.args['scatter'] = Argument(prefix='--scatter', type='bool', default=True, desc='Create a whole-genome copy ratio profile as a PDF scatter plot.')
     cmd.args['diagram'] = Argument(prefix='--diagram', type='bool', default=True, desc='Create an ideogram of copy ratios on chromosomes as a PDF')
+    cmd.args['tumor_bams'] = Argument(prefix='', type='infile', array=True, desc='Mapped sequence reads (.bam)')
     cmd.outputs['cnr_file'] = Output(value='*.cnr')
     return cmd
 
