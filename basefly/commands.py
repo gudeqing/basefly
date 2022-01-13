@@ -830,7 +830,7 @@ def stringtie():
     cmd.meta.source = 'https://ccb.jhu.edu/software/stringtie/index.shtml'
     cmd.meta.version = '2.2.0'
     cmd.meta.desc = 'StringTie is a fast and highly efficient assembler of RNA-Seq alignments into potential transcripts.'
-    cmd.runtime.image = '?'
+    cmd.runtime.image = 'nanozoo/stringtie:2.1.7--420b0db'
     cmd.runtime.tool = 'stringtie'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 8 * 1024 ** 3
@@ -864,5 +864,37 @@ def stringtie():
     cmd.args['cram_ref'] = Argument(prefix='--cram-ref ', type='infile', level='optional', desc="for CRAM input files, the reference genome sequence can be provided as a multi-FASTA file the same chromosome sequences that were used when aligning the reads. This option is optional but recommended as StringTie can make use of some alignment/junction quality data (mismatches around the junctions) that can be more accurately assessed in the case of CRAM files when the reference genome sequence is also provided")
     cmd.args['merge'] = Argument(prefix='--merge', type='bool', default=False, desc=' In the merge mode, StringTie takes as input a list of GTF/GFF files and merges/assembles these transcripts into a non-redundant set of transcripts. This mode is used in the new differential analysis pipeline to generate a global, unified set of transcripts (isoforms) across multiple RNA-Seq samples.')
     cmd.outputs['out_gtf'] = Output(value='{out_gtf}')
+    return cmd
+
+
+def gff_compare():
+    cmd = Command()
+    cmd.meta.name = 'gffcompare'
+    cmd.meta.source = 'https://github.com/gpertea/gffcompare'
+    cmd.meta.version = '0.12.6'
+    cmd.meta.desc = 'StringTie is a fast and highly efficient assembler of RNA-Seq alignments into potential transcripts.'
+    cmd.runtime.image = 'nanozoo/stringtie:2.1.7--420b0db'
+    cmd.runtime.tool = 'gffcompare'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.args['gtf_list'] = Argument(prefix='-i ', type='infile', level='optional', desc='provide a text file with a list of (query) GTF files to process instead of expecting them as command-line arguments (useful when a large number of GTF files should be processed).')
+    cmd.args['outprefix'] = Argument(prefix='-o ', default='gffcmp', desc='All output files created by gffcompare will have this prefix (e.g. .loci, .tracking, etc.)')
+    cmd.args['ref'] = Argument(prefix='-r ', type='infile', level='optional', desc='An optional “reference” annotation GFF file. Each sample is matched against this file, and sample isoforms are tagged as overlapping, matching, or novel where appropriate')
+    cmd.args['R'] = Argument(prefix='-R', type='bool', default=False, desc='If -r was specified, this option causes gffcompare to ignore reference transcripts that are not overlapped by any transcript in one of input1.gt,...,inputN.gtf. Useful for ignoring annotated transcripts that are not present in your RNA-Seq samples and thus adjusting the "sensitivity" calculation in the accuracy report written in the file.')
+    cmd.args['Q'] = Argument(prefix='-Q', type='bool', default=False, desc='If -r was specified, this option causes gffcompare to ignore input transcripts that are not overlapped by any transcript in the reference. Useful for adjusting the “precision” calculation in the accuracy report written in the file.')
+    cmd.args['M'] = Argument(prefix='-M', type='bool', default=False, desc='discard (ignore) single-exon transfrags and reference transcripts (i.e. consider only multi-exon transcripts)')
+    cmd.args['N'] = Argument(prefix='-N', type='bool', default=False, desc='discard (ignore) single-exon reference transcripts; single-exon transfrags are still considered, but they will never find an exact match')
+    cmd.args['D'] = Argument(prefix='-D', type='bool', default=False, desc='discard "duplicate" (redundant) query transfrags (i.e. those with the same intron chain) within a single sample (and thus disable "annotation" mode)')
+    cmd.args['genome'] = Argument(prefix='-s ', type='infile', level='optional', desc='path to genome sequences (optional); this will enable the "repeat" ('r') classcode assessment;repeats must be soft-masked (lower case) in the genomic sequence')
+    cmd.args['e'] = Argument(prefix='-e ', default=100, desc='Maximum distance (range) allowed from free ends of terminal exons of reference transcripts when assessing exon accuracy. By default, this is 100')
+    cmd.args['d'] = Argument(prefix='-d ', default=100, desc='Maximum distance (range) for grouping transcript start sites, by default 100')
+    cmd.args['p'] = Argument(prefix='-p ', default='TCONS', desc='The name prefix to use for consensus/combined transcripts in the <outprefix>.combined.gtf file')
+    cmd.args['C'] = Argument(prefix='-C', type='bool', default=False, desc='Discard the “contained” transfrags from the .combined.gtf output. By default, without this option, gffcompare writes in that file isoforms that were found to be fully contained/covered (with the same compatible intron structure) by other transfrags in the same locus, with the attribute “contained_in” showing the first container transfrag found.')
+    cmd.args['A'] = Argument(prefix='-A', type='bool', default=False, desc='Like -C but will not discard intron-redundant transfrags if they start on a different 5-end exon (keep alternate transcript start sites)')
+    cmd.args['X'] = Argument(prefix='-X', type='bool', default=False, desc="Like -C but also discard contained transfrags if transfrag ends stick out within the container's introns")
+    cmd.args['K'] = Argument(prefix='-K', type='bool', default=False, desc='For -C/-A/-X, do NOT discard any redundant transfrag matching a reference')
+    cmd.args['T'] = Argument(prefix='-T', type='bool', default=False, desc='Do not generate .tmap and .refmap files for each input file')
+    cmd.outputs['combined_gtf'] = Output(value='{outprefix}.combined.gtf')
+    cmd.outputs['annotated_gtf'] = Output(value='{outprefix}.annotated.gtf', desc='If a single GTF/GFF query file is provided as input and no specific options to remove "duplicated"/redundant transfrags were given (-D, -S, -C, -A, -X), GffCompare outputs a file called <outprefix>.annotated.gtf instead of <outprefix>.combined.gtf Its format is similar to the above, but preserves transcript IDs (so the -p option is ignored)')
     return cmd
 

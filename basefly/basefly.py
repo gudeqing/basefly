@@ -132,6 +132,7 @@ class Output:
     # 由command形成task之后，可以带入task_id
     task_id: str = None
     name: str = None
+    desc: str = None
 
     def __post_init__(self):
         if self.value is None:
