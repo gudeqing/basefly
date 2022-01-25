@@ -45,7 +45,6 @@ ENV PATH="${PATH}:/home/arcasHLA-master/"
 # install two annother packages
 RUN pip3 install -i $PIP_SOURCE psutil
 RUN pip3 install https://github.com/gudeqing/xcmds/raw/master/dist/xcmds-1.5.0-py3-none-any.whl
-RUN wget http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp /usr/local/bin/
 RUN apt install -y nano
 # 复制数据库
 #COPY ./dat /home/arcasHLA-master/dat
@@ -65,7 +64,37 @@ ARG VERSION=202010.02
 RUN mkdir -p /opt/sentieon/ && \
     wget -nv -O - "https://s3.amazonaws.com/sentieon-release/software/sentieon-genomics-${VERSION}.tar.gz" | \
       tar -zxf - -C /opt/sentieon/
-CMD ["/bin/bash"]
 ENV PATH /opt/sentieon/sentieon-genomics-${VERSION}/bin/:$PATH
 ENV SENTIEON_INSTALL_DIR=/opt/sentieon-genomics-${VERSION} \
     SENTIEON_LICENSE=sentieon-lic.enigma2:8990
+
+RUN mkdir -p /opt/stringtie/ && \
+    wget -nv -O - "https://github.com/gpertea/stringtie/releases/download/v2.2.0/stringtie-2.2.0.Linux_x86_64.tar.gz" | \
+    tar -zxf - -C /opt/stringtie/
+
+RUN mkdir -p /opt/gffcompare/ && \
+    wget -nv -O - "http://ccb.jhu.edu/software/stringtie/dl/gffcompare-0.12.6.Linux_x86_64.tar.gz" | \
+    tar -zxf - -C /opt/gffcompare/
+
+RUN mkdir -p /opt/gffread/ && \
+    wget -nv -O - "http://ccb.jhu.edu/software/stringtie/dl/gffread-0.12.7.Linux_x86_64.tar.gz" | \
+    tar -zxf - -C /opt/gffread/
+
+RUN mkdir -p /opt/diamond/ && \
+    wget -nv -O - "https://github.com/bbuchfink/diamond/releases/download/v2.0.14/diamond-linux64.tar.gz" | \
+    tar -zxf - -C /opt/diamond/
+
+RUN pip install xgboost==1.3.3
+
+RUN pip install mhcflurry
+
+RUN mkdir -p /opt/TransDecoder/ && \
+    wget -nv -O - "https://github.com/TransDecoder/TransDecoder/archive/refs/tags/TransDecoder-v5.5.0.tar.gz" | \
+    tar -zxf - -C /opt/TransDecoder/
+
+# 添加RNAmining脚本
+COPY RNAmining /opt/RNAmining
+# 还需按照gffread,diamond，都是二进制，还比较好安装
+# RNAmining, mhcflurry（数据库挺大，打包进来可能比较困难），都是python包
+# transdecoder(需要按照perl，安装也比较困难)
+CMD ["/bin/bash"]
