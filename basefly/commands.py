@@ -898,3 +898,106 @@ def gff_compare():
     cmd.outputs['annotated_gtf'] = Output(value='{outprefix}.annotated.gtf', desc='If a single GTF/GFF query file is provided as input and no specific options to remove "duplicated"/redundant transfrags were given (-D, -S, -C, -A, -X), GffCompare outputs a file called <outprefix>.annotated.gtf instead of <outprefix>.combined.gtf Its format is similar to the above, but preserves transcript IDs (so the -p option is ignored)')
     return cmd
 
+
+def diamond_makedb():
+    cmd = Command()
+    cmd.meta.name = 'diamond_makedb'
+    cmd.meta.source = 'https://github.com/bbuchfink/diamond'
+    cmd.meta.version = '2.0.14'
+    cmd.meta.desc = 'DIAMOND is a sequence aligner for protein and translated DNA searches, designed for high performance analysis of big sequence data'
+    cmd.runtime.image = ''
+    cmd.runtime.tool = 'diamond makedb'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['threads'] = Argument(prefix='-p ', type='int', default=4, desc='number of CPU threads')
+    cmd.args['db'] = Argument(prefix='-d ', desc='database file name prefix')
+    cmd.args['in'] = Argument(prefix='--in ', desc='input reference file in FASTA format')
+    cmd.args['taxonmap'] = Argument(prefix='--taxonmap ', level='optional', desc='protein accession to taxid mapping file')
+    cmd.args['taxonnodes'] = Argument(prefix='--taxonnodes ', level='optional', desc='taxonomy nodes.dmp from NCBI')
+    cmd.args['taxonnames'] = Argument(prefix='--taxonnames ', level='optional', desc='taxonomy names.dmp from NCBI')
+    cmd.outputs['db'] = Output(value='{db}.dmnd')
+    return cmd
+
+
+def diamond_blastp():
+    cmd = Command()
+    cmd.meta.name = 'diamond_blastp'
+    cmd.meta.source = 'https://github.com/bbuchfink/diamond'
+    cmd.meta.version = '2.0.14'
+    cmd.meta.desc = 'DIAMOND is a sequence aligner for protein and translated DNA searches, designed for high performance analysis of big sequence data'
+    cmd.runtime.image = ''
+    cmd.runtime.tool = 'diamond blastp'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['threads'] = Argument(prefix='-p ', type='int', default=4, desc='number of CPU threads')
+    cmd.args['db'] = Argument(prefix='-d ', desc='database file name prefix')
+    cmd.args['query'] = Argument(prefix='-q ', type='infile', desc='query peptide fasta file')
+    cmd.args['unaligned'] = Argument(prefix='--un ', desc='file for unaligned queries')
+    cmd.args['aligned'] = Argument(prefix='--al ', desc='file or aligned queries')
+    cmd.args['out'] = Argument(prefix='-o ', desc='output of alignment result')
+    cmd.args['max-target-seqs'] = Argument(prefix='-k ', default=25, desc='maximum number of target sequences to report alignments for (default=25)')
+    cmd.args['compress'] = Argument(prefix='--compress ', default=0, range=[0,1], desc='compression for output files')
+    cmd.args['evalue'] = Argument(prefix='-e ', default=0.001, desc='maximum e-value to report alignments')
+    cmd.args['identity'] = Argument(prefix='--id ', default=50, desc='minimum identity% to report an alignment')
+    cmd.args['query-cover'] = Argument(prefix='--query-cover ', default=50, desc='minimum query cover% to report an alignment')
+    cmd.args['subject-cover'] = Argument(prefix='--subject-cover ', default=50, desc='minimum subject cover% to report an alignment')
+    cmd.args['mode'] = Argument(prefix='--', default='sensitive', range=['fast', 'mid-sensitive', 'sensitive', 'more-sensitive', 'very-sensitive', 'ultra-sensitive'], desc='indicate to enable which searching mode to use')
+    cmd.args['algo'] = Argument(prefix='--algo ', default='0', range=['0', '1', 'ctg'], desc='Seed search algorithm (0=double-indexed/1=query-indexed/ctg=contiguous-seed)')
+    cmd.args['other_args'] = Argument(prefix='', level='optional', desc='other customised arguments you wish to use, such as "-other value"')
+    cmd.outputs['aligned'] = Output(value='{aligned}')
+    cmd.outputs['unaligned'] = Output(value='{unaligned}')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def mhcflurry_predict_scan():
+    cmd = Command()
+    cmd.meta.name = 'mhcflurry'
+    cmd.meta.source = 'https://github.com/openvax/mhcflurry'
+    cmd.meta.version = '2.0.14'
+    cmd.meta.desc = 'DIAMOND is a sequence aligner for protein and translated DNA searches, designed for high performance analysis of big sequence data'
+    cmd.runtime.image = ''
+    cmd.runtime.tool = 'mhcflurry-predict-scan'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['input_file'] = Argument(prefix='', type='infile', level='optional', desc='Sequences to predict, csv or fasta')
+    cmd.args['alleles'] = Argument(prefix='--alleles ', array=True, delimiter=',', desc='Alleles to predict, such as LA-A*02:01,HLA-A*03:01')
+    cmd.args['sequences'] = Argument(prefix='--sequences ', level='optional', desc='Sequences to predict (exclusive with passing an input file)')
+    cmd.args['sequence-id-column'] = Argument(prefix='--sequence-id-column ', default='sequence_id', desc="Input CSV column name for sequence IDs. Default: 'sequence_id'")
+    cmd.args['sequence-column'] = Argument(prefix='--sequence-column ', default='sequence', desc="Input CSV column name for sequences. Default: 'sequence'")
+    cmd.args['peptide-lengths'] = Argument(prefix='--peptide-lengths ', array=True, delimiter=',', default=[8, 9, 10, 11], desc='Peptide lengths to consider. Pass as START-END (e.g. 8-11) or a comma-separated list (8,9,10,11). When using START-END, the range is INCLUSIVE on both ends. Default: 8-11')
+    cmd.args['results-all'] = Argument(prefix='--results-all', type='bool', default=False, desc='Return results for all peptides regardless of affinity, etc.')
+    cmd.args['results-best'] = Argument(prefix='--results-best ', level='optional', range=['presentation_score', 'processing_score', 'affinity', 'affinity_percentile'], desc='Take the top result for each sequence according to the specified predicted quantity')
+    cmd.args['results-filtered'] = Argument(prefix='--results-filtered ',  default='affinity', range=['presentation_score', 'processing_score', 'affinity', 'affinity_percentile'], desc='Filter results by the specified quantity')
+    cmd.args['threshold-presentation-score'] = Argument(prefix='--threshold-presentation-score ', default=0.7, desc='Threshold if filtering by presentation score')
+    cmd.args['threshold-processing-score'] = Argument(prefix='--threshold-processing-score ', default=0.5, desc='Threshold if filtering by processing score.')
+    cmd.args['threshold-affinity'] = Argument(prefix='--threshold-affinity ', default=500, desc='Threshold if filtering by affinity.')
+    cmd.args['threshold-affinity-percentile'] = Argument(prefix='--threshold-affinity-percentile ', default=2.0, desc='Threshold if filtering by affinity percentile.')
+    cmd.args['out'] = Argument(prefix='--out ', desc='output csv')
+    cmd.args['output-delimiter'] = Argument(prefix='--output-delimiter ', default=',')
+    cmd.args['no-affinity-percentile'] = Argument(prefix='--no-affinity-percentile', type='bool', default=False, desc='Do not include affinity percentile rank')
+    cmd.args['models'] = Argument(prefix='--models ', type='indir', desc='Directory containing presentation models, such as mhcflurry/4/2.0.0/models_class1_presentation/models')
+    cmd.args['no-flanking'] = Argument(prefix='--no-flanking', type='bool', default=False, desc='Do not use flanking sequence information in predictions')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def RNAmining():
+    cmd = Command()
+    cmd.meta.name = 'RNAmining'
+    cmd.meta.source = 'https://rnamining.integrativebioinformatics.me/about'
+    cmd.meta.version = '1.0.4'
+    cmd.meta.desc = 'This tool was implemented using XGBoost machine learning algorithm. Machine learning is a subfield of computer science that developed from the study of pattern recognition and computational learning theories in artificial intelligence. This tool operate through a model obtained from training data analyzes and produces an inferred function, which can be used for mapping new examples'
+    cmd.runtime.image = ''
+    cmd.runtime.tool = 'python3 rnamining.py'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['query'] = Argument(prefix='-f ', type='infile', desc='The filename with a sequence to predict')
+    cmd.args['organism'] = Argument(prefix='-organism_name ', default='Homo_sapiens', range=['Escherichia_coli', 'Arabidopsis_thaliana', 'Drosophila_melanogaster', 'Homo_sapiens', 'Mus_musculus', 'Saccharomyces_cerevisiae'], desc='The name of the organism you want to predict/train')
+    cmd.args['prediction_type'] = Argument(prefix='-prediction_type ', default='coding_prediction', range=['coding_prediction', 'ncRNA_functional_assignation'])
+    cmd.args['outdir'] = Argument(prefix='-output_folder ', default='.', desc='output directory')
+    cmd.outputs['outdir'] = Output(value='{outdir}', type='outdir')
+    cmd.outputs['predictions'] = Output(value='{outdir}/predictions.txt')
+    cmd.outputs['codings'] = Output(value='{outdir}/codings.txt')
+    return cmd
+
