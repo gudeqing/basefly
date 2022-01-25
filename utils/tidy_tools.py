@@ -5,6 +5,9 @@ from glob import glob
 import pandas as pd
 import numpy as np
 
+"""
+这里包含的工具是用于结果整理的
+"""
 
 def find_files(query_dir, names:tuple, followlinks=True):
     results = [[] for x in names]
