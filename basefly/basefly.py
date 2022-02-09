@@ -175,7 +175,7 @@ class Command:
 
             if arg_value is None:
                 if arg.level == 'required':
-                    raise Exception(f'No value found for {arg_name}!')
+                    raise Exception(f'No value found for required argument {arg_name} in {self.meta.name}')
                 else:
                     # 对于非必须参数，且没有赋值的参数，直接跳过，不参与命令行的形成
                     continue
