@@ -244,13 +244,17 @@ class Command:
 class Task:
     cmd: Command
     name: str = None
+    tag: str = None
     task_id: str = field(default_factory=uuid4)
     depends: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         # task name
         if self.name is None:
-            self.name = self.cmd.meta.name + '-' + str(self.task_id)
+            if self.tag:
+                self.name = self.cmd.meta.name + '-' + str(self.tag)
+            else:
+                self.name = self.cmd.meta.name + '-' + str(self.task_id)
 
         # 为每一个output带入
         for key in self.cmd.outputs.keys():
@@ -355,8 +359,8 @@ class Workflow:
             v.name = k
         self.topvars.update(var_dict)
 
-    def add_task(self, cmd: Command, depends: list = [], name: str = None):
-        task = Task(cmd=cmd, depends=depends, name=name)
+    def add_task(self, cmd: Command, depends: list = [], name: str = None, tag: str = None):
+        task = Task(cmd=cmd, depends=depends, name=name, tag=tag)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 

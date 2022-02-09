@@ -639,7 +639,11 @@ class RunCommands(CommandNetwork):
     def continue_run(self, rerun_steps=tuple(), assume_success_steps=tuple()):
         detail_steps = []
         for each in rerun_steps:
-            detail_steps += [x for x in self.names() if x.startswith(each)]
+            to_be_rerun_steps = [x for x in self.names() if x.startswith(each)]
+            if to_be_rerun_steps:
+                detail_steps += to_be_rerun_steps
+            else:
+                raise Exception(f'{each} matches no task, you may check the task name by "--list_task"')
 
         self.ever_queued = set()
         # 使用已有状态信息更新状态
