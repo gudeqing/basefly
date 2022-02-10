@@ -6,6 +6,7 @@ import time
 class GTF(object):
     def __init__(self, gtf, target_transcripts=None):
         self.gtf = gtf
+        print('parsing gtf file:', gtf)
         self.table = pd.read_csv(self.gtf, sep='\t', comment='#', header=None)
         header = ['chr', 'source', 'type', 'start', 'end', 'score', 'strand', 'phase', 'attrs']
         self.table.columns = header
@@ -19,12 +20,12 @@ class GTF(object):
     @staticmethod
     def parse_col9(col9: str):
         col9lst = col9.rstrip(';').split(';')
-        col9dict = dict(x.strip().replace('"', '').split() for x in col9lst)
+        col9dict = dict(x.strip().rstrip('"').split(' "') for x in col9lst)
         # try:
-        #     col9dict = dict(x.strip().replace('"', '').split() for x in col9lst)
+        #     col9dict = dict(x.strip().rstrip('"').split(' "') for x in col9lst)
         # except Exception as e:
         #     print(e)
-        #     print(col9)
+        #     print('raw col9:', col9)
         #     exit()
         return col9dict
 
@@ -56,9 +57,15 @@ class GTF(object):
                     else:
                         print('gtf的第九列属性字段和前面列的字段重复！')
             elif row['type'] == 'exon':
-                trans_desc = result[attr_dict['transcript_id']]
-                # trans_desc.setdefault('exon_intervals', []).append((row['start'], row['end']))
-                trans_desc.setdefault('exon_pos_lst', []).extend(range(row['start'], row['end']+1))
+                if attr_dict['transcript_id'] not in result:
+                    # 有些不规范的gtf就是直接来个外显子，如ERCC内控序列
+                    trans_desc = result.setdefault(attr_dict.pop('transcript_id'), dict())
+                    trans_desc.update(attr_dict)
+                    trans_desc.setdefault('exon_pos_lst', []).extend(range(row['start'], row['end'] + 1))
+                else:
+                    trans_desc = result[attr_dict['transcript_id']]
+                    # trans_desc.setdefault('exon_intervals', []).append((row['start'], row['end']))
+                    trans_desc.setdefault('exon_pos_lst', []).extend(range(row['start'], row['end']+1))
         return result
 
     def filter_by_attrs(self, col9: str, key, value_range):
@@ -74,7 +81,7 @@ class GTF(object):
         2. 如果不在任何区域，就查找左右最近的feature是谁
         :param chrom: 染色体
         :param pos: 坐标
-        :param n_nearest: 指定查找左右最近N个feature，某人只查找一个左右最近的
+        :param n_nearest: 指定查找左右最近N个feature，默认查找一个左右最近的
         :param tp: 限定要查找的feature类型，可以是下面的任何一个，默认所有类型都含括，也即不过滤
                 CDS exon gene start_codon stop_codon transcript UTR
         :return: pd.DataFrame, 增加distance列，正数表示左边最近的距离，负数表示右边最近的距离，0表示落在feature区域
