@@ -93,8 +93,8 @@ RUN mkdir -p /opt/TransDecoder/ && \
     tar -zxf - -C /opt/TransDecoder/
 
 # 添加RNAmining脚本
+RUN pip3 install -i $PIP_SOURCE pickle5
 COPY RNAmining /opt/RNAmining
-# 还需按照gffread,diamond，都是二进制，还比较好安装
-# RNAmining, mhcflurry（数据库挺大，打包进来可能比较困难），都是python包
-# transdecoder(需要按照perl，安装也比较困难)
+
+RUN echo 'PS1="\[\e[37;40m\][\[\e[32;40m\]\u\[\e[37;40m\]@\t \[\e[36;40m\]\w\[\e[0m\]]\\n$ "' >> /root/.bashrc
 CMD ["/bin/bash"]
