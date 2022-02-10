@@ -1026,12 +1026,33 @@ def diamond_blastp():
     return cmd
 
 
+def mhcflurry_predict():
+    cmd = Command()
+    cmd.meta.name = 'mhcflurry'
+    cmd.meta.source = 'https://github.com/openvax/mhcflurry'
+    cmd.meta.version = '2.0.14'
+    cmd.meta.desc = 'MHCflurry is an open source package for peptide/MHC I binding affinity prediction.'
+    cmd.runtime.image = ''
+    cmd.runtime.tool = 'mhcflurry-predict'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 6 * 1024 ** 3
+    cmd.args['input_csv'] = Argument(prefix='', type='infile', desc='The input CSV file is expected to contain columns "allele", "peptide", and, optionally, "n_flank", and "c_flank".')
+    cmd.args['out'] = Argument(prefix='--out ', desc='output csv')
+    cmd.args['no-throw'] = Argument(prefix='--no-throw', type='bool', default=False, desc='Return NaNs for unsupported alleles or peptides instead of raising')
+    cmd.args['always-include-best-allele'] = Argument(prefix='--always-include-best-allele', type='bool', default=False, desc='Always include the best_allele column even when it is identical to the allele column (i.e. all queries are monoallelic)')
+    cmd.args['models'] = Argument(prefix='--models ', type='indir', desc='Directory containing models. Either a binding affinity predictor or a presentation predictor can be used.')
+    cmd.args['affinity-only'] = Argument(prefix='--affinity-only', type='bool', default=False, desc='Affinity prediction only (no antigen processing or presentation)')
+    cmd.args['no-flanking'] = Argument(prefix='--no-flanking', type='bool', default=False, desc='Do not use flanking sequence information even when available')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
 def mhcflurry_predict_scan():
     cmd = Command()
     cmd.meta.name = 'mhcflurry'
     cmd.meta.source = 'https://github.com/openvax/mhcflurry'
     cmd.meta.version = '2.0.14'
-    cmd.meta.desc = 'DIAMOND is a sequence aligner for protein and translated DNA searches, designed for high performance analysis of big sequence data'
+    cmd.meta.desc = 'MHCflurry is an open source package for peptide/MHC I binding affinity prediction.'
     cmd.runtime.image = ''
     cmd.runtime.tool = 'mhcflurry-predict-scan'
     cmd.runtime.cpu = 3
