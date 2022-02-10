@@ -831,20 +831,21 @@ def stringtie():
     cmd.meta.version = '2.2.0'
     cmd.meta.desc = 'StringTie is a fast and highly efficient assembler of RNA-Seq alignments into potential transcripts.'
     cmd.runtime.image = 'nanozoo/stringtie:2.1.7--420b0db'
+    cmd.runtime.tool_dir = '/opt/stringtie/stringtie-2.2.0.Linux_x86_64/'
     cmd.runtime.tool = 'stringtie'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.args['out_gtf'] = Argument(prefix='-o ', desc='Sets the name of the output GTF file where StringTie will write the assembled transcripts. This can be specified as a full path, in which case directories will be created as needed.')
     cmd.args['L'] = Argument(prefix='-L', type='bool', default=False, desc='long reads processing mode; also enforces -s 1.5 -g 0 (default:false)')
     cmd.args['mix'] = Argument(prefix='--mix', type='bool', default=False, desc='mixed reads processing mode; both short and long read data alignments are expected (long read alignments must be given as the 2nd BAM/CRAM input file)')
     cmd.args['e'] = Argument(prefix='-e', type='bool', default=False, desc='mixed reads processing mode; both short and long read data alignments are expected (long read alignments must be given as the 2nd BAM/CRAM input file)')
     cmd.args['v'] = Argument(prefix='-v', type='bool', default=False, desc='Turns on verbose mode, printing bundle processing details.')
-    cmd.args['out_gtf'] = Argument(prefix='-o ', desc='Sets the name of the output GTF file where StringTie will write the assembled transcripts. This can be specified as a full path, in which case directories will be created as needed.')
     cmd.args['p'] = Argument(prefix='-p ', type='int', default=4, desc='Specify the number of processing threads (CPUs) to use for transcript assembly.')
-    cmd.args['ref_model'] = Argument(prefix='-G ', type='infile', level='optional', desc='Use a reference annotation file (in GTF or GFF3 format) to guide the assembly process. The output will include expressed reference transcripts as well as any novel transcripts that are assembled. This option is required by options -B, -b, -e, -C')
+    cmd.args['gene_model'] = Argument(prefix='-G ', type='infile', level='optional', desc='Use a reference annotation file (in GTF or GFF3 format) to guide the assembly process. The output will include expressed reference transcripts as well as any novel transcripts that are assembled. This option is required by options -B, -b, -e, -C')
     cmd.args['fr-firststrand'] = Argument(prefix='--rf', type='bool', default=False, desc='Assumes a stranded library fr-firststrand.')
     cmd.args['fr-secondstrand'] = Argument(prefix='--fr', type='bool', default=False, desc='Assumes a stranded library fr-secondstrand.')
     cmd.args['ptf'] = Argument(prefix='--ptf ', type='infile', level='optional', desc='Loads a list of point-features from a text feature file <f_tab> to guide the transcriptome assembly. Accepted point features are transcription start sites (TSS) and polyadenylation sites (CPAS). There are four tab-delimited columns in the feature file. The first three define the location of the point feature on the cromosome (sequence name, coordinate and strand), and the last is the type of the feature (TSS or CPAS)')
-    cmd.args['label'] = Argument(prefix='-l', default='STRG', desc='Sets <label> as the prefix for the name of the output transcripts')
+    cmd.args['label'] = Argument(prefix='-l ', default='STRG', desc='Sets <label> as the prefix for the name of the output transcripts')
     cmd.args['f'] = Argument(prefix='-f ', type='float', default=0.01, desc='Sets the minimum isoform abundance of the predicted transcripts as a fraction of the most abundant transcript assembled at a given locus. Lower abundance transcripts are often artifacts of incompletely spliced precursors of processed transcripts')
     cmd.args['m'] = Argument(prefix='-m ', type='int', default=200, desc='Sets the minimum length allowed for the predicted transcripts')
     cmd.args['A'] = Argument(prefix='-A ', level='optional', desc='Gene abundances will be reported (tab delimited format) in the output file with the given name.')
@@ -853,7 +854,7 @@ def stringtie():
     cmd.args['j'] = Argument(prefix='-j ', type='float', default=1.0, desc="There should be at least this many spliced reads that align across a junction (i.e. junction coverage). This number can be fractional, since some reads align in more than one place. A read that aligns in n places will contribute 1/n to the junction coverage.")
     cmd.args['t'] = Argument(prefix='-t', type='bool', default=False, desc="This parameter disables trimming at the ends of the assembled transcripts. By default StringTie adjusts the predicted transcript's start and/or stop coordinates based on sudden drops in coverage of the assembled transcript")
     cmd.args['c'] = Argument(prefix='-c ', type='int', default=1, desc="Sets the minimum read coverage allowed for the predicted transcripts. A transcript with a lower coverage than this value is not shown in the output")
-    cmd.args['s'] = Argument(prefix='-s', type='float', default=4.75, desc='Sets the minimum read coverage allowed for single-exon transcripts')
+    cmd.args['s'] = Argument(prefix='-s ', type='float', default=4.75, desc='Sets the minimum read coverage allowed for single-exon transcripts')
     cmd.args['conservative'] = Argument(prefix='--conservative', type='bool', default=False, desc='Assembles transcripts in a conservative mode. Same as -t -c 1.5 -f 0.05')
     cmd.args['g'] = Argument(prefix='-g ', type='int', default=50, desc='Minimum locus gap separation value. Reads that are mapped closer than this distance are merged together in the same processing bundle')
     cmd.args['B'] = Argument(prefix='-B', type='bool', default=False, desc='This switch enables the output of Ballgown input table files (*.ctab) containing coverage data for the reference transcripts given with the -G option.')
@@ -862,7 +863,8 @@ def stringtie():
     cmd.args['x'] = Argument(prefix='-x ', level='optional', desc="Ignore all read alignments (and thus do not attempt to perform transcript assembly) on the specified reference sequences. Parameter <seqid_list> can be a single reference sequence name (e.g. -x chrM) or a comma-delimited list of sequence names (e.g. -x 'chrM,chrX,chrY'). This can speed up StringTie especially in the case of excluding the mitochondrial genome, whose genes may have very high coverage in some cases, even though they may be of no interest for a particular RNA-Seq analysis. The reference sequence names are case sensitive, they must match identically the names of chromosomes/contigs of the target genome against which the RNA-Seq reads were aligned in the first place.")
     cmd.args['u'] = Argument(prefix='-u', type='bool', default=False, desc='Turn off multi-mapping correction. In the default case this correction is enabled, and each read that is mapped in n places only contributes 1/n to the transcript coverage instead of 1')
     cmd.args['cram_ref'] = Argument(prefix='--cram-ref ', type='infile', level='optional', desc="for CRAM input files, the reference genome sequence can be provided as a multi-FASTA file the same chromosome sequences that were used when aligning the reads. This option is optional but recommended as StringTie can make use of some alignment/junction quality data (mismatches around the junctions) that can be more accurately assessed in the case of CRAM files when the reference genome sequence is also provided")
-    cmd.args['merge'] = Argument(prefix='--merge', type='bool', default=False, desc=' In the merge mode, StringTie takes as input a list of GTF/GFF files and merges/assembles these transcripts into a non-redundant set of transcripts. This mode is used in the new differential analysis pipeline to generate a global, unified set of transcripts (isoforms) across multiple RNA-Seq samples.')
+    cmd.args['merge'] = Argument(prefix='--merge', type='bool', default=False, desc='In the merge mode, StringTie takes as input a list of GTF/GFF files and merges/assembles these transcripts into a non-redundant set of transcripts. This mode is used in the new differential analysis pipeline to generate a global, unified set of transcripts (isoforms) across multiple RNA-Seq samples.')
+    cmd.args['bam'] = Argument(type='infile', array=True, desc='input bam(s) file path')
     cmd.outputs['out_gtf'] = Output(value='{out_gtf}')
     return cmd
 
@@ -874,10 +876,11 @@ def gffcompare():
     cmd.meta.version = '0.12.6'
     cmd.meta.desc = 'StringTie is a fast and highly efficient assembler of RNA-Seq alignments into potential transcripts.'
     cmd.runtime.image = 'nanozoo/stringtie:2.1.7--420b0db'
+    cmd.runtime.tool_dir = '/opt/gffcompare/gffcompare-0.12.6.Linux_x86_64/'
     cmd.runtime.tool = 'gffcompare'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 5 * 1024 ** 3
-    cmd.args['gtf_list'] = Argument(prefix='-i ', type='infile', level='optional', desc='provide a text file with a list of (query) GTF files to process instead of expecting them as command-line arguments (useful when a large number of GTF files should be processed).')
+    cmd.args['gtfs'] = Argument(prefix='', type='infile', level='optional', array=True, desc='provide a list of (query) GTF files to process')
     cmd.args['outprefix'] = Argument(prefix='-o ', default='gffcmp', desc='All output files created by gffcompare will have this prefix (e.g. .loci, .tracking, etc.)')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', level='optional', desc='An optional “reference” annotation GFF file. Each sample is matched against this file, and sample isoforms are tagged as overlapping, matching, or novel where appropriate')
     cmd.args['R'] = Argument(prefix='-R', type='bool', default=False, desc='If -r was specified, this option causes gffcompare to ignore reference transcripts that are not overlapped by any transcript in one of input1.gt,...,inputN.gtf. Useful for ignoring annotated transcripts that are not present in your RNA-Seq samples and thus adjusting the "sensitivity" calculation in the accuracy report written in the file.')
@@ -888,6 +891,7 @@ def gffcompare():
     cmd.args['genome'] = Argument(prefix='-s ', type='infile', level='optional', desc='path to genome sequences (optional); this will enable the "repeat" ('r') classcode assessment;repeats must be soft-masked (lower case) in the genomic sequence')
     cmd.args['e'] = Argument(prefix='-e ', default=100, desc='Maximum distance (range) allowed from free ends of terminal exons of reference transcripts when assessing exon accuracy. By default, this is 100')
     cmd.args['d'] = Argument(prefix='-d ', default=100, desc='Maximum distance (range) for grouping transcript start sites, by default 100')
+    cmd.args['strict_match'] = Argument(prefix='--strict-match', type='bool', default=False, desc="transcript matching takes into account the -e range for terminal exons; code '=' is only assigned if transcript ends are; within that range, otherwise code '~' is assigned just for intron chain; match (or significant overlap in the case of single exon transcripts)")
     cmd.args['p'] = Argument(prefix='-p ', default='TCONS', desc='The name prefix to use for consensus/combined transcripts in the <outprefix>.combined.gtf file')
     cmd.args['C'] = Argument(prefix='-C', type='bool', default=False, desc='Discard the “contained” transfrags from the .combined.gtf output. By default, without this option, gffcompare writes in that file isoforms that were found to be fully contained/covered (with the same compatible intron structure) by other transfrags in the same locus, with the attribute “contained_in” showing the first container transfrag found.')
     cmd.args['A'] = Argument(prefix='-A', type='bool', default=False, desc='Like -C but will not discard intron-redundant transfrags if they start on a different 5-end exon (keep alternate transcript start sites)')
@@ -906,6 +910,7 @@ def gffread():
     cmd.meta.version = '0.12.7'
     cmd.meta.desc = 'GFF/GTF utility providing format conversions, filtering, FASTA sequence extraction and more.'
     cmd.runtime.image = ''
+    cmd.runtime.tool_dir = '/opt/gffread/gffread-0.12.7.Linux_x86_64/'
     cmd.runtime.tool = 'gffread'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 5 * 1024 ** 3
@@ -923,6 +928,27 @@ def gffread():
     return cmd
 
 
+def TransDecoder_LongOrfs():
+    cmd = Command()
+    cmd.meta.name = 'TransDecoderLongOrfs'
+    cmd.meta.source = 'https://github.com/TransDecoder/TransDecoder'
+    cmd.meta.version = '5.5.0'
+    cmd.meta.desc = 'Use TransDecoder predict the likely coding regions. TransDecoder identifies candidate coding regions within transcript sequences, such as those generated by de novo RNA-Seq transcript assembly using Trinity, or constructed based on RNA-Seq alignments BAM.'
+    cmd.runtime.image = ''
+    cmd.runtime.tool_dir = '/opt/TransDecoder/TransDecoder-TransDecoder-v5.5.0/'
+    cmd.runtime.tool = 'TransDecoder.LongOrfs'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['t'] = Argument(prefix='-t ', type='infile', desc='transcript fasta file')
+    cmd.args['m'] = Argument(prefix='-m ', type='int', default=64, desc='minimum protein length (default: 100)')
+    cmd.args['gene_trans_map'] = Argument(prefix='--gene_trans_map ', type='infile', level='optional', desc='gene-to-transcript identifier mapping file (tab-delimited, gene_id<tab>trans_id<return> )')
+    cmd.args['genetic_code'] = Argument(prefix='-G ', default='universal', desc='genetic code (default: universal; see PerlDoc; options: Euplotes, Tetrahymena, Candida, Acetabularia)')
+    cmd.args['only_top_strand'] = Argument(prefix='-S', type='bool', default=False, desc='strand-specific (only analyzes top strand)')
+    cmd.args['outdir'] = Argument(prefix='--output_dir ', default='LongOrfs', desc='path to intended output directory')
+    cmd.outputs['outdir'] = Output(value='{outdir}', type='outdir')
+    return cmd
+
+
 def transdecoder_predict():
     cmd = Command()
     cmd.meta.name = 'TransDecoderPredict'
@@ -930,16 +956,17 @@ def transdecoder_predict():
     cmd.meta.version = '5.5.0'
     cmd.meta.desc = 'Use TransDecoder predict the likely coding regions. TransDecoder identifies candidate coding regions within transcript sequences, such as those generated by de novo RNA-Seq transcript assembly using Trinity, or constructed based on RNA-Seq alignments BAM.'
     cmd.runtime.image = ''
+    cmd.runtime.tool_dir = '/opt/TransDecoder/TransDecoder-TransDecoder-v5.5.0/'
     cmd.runtime.tool = 'TransDecoder.Predict'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.args['t'] = Argument(prefix='-t ', type='infile', desc='transcript fasta file')
     cmd.args['retain_long_orfs_mode'] = Argument(prefix='--retain_long_orfs_mode ', default='dynamic', desc='In dynamic mode, sets range according to 1%FDR in random sequence of same GC content.')
     cmd.args['retain_long_orfs_length'] = Argument(prefix='--retain_long_orfs_length ', level='optional', default=1000000, desc="under 'strict' mode, retain all ORFs found that are equal or longer than these many nucleotides even if no other evidence marks it as coding (default: 1000000) so essentially turned off by default")
-    cmd.args['retain_pfam_hits'] = Argument(prefix='--retain_pfam_hits ', level='optional', desc='file name of domain table output file from running hmmscan to search Pfam')
-    cmd.args['retain_blastp_hits'] = Argument(prefix='--retain_blastp_hits ', level='optional', desc="blastp output in '-outfmt 6' format. ")
+    cmd.args['retain_pfam_hits'] = Argument(prefix='--retain_pfam_hits ', type='infile', level='optional', desc='file name of domain table output file from running hmmscan to search Pfam')
+    cmd.args['retain_blastp_hits'] = Argument(prefix='--retain_blastp_hits ', type='infile', level='optional', desc="blastp output in '-outfmt 6' format. ")
     cmd.args['single_best_only'] = Argument(prefix='--single_best_only', type='bool', default=False, desc='Retain only the single best orf per transcript (prioritized by homology then orf length)')
-    cmd.args['output_dir'] = Argument(prefix='--output_dir ', default='LongOrfs_dir', desc='output directory from the TransDecoder.LongOrfs step (default: basename( -t val ) + ".transdecoder_dir")')
+    cmd.args['output_dir'] = Argument(prefix='--output_dir ', type='indir', default='LongOrfs_dir', desc='output directory from the TransDecoder.LongOrfs step (default: basename( -t val ) + ".transdecoder_dir")')
     cmd.args['no_refine_starts'] = Argument(prefix='--no_refine_starts', type='bool', default=False, desc="start refinement identifies potential start codons for 5' partial ORFs using a PWM, process on by default")
     cmd.outputs['LongOrfs_dir'] = Output(value='{output_dir}')
     cmd.outputs['pep_file'] = Output(value='*.transdecoder.pep')
@@ -953,6 +980,7 @@ def diamond_makedb():
     cmd.meta.version = '2.0.14'
     cmd.meta.desc = 'DIAMOND is a sequence aligner for protein and translated DNA searches, designed for high performance analysis of big sequence data'
     cmd.runtime.image = ''
+    cmd.runtime.tool_dir = '/opt/diamond/'
     cmd.runtime.tool = 'diamond makedb'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 5 * 1024 ** 3
@@ -973,6 +1001,7 @@ def diamond_blastp():
     cmd.meta.version = '2.0.14'
     cmd.meta.desc = 'DIAMOND is a sequence aligner for protein and translated DNA searches, designed for high performance analysis of big sequence data'
     cmd.runtime.image = ''
+    cmd.runtime.tool_dir = '/opt/diamond/'
     cmd.runtime.tool = 'diamond blastp'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 5 * 1024 ** 3
@@ -1036,7 +1065,7 @@ def RNAmining():
     cmd.meta.version = '1.0.4'
     cmd.meta.desc = 'This tool was implemented using XGBoost machine learning algorithm. Machine learning is a subfield of computer science that developed from the study of pattern recognition and computational learning theories in artificial intelligence. This tool operate through a model obtained from training data analyzes and produces an inferred function, which can be used for mapping new examples'
     cmd.runtime.image = ''
-    cmd.runtime.tool = 'python3 rnamining.py'
+    cmd.runtime.tool = 'python3 /opt/RNAmining/rnamining.py'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.args['query'] = Argument(prefix='-f ', type='infile', desc='The filename with a sequence to predict')
