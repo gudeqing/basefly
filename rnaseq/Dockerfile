@@ -96,5 +96,5 @@ RUN mkdir -p /opt/TransDecoder/ && \
 RUN pip3 install -i $PIP_SOURCE pickle5
 COPY RNAmining /opt/RNAmining
 
-RUN echo 'PS1="\[\e[37;40m\][\[\e[32;40m\]\u\[\e[37;40m\]@\t \[\e[36;40m\]\w\[\e[0m\]]\\n$ "' >> /root/.bashrc
+RUN echo 'PS1="\[\e[37;40m\][\[\e[32;40m\]\u\[\e[37;40m\]@\\t \[\e[36;40m\]\w\[\e[0m\]]\\n$ "' >> /root/.bashrc
 CMD ["/bin/bash"]
