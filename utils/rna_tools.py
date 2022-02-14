@@ -312,7 +312,7 @@ def find_potential_intron_peptides(tumor_gtf, normal_gtf, ref_gtf, tumor_transde
                 # 制备MixMHC2pred的输入
                 with open(out_prefix+f'.{mhc_type}.uniq_intron_retained.pep_segments.faa', 'w') as f:
                     for v, k in t_uniq_pep_kmer_dict.items():
-                        f.write(f'>{"|".join(k)}\n{v[1]}\n')
+                        f.write(f'>{"|".join(k)} flank_n={v[0]} flank_c={v[2]}\n{v[1]}\n')
         else:
             print('没有提取出任何肿瘤样本特有的疑似源于内含子区间的peptide')
 

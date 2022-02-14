@@ -281,7 +281,7 @@ def simplify_hisat_genotype(df, outdir='.'):
     # stat distribution
 
 
-def get_2digits_hla_genetype(table, sample, alleles=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2')):
+def get_4digits_hla_genetype(table, sample, alleles=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2')):
     """prepare for pvacseq tool based on result of merge_hisat_genotype"""
     df = pd.read_table(table, index_col=0, header=0)
     targets = list()

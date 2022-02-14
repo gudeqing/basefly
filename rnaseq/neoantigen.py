@@ -17,7 +17,7 @@
     b. 对于具有编码潜能的transcript，进一步使用transdecoder(https://github.com/TransDecoder/TransDecoder)进行pipetide预测
 6. 提取出内含子对应（gffcompare会尽量给组装出来的转录本一个最近似的参考转录本，这里的内含子是相对参考转录本而言，即没有落在参考转录本外显子区域）
     编码的肽段，且前后各延申7个碱基，这样可以得到肿瘤组织的新肽段集合Tumor_New_Peptide(进行一定长度如[8-11]的切割，保留前后5个氨基酸的flank)
-7. 如果有正常组织，对正常组织也采用3，5，6【不仅仅扣内含子区域】的处理，得到正常组织对应的新肽段集合Normal_New_Peptide
+7. 如果有正常组织，对正常组织也采用3，5，6【但不仅仅是扣内含子区域对应的肽段，而是所有新转录本的肽段】的处理，得到正常组织对应的新肽段集合Normal_New_Peptide
 8. 得到初步新抗原预测的肽段集合: pre_new_peptide = Tumor_New_Peptide - Normal_New_Peptide
 9. 最终的新抗原肽段集合：将pre_new_peptide和参考蛋白组进行比对（使用diamond)，过滤掉identity=100的peptide后得到最终的final_new_peptide
 10. 使用mhcflurry-predict-scan等进行MHC-I类新抗原预测，筛选出潜在的最终新抗原肽段
@@ -28,6 +28,8 @@ import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from basefly.basefly import Argument, Output, Command, Workflow, TopVar, TmpVar
+from utils.tidy_tools import get_4digits_hla_genetype
+from utils.rna_tools import check_and_convert_alleles_for_MixMHC2Pred
 from basefly.commands import stringtie, gffcompare, gffread, transdecoder_predict, RNAmining, TransDecoder_LongOrfs, mhcflurry_predict, MixMHC2pred
 __author__ = 'gdq'
 
@@ -89,11 +91,15 @@ def pipeline():
     wf.add_argument('-genome_fa', required=True, help='reference nucleotide fasta file')
     wf.add_argument('-gtf', required=True, help='genome annotation file in gtf format, gff format is not supported.')
     wf.add_argument('-mhcflurry_models', help='Directory containing models of mhcflurry')
+    wf.add_argument('-hla_genotype', required=True, help='HLA genetype table with header consiting of HLA gene name, index is tumor sample name. Each element data is genetype detail.')
+    wf.add_argument('-alleles', default=('DRA', 'DRB1', 'DRB3', 'DRB4', 'DRB5', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'),
+                    nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
     wf.add_argument('-genome_pep', required=False, help='reference proteome fasta file')
     wf.parse_args()
 
     for sample_names, bams in parse_bam_list(wf.args.bams).items():
         # 组装获得gtf，并使用参考gtf进行注释
+        tumor_sample, normal_sample = sample_names
         for ind, sample in enumerate(sample_names):
             assemble_task, args = wf.add_task(stringtie(), tag=sample)
             args['bam'].value = [bams[ind]]
@@ -142,7 +148,6 @@ def pipeline():
                 normal_decoder_task = decoder_task
 
         # 结合肿瘤样本和对照样本的组装结果和蛋白编码预测结果进行特异性的肿瘤新肽段提取
-        tumor_sample = sample_names[0]
         find_novel_peptide_task, args = wf.add_task(find_potential_intron_peptides(),
                                                     name='findNovelPeptides-'+tumor_sample,
                                                     depends=[tumor_filter_task, normal_filter_task,
@@ -165,8 +170,8 @@ def pipeline():
         mhc2pred_task, args = wf.add_task(MixMHC2pred(), tag=tumor_sample, depends=[find_novel_peptide_task])
         args['input'].value = find_novel_peptide_task.outputs['MixMHC2pred_faa']
         args['output'].value = tumor_sample + '.MixMHC2pred.txt'
-        args['alleles'].value = ['DRB1_01_01','DPA1_01_03__DPA1_02_01__DPB1_03_01']
-
+        alleles = get_4digits_hla_genetype(wf.args.hla_genotype, normal_sample, alleles=wf.args.alleles)
+        args['alleles'].value = check_and_convert_alleles_for_MixMHC2Pred(alleles)
     wf.run()
 
 

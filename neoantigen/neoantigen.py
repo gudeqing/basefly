@@ -3,7 +3,7 @@ script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from basefly.basefly import Workflow, Argument, Output, Command,  TopVar, TmpVar
 from basefly.commands import add_exp_to_vcf, bam_read_count, add_read_count_to_vcf, pvacseq
-from utils.tidy_tools import get_2digits_hla_genetype, merge_epitopes
+from utils.tidy_tools import get_4digits_hla_genetype, merge_epitopes
 import pandas as pd
 __author__ = 'gdq'
 
@@ -119,7 +119,7 @@ def pipeline():
         args['tumor-sample-name'].value = tumor
         args['normal-sample-name'].value = normal
         # use HLA gene-type from tumor or normal??
-        args['allele'].value = ','.join(get_2digits_hla_genetype(wf.args.hla_genotype, normal, alleles=wf.args.alleles))
+        args['allele'].value = ','.join(get_4digits_hla_genetype(wf.args.hla_genotype, normal, alleles=wf.args.alleles))
 
     wf.run()
     # merge
