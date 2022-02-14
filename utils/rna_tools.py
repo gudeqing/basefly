@@ -229,18 +229,24 @@ def get_retained_intron_peptide(transdecoder_pep, out_prefix, intron_interval_di
 
 
 def segment_peptides(pep_dict:dict, length=(8, 11)):
+    """
+    按照指定长度进行蛋白质切割，返回字典，key=(左侧5，中间，右侧5）, value=pep_id(from=提取坐标)
+    :param pep_dict:
+    :param length:
+    :return:
+    """
     result = dict()
     for k in range(length[0], length[1] + 1):
         for pep_id, sequence in pep_dict.items():
             for i in range(len(sequence) + 1 - k):
                 n_flank = sequence[i-5:i] if i > 5 else ''
                 c_flank = sequence[i+k:i+k+5]
-                result.setdefault((n_flank, sequence[i:i+k], c_flank), set()).add(pep_id)
+                result.setdefault((n_flank, sequence[i:i+k], c_flank), set()).add(f'{pep_id}(from={i}-{i+k})')
     return result
 
 
 def find_potential_intron_peptides(tumor_gtf, normal_gtf, ref_gtf, tumor_transdecoder_pep, normal_transdecoder_pep, out_prefix,
-                                  pep_len=(8, 11), ignore_novel_transcript=True, alleles:tuple=('HLA-A', 'HLA-B')):
+                                  mhc1_pep_len=(8, 11), mhc2_pep_len=(12, 18), ignore_novel_transcript=True, alleles:tuple=('HLA-A', 'HLA-B')):
     """
     :param tumor_gtf: 使用gffcompare注释过的gtf，是过滤后的gtf
     :param normal_gtf: 使用gffcompare注释过的gtf
@@ -257,41 +263,129 @@ def find_potential_intron_peptides(tumor_gtf, normal_gtf, ref_gtf, tumor_transde
     retained_intron_interval_dict = get_retained_intron_interval(tumor_gtf, ref_gtf)
     t_intron_pep, t_novel_pep = get_retained_intron_peptide(tumor_transdecoder_pep, out_prefix=out_prefix+'.tumor',
                                                             intron_interval_dict=retained_intron_interval_dict)
+    # t_intron_pep = {k:v['pep'] for k, v in parse_transdecoder_pep(tumor_transdecoder_pep).items()}
+    # print('xxx', len(t_intron_pep))
 
     # 获取正常组织的结果
-    retained_intron_interval_dict = get_retained_intron_interval(normal_gtf, ref_gtf)
-    n_intron_pep, n_novel_pep = get_retained_intron_peptide(normal_transdecoder_pep, out_prefix=out_prefix+'.normal',
-                                                            intron_interval_dict=retained_intron_interval_dict)
+    # retained_intron_interval_dict = get_retained_intron_interval(normal_gtf, ref_gtf)
+    # n_intron_pep, n_novel_pep = get_retained_intron_peptide(normal_transdecoder_pep, out_prefix=out_prefix+'.normal',
+    #                                                         intron_interval_dict=retained_intron_interval_dict)
+    # 对于正常组织，将所有新转录本对应的蛋白质都进行切割
+    n_intron_pep = n_novel_pep = {k:v['pep'] for k, v in parse_transdecoder_pep(normal_transdecoder_pep).items()}
 
     # 获得肿瘤特异性的
     if not ignore_novel_transcript:
         t_intron_pep.update(t_novel_pep)
         n_intron_pep.update(n_novel_pep)
 
-    t_intron_pep_kmer_dict = segment_peptides(t_intron_pep, length=pep_len)
-    n_intron_pep_kmer_dict = segment_peptides(n_intron_pep, length=pep_len)
-    t_uniq_pep_kmer_set = t_intron_pep_kmer_dict.keys() - n_intron_pep_kmer_dict.keys()
-    print(f'过滤掉了{len(t_intron_pep_kmer_dict)-len(t_uniq_pep_kmer_set)} 个在对照样本中也能检测到的肽段')
-    print(f'最后找到{len(t_uniq_pep_kmer_set)}个肿瘤特异性肽段')
-    t_uniq_pep_kmer_dict = {x: t_intron_pep_kmer_dict[x] for x in t_uniq_pep_kmer_set}
+    for mhc_type in ['mhc1', 'mhc2']:
+        print(f'>生成的{mhc_type}的候选neoEpitope序列......')
+        len_range = mhc1_pep_len if mhc_type == 'mhc1' else mhc2_pep_len
+        t_intron_pep_kmer_dict = segment_peptides(t_intron_pep, length=len_range)
+        n_intron_pep_kmer_dict = segment_peptides(n_intron_pep, length=len_range)
+        # t_uniq_pep_kmer_set = t_intron_pep_kmer_dict.keys() - n_intron_pep_kmer_dict.keys()
+        n_intron_pep_kmers = {x[1] for x in n_intron_pep_kmer_dict.keys()}
+        t_uniq_pep_kmer_set = {x for x in t_intron_pep_kmer_dict.keys() if x[1] not in n_intron_pep_kmers}
+        print(f'过滤掉了{len(t_intron_pep_kmer_dict)-len(t_uniq_pep_kmer_set)}条在对照样本中也能检测到的肽段')
+        print(f'最后找到{len(t_uniq_pep_kmer_set)}条肿瘤特异性肽段')
+        t_uniq_pep_kmer_dict = {x: t_intron_pep_kmer_dict[x] for x in t_uniq_pep_kmer_set}
 
-    # save
-    if t_uniq_pep_kmer_dict:
-        with open(out_prefix+'.uniq_intron_retained.pep_segments.csv', 'w') as f:
-            f.write('source_id,n_flank,peptide,c_flank,allele\n')
-            for v, k in t_uniq_pep_kmer_dict.items():
-                for hla_gene in alleles:
-                    f.write(f'{"|".join(k)},{v[0]},{v[1]},{v[2]},{hla_gene}\n')
+        # save
+        if t_uniq_pep_kmer_dict:
+            if mhc_type == 'mhc1':
+                # 制备用于mhcflurry的输入
+                with open(out_prefix+f'.{mhc_type}.uniq_intron_retained.pep_segments.csv', 'w') as f:
+                    f.write('source_id,n_flank,peptide,c_flank,allele\n')
+                    for v, k in t_uniq_pep_kmer_dict.items():
+                        for hla_gene in alleles:
+                            f.write(f'{"|".join(k)},{v[0]},{v[1]},{v[2]},{hla_gene}\n')
 
-        # 输出切割前的肽段，目的是用于和参考蛋白组进行diamond比对，以便过滤掉参考蛋白组也能产生的肽段，由于是切割前的肽段，或许有些严格。
-        with open(out_prefix+'.uniq_intron_retained.pep.faa', 'w') as f:
-            found = set()
-            for _, id_set in t_uniq_pep_kmer_dict.items():
-                for k in (id_set - found):
-                    f.write(f'>{k}\n{t_intron_pep[k]}\n')
-                    found.add(k)
+                # 输出切割前的肽段, 暂无用途
+                with open(out_prefix+'.uniq_intron_retained.pep.faa', 'w') as f:
+                    found = set()
+                    for _, id_set in t_uniq_pep_kmer_dict.items():
+                        for k in (id_set - found):
+                            k = k.split('(')[0] # 提取原始ID
+                            f.write(f'>{k}\n{t_intron_pep[k]}\n')
+                            found.add(k)
+            else:
+                # 制备MixMHC2pred的输入
+                with open(out_prefix+f'.{mhc_type}.uniq_intron_retained.pep_segments.faa', 'w') as f:
+                    for v, k in t_uniq_pep_kmer_dict.items():
+                        f.write(f'>{"|".join(k)}\n{v[1]}\n')
+        else:
+            print('没有提取出任何肿瘤样本特有的疑似源于内含子区间的peptide')
+
+
+def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
+    """
+    为什么要考虑把DPA1和DPB1捆绑在一起考虑，或许可以参考https://pubmed.ncbi.nlm.nih.gov/22526601/
+    :param alleles: list such as ['HLA-DRB1*01:01', 'HLA-DPA1*01:01']
+    :return:
+    """
+    allele_mapping = {
+        'HLA-DRB1*01:01': 'DRB1_01_01',
+        'HLA-DRB1*01:02': 'DRB1_01_02',
+        'HLA-DRB1*01:03': 'DRB1_01_03',
+        'HLA-DRB1*03:01': 'DRB1_03_01',
+        'HLA-DRB1*04:01': 'DRB1_04_01',
+        'HLA-DRB1*04:04': 'DRB1_04_04',
+        'HLA-DRB1*04:05': 'DRB1_04_05',
+        'HLA-DRB1*04:08': 'DRB1_04_08',
+        'HLA-DRB1*07:01': 'DRB1_07_01',
+        'HLA-DRB1*08:01': 'DRB1_08_01',
+        'HLA-DRB1*10:01': 'DRB1_10_01',
+        'HLA-DRB1*11:01': 'DRB1_11_01',
+        'HLA-DRB1*11:04': 'DRB1_11_04',
+        'HLA-DRB1*12:01': 'DRB1_12_01',
+        'HLA-DRB1*13:01': 'DRB1_13_01',
+        'HLA-DRB1*13:03': 'DRB1_13_03',
+        'HLA-DRB1*15:01': 'DRB1_15_01',
+        'HLA-DRB1*16:01': 'DRB1_16_01',
+        'HLA-DRB3*01:01': 'DRB3_01_01',
+        'HLA-DRB3*02:02': 'DRB3_02_02',
+        'HLA-DRB4*01:01': 'DRB4_01_01',
+        'HLA-DRB4*01:03': 'DRB4_01_03',
+        'HLA-DRB5*01:01': 'DRB5_01_01',
+        'HLA-DRB5*02:02': 'DRB5_02_02',
+        'HLA-DPA1*01:03 and HLA-DPA1*02:01 /DPB1*03:01': 'DPA1_01_03__DPA1_02_01__DPB1_03_01',
+        'HLA-DPA1*01:03 and HLA-DPA1*02:01 /DPB1*11:01': 'DPA1_01_03__DPA1_02_01__DPB1_11_01',
+        'HLA-DPA1*01:03 and HLA-DPA1*02:01 /DPB1*17:01': 'DPA1_01_03__DPA1_02_01__DPB1_17_01',
+        'HLA-DPA1*01:03 and HLA-DPA1*02:02 /DPB1*05:01': 'DPA1_01_03__DPA1_02_02__DPB1_05_01',
+        'HLA-DPA1*01:03 /HLA-DPB1*105:01 and HLA-DPB1*126:01': 'DPA1_01_03__DPB1_105_01__DPB1_126_01',
+        'HLA-DPA1*01:03/DPB1*02:01': 'DPA1_01_03__DPB1_02_01',
+        'HLA-DPA1*01:03/DPB1*03:01': 'DPA1_01_03__DPB1_03_01',
+        'HLA-DPA1*01:03/DPB1*04:01': 'DPA1_01_03__DPB1_04_01',
+        'HLA-DPA1*01:03/DPB1*06:01': 'DPA1_01_03__DPB1_06_01',
+        'HLA-DPA1*01:03/DPB1*20:01': 'DPA1_01_03__DPB1_20_01',
+        'HLA-DQA1*02:01/DQB1*02:02': 'DQA1_02_01__DQB1_02_02',
+        'HLA-DQA1*03:01/DQB1*03:01': 'DQA1_03_01__DQB1_03_01',
+        'HLA-DQA1*03:03/DQB1*03:01': 'DQA1_03_03__DQB1_03_01',
+        'HLA-DQA1*05:05/DQB1*03:01': 'DQA1_05_05__DQB1_03_01'
+    }
+    mapping = dict()
+    valid_alleles = set()
+    for each in allele_mapping.values():
+        official_names = ['HLA-' + x.replace('_', '*', 1).replace('_', ':') for x in each.split('__')]
+        mapping[tuple(sorted(official_names))] = each
+        valid_alleles.update(official_names)
+    mapping = dict(sorted([[k, v] for k, v in mapping.items()], key=lambda x:-len(x[0])))
+
+    valid = set(alleles) & valid_alleles
+    if not valid:
+        raise Exception('No valid alleles for MixMHC2Pred')
+    print('These alleles are not available:', set(alleles) - valid_alleles)
+    result = []
+    for k, v in mapping.items():
+        if not (set(k) - set(alleles)):
+            result.append(v)
+            break
+    if not result:
+        print('valid combination are', mapping)
+        raise Exception('No valid alleles combination is valid for MixMHC2Pred')
     else:
-        print('没有提取出任何肿瘤样本特有的疑似源于内含子区间的peptide')
+        print('valid inputs will are', result)
+    return result
 
 
 if __name__ == '__main__':

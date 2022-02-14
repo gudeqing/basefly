@@ -1098,3 +1098,24 @@ def RNAmining():
     cmd.outputs['codings'] = Output(value='{outdir}/codings.txt')
     return cmd
 
+
+def MixMHC2pred():
+    cmd = Command()
+    cmd.meta.name = 'MixMHC2pred'
+    cmd.meta.source = 'https://github.com/GfellerLab/MixMHC2pred'
+    cmd.meta.version = '1.2'
+    cmd.meta.desc= 'MixMHC2pred is a predictor of HLA class II ligands and epitopes. MixMHC2pred is meant for scoring different peptides and prioritising the most likely HLA-II ligands and epitopes. As it is trained on naturally presented peptides, it does not output a predicted affinity value, simply a score.'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.tool = '/opt/MixMHC2pred/MixMHC2pred_unix'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='File listing all the peptides with one peptide per line. It can also be a fasta file (note that the peptide description given by the lines with ">" are not kept). Please note that even in fasta format, the input should consist in a list of peptides: MixMHC2pred is not cutting inputted proteins into shorter fragments that could be presented but it uses the input sequences as given in the file directly')
+    cmd.args['output'] = Argument(prefix='-o ', default='mixMHC2pred.txt', desc='The name of the output file (including the directory). Peptides are kept in the same order than in the input file.')
+    cmd.args['alleles'] = Argument(prefix='-a ', array=True, desc='List of HLA-II alleles to test. Use for example the nomenclature DRB1_03_01 for HLA-DRB1*03:01 and DPA1_01_03__DPB1_04_01 for HLA-DPA1*01:03-DPB1*04:01. The full list of alleles available and corresponding nomenclature is given in the file Alleles_list.txt.')
+    cmd.outputs['output'] = Output(value='{output}')
+    return cmd
+
+
+if __name__ == '__main__':
+    from xcmds import xcmds
+    xcmds.xcmds(locals())

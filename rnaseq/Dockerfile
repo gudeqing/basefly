@@ -96,5 +96,10 @@ RUN mkdir -p /opt/TransDecoder/ && \
 RUN pip3 install -i $PIP_SOURCE pickle5
 COPY RNAmining /opt/RNAmining
 
+# install mhcnuggets and MixMHC2pred
+RUN pip3 install -i $PIP_SOURCE --use-feature=2020-resolver mhcnuggets
+RUN mkdir /opt/MixMHC2pred && cd /opt/MixMHC2pred && wget https://github.com/GfellerLab/MixMHC2pred/releases/download/v1.2/MixMHC2pred-1.2.zip && unzip MixMHC2pred-1.2.zip
+
+# finally
 RUN echo 'PS1="\[\e[37;40m\][\[\e[32;40m\]\u\[\e[37;40m\]@\\t \[\e[36;40m\]\w\[\e[0m\]]\\n$ "' >> /root/.bashrc
 CMD ["/bin/bash"]
