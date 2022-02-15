@@ -385,7 +385,7 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
         print()
         raise Exception(f'No valid alleles combination is valid for MixMHC2Pred. Input alleles are {alleles}')
     else:
-        print('valid inputs will are', result)
+        print('valid inputs are', result)
     return result
 
 

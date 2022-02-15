@@ -20,7 +20,9 @@ class GTF(object):
     @staticmethod
     def parse_col9(col9: str):
         col9lst = col9.rstrip(';').split(';')
-        col9dict = dict(x.strip().rstrip('"').split(' "') for x in col9lst)
+        # 有的属性的值是纯数字，因此不带引号，会导致下面的解析报错，所以假设key肯定不带空格进行解析
+        # col9dict = dict(x.strip().rstrip('"').split(' "') for x in col9lst)
+        col9dict = dict(x.strip().replace('"', '').split(' ', 1) for x in col9lst)
         # try:
         #     col9dict = dict(x.strip().rstrip('"').split(' "') for x in col9lst)
         # except Exception as e:
