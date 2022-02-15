@@ -226,7 +226,7 @@ class Command:
                     # 如果bool类型且value为false，则该参数不参与命令行形成
                     continue
             else:
-                if arg_value:
+                if arg_value is not None:
                     if not arg.multi_times:
                         cmd += ' ' + arg.prefix + str(arg_value)
                     else:
