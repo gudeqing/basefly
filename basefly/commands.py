@@ -1116,6 +1116,52 @@ def MixMHC2pred():
     return cmd
 
 
+def makeblastdb():
+    cmd = Command()
+    cmd.meta.name = 'makeblastdb'
+    cmd.meta.source = 'https://blast.ncbi.nlm.nih.gov/Blast.cgi'
+    cmd.meta.version = '2.12.0+'
+    cmd.meta.desc = 'BLAST finds regions of similarity between biological sequences. The program compares nucleotide or protein sequences to sequence databases and calculates the statistical significance.'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.tool_dir = '/opt/ncbi-blast-2.12.0+/bin'
+    cmd.runtime.tool = 'makeblastdb'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['input_file'] = Argument(prefix='-in ', type='infile', desc='Input file/database name')
+    cmd.args['input_type'] = Argument(prefix='-input_type ', range=['asn1_bin', 'asn1_txt', 'blastdb', 'fasta'], default='fasta', desc='Type of the data specified in input_file')
+    cmd.args['dbtype'] = Argument(prefix='-dbtype ', range=['nucl', 'prot'], default='prot', desc='Molecule type of target db')
+    cmd.args['out'] = Argument(prefix='-out ', default='reference', desc='Name of BLAST database to be created')
+    cmd.outputs['out'] = Output('{out}')
+    return cmd
+
+
+def blastp():
+    cmd = Command()
+    cmd.meta.name = 'blastp'
+    cmd.meta.source = 'https://blast.ncbi.nlm.nih.gov/Blast.cgi'
+    cmd.meta.version = '2.12.0+'
+    cmd.meta.desc = 'BLAST finds regions of similarity between biological sequences. The program compares nucleotide or protein sequences to sequence databases and calculates the statistical significance.'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.tool_dir = '/opt/ncbi-blast-2.12.0+/bin'
+    cmd.runtime.tool = 'blastp'
+    cmd.runtime.cpu = 3
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['query'] = Argument(prefix='-query ', type='infile', desc='input file')
+    cmd.args['task'] = Argument(prefix='-task ', default='blastp-short', range=['blastp', 'blastp-fast', 'blastp-short'], desc='Task to execute')
+    cmd.args['db'] = Argument(prefix='-db ', type='infile', desc='database file')
+    cmd.args['out'] = Argument(prefix='-out ', desc='output file name')
+    cmd.args['evalue'] = Argument(prefix='-evalue ', type='int', default=10, desc='Expectation value (E) threshold for saving hits')
+    cmd.args['word_size'] = Argument(prefix='-word_size ', type='int', default=2, desc='Word size for wordfinder algorithm')
+    cmd.args['gapopen'] = Argument(prefix='-gapopen ', type='int', default=5, desc='Cost to open a gap')
+    cmd.args['comp_based_stats'] = Argument(prefix='-comp_based_stats ', default='2', desc='Use composition-based statistics.D or d: default (equivalent to 2 ); 0 or F or f: No composition-based statistics; 1: Composition-based statistics as in NAR 29:2994-3005, 2001; 2 or T or t : Composition-based score adjustment as in Bioinformatics; 21:902-911,; 2005, conditioned on sequence properties; 3: Composition-based score adjustment as in Bioinformatics 21:902-911,; 2005, unconditionally')
+    cmd.args['outfmt'] = Argument(prefix='-outfmt ', type='int', default='7', desc='alignment view options')
+    cmd.args['max_target_seqs'] = Argument(prefix='-max_target_seqs ', type='int', default=500, desc='Maximum number of aligned sequences to keep')
+    cmd.args['ungapped'] = Argument(prefix='-ungapped', type='bool', default=False, desc='Perform ungapped alignment only?')
+    cmd.args['num_threads'] = Argument(prefix='-num_threads ', type='int', default=4, desc='Number of threads (CPUs) to use in the BLAST search')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
 if __name__ == '__main__':
     from xcmds import xcmds
     xcmds.xcmds(locals())

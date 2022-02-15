@@ -30,7 +30,8 @@ import sys; sys.path.append(script_path)
 from basefly.basefly import Argument, Output, Command, Workflow, TopVar, TmpVar
 from utils.tidy_tools import get_4digits_hla_genetype
 from utils.rna_tools import check_and_convert_alleles_for_MixMHC2Pred
-from basefly.commands import stringtie, gffcompare, gffread, transdecoder_predict, RNAmining, TransDecoder_LongOrfs, mhcflurry_predict, MixMHC2pred
+from basefly.commands import stringtie, gffcompare, gffread, transdecoder_predict, \
+    RNAmining, TransDecoder_LongOrfs, mhcflurry_predict, MixMHC2pred, makeblastdb, blastp
 __author__ = 'gdq'
 
 
@@ -68,6 +69,7 @@ def find_potential_intron_peptides():
     cmd.args['alleles'] = Argument(prefix='-alleles ', array=True, desc='HLA gene list, will be used to format mhcflurry input csv file')
     cmd.outputs['mhcflurry_csv'] = Output(value='{out_prefix}.mhc1.uniq_intron_retained.pep_segments.csv')
     cmd.outputs['MixMHC2pred_faa'] = Output(value='{out_prefix}.mhc2.uniq_intron_retained.pep_segments.faa')
+    cmd.outputs['mhcflurry_faa'] = Output(value='{out_prefix}.mhc2.uniq_intron_retained.pep_segments.faa')
     return cmd
 
 
@@ -90,12 +92,19 @@ def pipeline():
     wf.add_argument('-bams', required=True, help='A file with four columns: [tumor_sample_name, normal_sample_name, tumor_bam_file_path, normal_bam_file_path]')
     wf.add_argument('-genome_fa', required=True, help='reference nucleotide fasta file')
     wf.add_argument('-gtf', required=True, help='genome annotation file in gtf format, gff format is not supported.')
-    wf.add_argument('-mhcflurry_models', help='Directory containing models of mhcflurry')
+    wf.add_argument('-mhcflurry_models', required=True, help='Directory containing models of mhcflurry')
     wf.add_argument('-hla_genotype', required=True, help='HLA genetype table with header consiting of HLA gene name, index is tumor sample name. Each element data is genetype detail.')
     wf.add_argument('-alleles', default=('DRA', 'DRB1', 'DRB3', 'DRB4', 'DRB5', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'),
                     nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
     wf.add_argument('-genome_pep', required=False, help='reference proteome fasta file')
     wf.parse_args()
+
+    # 建参考基因组的蛋白库
+    if wf.args.genome_pep:
+        makedb_task, args = wf.add_task(makeblastdb(), tag='refProteome')
+        args['input_file'].value = wf.args.genome_pep
+        args['dbtype'].value = 'prot'
+        args['out'].value = 'refProteome'
 
     for sample_names, bams in parse_bam_list(wf.args.bams).items():
         # 组装获得gtf，并使用参考gtf进行注释
@@ -125,20 +134,20 @@ def pipeline():
                 normal_filter_task = filter_task
 
             # 提取转录本序列
-            get_seq_task, args = wf.add_task(gffread(), name='extractSeq-'+sample, depends=[filter_task])
+            get_seq_task, args = wf.add_task(gffread(), tag=sample, depends=[filter_task])
             args['input_gff'].value = filter_task.outputs['out_gtf']
             args['w'].value = sample + '.target_novel_transcript.fa'
             args['genome'].value = wf.args.genome_fa
 
             # 使用RNAmining进行编码潜能预测
-            coding_predict_task, args = wf.add_task(RNAmining(), name='RNAmining-'+sample, depends=[get_seq_task])
+            coding_predict_task, args = wf.add_task(RNAmining(), tag=sample, depends=[get_seq_task])
             args['query'].value = get_seq_task.outputs['transcript_fa']
 
             # 转录本编码能力预测 transdecoder
             LongOrfs_task, args = wf.add_task(TransDecoder_LongOrfs(), tag=sample, depends=[coding_predict_task])
             args['t'].value = coding_predict_task.outputs['codings']
             # predict coding region
-            decoder_task, args = wf.add_task(transdecoder_predict(), name='transdecoder-'+sample, depends=[coding_predict_task, LongOrfs_task])
+            decoder_task, args = wf.add_task(transdecoder_predict(), tag=sample, depends=[coding_predict_task, LongOrfs_task])
             args['t'].value = coding_predict_task.outputs['codings']
             args['output_dir'].value = LongOrfs_task.outputs['outdir']
             args['single_best_only'].value = True
@@ -171,7 +180,37 @@ def pipeline():
         args['input'].value = find_novel_peptide_task.outputs['MixMHC2pred_faa']
         args['output'].value = tumor_sample + '.MixMHC2pred.txt'
         alleles = get_4digits_hla_genetype(wf.args.hla_genotype, normal_sample, alleles=wf.args.alleles)
-        args['alleles'].value = check_and_convert_alleles_for_MixMHC2Pred(alleles)
+        valid_inputs = check_and_convert_alleles_for_MixMHC2Pred(alleles)
+        if valid_inputs:
+            args['alleles'].value = valid_inputs
+        else:
+            print(f'skip MixMHC2Pred task for {tumor_sample}')
+            wf.tasks.pop(mhc2pred_task.task_id)
+
+        # blast against reference proteome
+        if wf.args.genome_pep:
+            mhc1_blastp_task, args = wf.add_task(blastp(), tag=tumor_sample+'MHC1', depends=[makedb_task, find_novel_peptide_task])
+            args['query'].value = find_novel_peptide_task.outputs['mhcflurry_faa']
+            args['task'].value = 'blastp-short'
+            args['db'].value = makedb_task.outputs['out']
+            args['max_target_seqs'].value = 1
+            args['num_threads'].value = 4
+            args['ungapped'].value = True
+            args['comp_based_stats'].value = '0'
+            args['outfmt'].value = 6
+            args['out'].value = tumor_sample + '.mhc1.blastp.txt'
+
+            mhc2_blastp_task, args = wf.add_task(blastp(), tag=tumor_sample+'MHC2', depends=[makedb_task, find_novel_peptide_task])
+            args['query'].value = find_novel_peptide_task.outputs['MixMHC2pred_faa']
+            args['task'].value = 'blastp-short'
+            args['db'].value = makedb_task.outputs['out']
+            args['max_target_seqs'].value = 1
+            args['num_threads'].value = 4
+            args['ungapped'].value = True
+            args['comp_based_stats'].value = '0'
+            args['outfmt'].value = 6
+            args['out'].value = tumor_sample + '.mhc2.blastp.txt'
+
     wf.run()
 
 

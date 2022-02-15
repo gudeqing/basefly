@@ -249,7 +249,7 @@ def find_potential_intron_peptides(tumor_gtf, normal_gtf, ref_gtf, tumor_transde
                                   mhc1_pep_len=(8, 11), mhc2_pep_len=(12, 18), ignore_novel_transcript=True, alleles:tuple=('HLA-A', 'HLA-B')):
     """
     :param tumor_gtf: 使用gffcompare注释过的gtf，是过滤后的gtf
-    :param normal_gtf: 使用gffcompare注释过的gtf
+    :param normal_gtf: 使用gffcompare注释过的gtf,
     :param ref_gtf: 参考基因组的gtf
     :param tumor_transdecoder_pep: 基于tumor_gtf，使用transdecoder预测的pep文件
     :param normal_transdecoder_pep: 基于normal_gtf，使用transdecoder预测的pep文件
@@ -270,7 +270,7 @@ def find_potential_intron_peptides(tumor_gtf, normal_gtf, ref_gtf, tumor_transde
     # retained_intron_interval_dict = get_retained_intron_interval(normal_gtf, ref_gtf)
     # n_intron_pep, n_novel_pep = get_retained_intron_peptide(normal_transdecoder_pep, out_prefix=out_prefix+'.normal',
     #                                                         intron_interval_dict=retained_intron_interval_dict)
-    # 对于正常组织，将所有新转录本对应的蛋白质都进行切割
+    # 对于正常组织，将所有新转录本对应的完整的蛋白质都进行切割
     n_intron_pep = n_novel_pep = {k:v['pep'] for k, v in parse_transdecoder_pep(normal_transdecoder_pep).items()}
 
     # 获得肿瘤特异性的
@@ -300,19 +300,19 @@ def find_potential_intron_peptides(tumor_gtf, normal_gtf, ref_gtf, tumor_transde
                         for hla_gene in alleles:
                             f.write(f'{"|".join(k)},{v[0]},{v[1]},{v[2]},{hla_gene}\n')
 
-                # 输出切割前的肽段, 暂无用途
-                with open(out_prefix+'.uniq_intron_retained.pep.faa', 'w') as f:
-                    found = set()
-                    for _, id_set in t_uniq_pep_kmer_dict.items():
-                        for k in (id_set - found):
-                            k = k.split('(')[0] # 提取原始ID
-                            f.write(f'>{k}\n{t_intron_pep[k]}\n')
-                            found.add(k)
-            else:
-                # 制备MixMHC2pred的输入
-                with open(out_prefix+f'.{mhc_type}.uniq_intron_retained.pep_segments.faa', 'w') as f:
-                    for v, k in t_uniq_pep_kmer_dict.items():
-                        f.write(f'>{"|".join(k)} flank_n={v[0]} flank_c={v[2]}\n{v[1]}\n')
+                # # 输出切割前的肽段, 暂无用途
+                # with open(out_prefix+'.uniq_intron_retained.pep.faa', 'w') as f:
+                #     found = set()
+                #     for _, id_set in t_uniq_pep_kmer_dict.items():
+                #         for k in (id_set - found):
+                #             k = k.split('(')[0] # 提取原始ID
+                #             f.write(f'>{k}\n{t_intron_pep[k]}\n')
+                #             found.add(k)
+
+            # 制备MixMHC2pred的输入
+            with open(out_prefix+f'.{mhc_type}.uniq_intron_retained.pep_segments.faa', 'w') as f:
+                for v, k in t_uniq_pep_kmer_dict.items():
+                    f.write(f'>{"|".join(k)} flank_n={v[0]} flank_c={v[2]}\n{v[1]}\n')
         else:
             print('没有提取出任何肿瘤样本特有的疑似源于内含子区间的peptide')
 
@@ -373,7 +373,7 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
 
     valid = set(alleles) & valid_alleles
     if not valid:
-        raise Exception(f'No valid alleles for MixMHC2Pred.Input alleles are {alleles}')
+        print(f'No valid alleles for MixMHC2Pred.Input alleles are {alleles}')
     print('These alleles are not available:', set(alleles) - valid_alleles)
     result = []
     for k, v in mapping.items():
@@ -381,9 +381,8 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
             result.append(v)
             break
     if not result:
-        print('valid combination are', mapping)
-        print()
-        raise Exception(f'No valid alleles combination is valid for MixMHC2Pred. Input alleles are {alleles}')
+        print('MixMHC2Pred only supports the following combination are', mapping)
+        print('Warning:', f'No valid alleles combination is valid for MixMHC2Pred. Input alleles are {alleles}')
     else:
         print('valid inputs are', result)
     return result
