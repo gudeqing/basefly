@@ -366,14 +366,14 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
     mapping = dict()
     valid_alleles = set()
     for each in allele_mapping.values():
-        official_names = ['HLA-' + x.replace('_', '*', 1).replace('_', ':') for x in each.split('__')]
+        official_names = [x.replace('_', '*', 1).replace('_', ':') for x in each.split('__')]
         mapping[tuple(sorted(official_names))] = each
         valid_alleles.update(official_names)
     mapping = dict(sorted([[k, v] for k, v in mapping.items()], key=lambda x:-len(x[0])))
 
     valid = set(alleles) & valid_alleles
     if not valid:
-        raise Exception('No valid alleles for MixMHC2Pred')
+        raise Exception(f'No valid alleles for MixMHC2Pred.Input alleles are {alleles}')
     print('These alleles are not available:', set(alleles) - valid_alleles)
     result = []
     for k, v in mapping.items():
@@ -382,7 +382,8 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
             break
     if not result:
         print('valid combination are', mapping)
-        raise Exception('No valid alleles combination is valid for MixMHC2Pred')
+        print()
+        raise Exception(f'No valid alleles combination is valid for MixMHC2Pred. Input alleles are {alleles}')
     else:
         print('valid inputs will are', result)
     return result
