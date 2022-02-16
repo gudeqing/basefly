@@ -5,6 +5,7 @@ import sys; sys.path.append(script_path)
 from functools import reduce
 from itertools import combinations
 import math
+import pandas as pd
 from utils.gtfparser import GTF
 
 """
@@ -263,7 +264,7 @@ def find_potential_intron_peptides(tumor_gtf, normal_gtf, ref_gtf, tumor_transde
     retained_intron_interval_dict = get_retained_intron_interval(tumor_gtf, ref_gtf)
     t_intron_pep, t_novel_pep = get_retained_intron_peptide(tumor_transdecoder_pep, out_prefix=out_prefix+'.tumor',
                                                             intron_interval_dict=retained_intron_interval_dict)
-    # t_intron_pep = {k:v['pep'] for k, v in parse_transdecoder_pep(tumor_transdecoder_pep).items()}
+    # t_intron_pep = t_novel_pep = {k:v['pep'] for k, v in parse_transdecoder_pep(tumor_transdecoder_pep).items()}
     # print('xxx', len(t_intron_pep))
 
     # 获取正常组织的结果
@@ -386,6 +387,53 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
     else:
         print('valid inputs are', result)
     return result
+
+
+def filter_fasta_by_seq_id(fasta, target_ids, out, exclude=True):
+    with open(fasta) as f1, open(out, 'w') as f2:
+        for line in f1:
+            if line.startswith('#'):
+                continue
+            if line.startswith('>'):
+                seq_id = line[1:].split()[0]
+                if exclude:
+                    if (seq_id not in target_ids):
+                        f2.write(line)
+                else:
+                    if (seq_id in target_ids):
+                        f2.write(line)
+            else:
+                if exclude:
+                    if (seq_id not in target_ids):
+                        f2.write(line)
+                else:
+                    if (seq_id in target_ids):
+                        f2.write(line)
+
+
+def filter_mhcflurry_csv_by_seq_id(csv_file, target_ids, out):
+    with open(csv_file) as fr, open(out, 'w') as fw:
+        fw.write(fr.readline())
+        for line in fr:
+            seq_id = line.split(',')[0]
+            if seq_id not in target_ids:
+                fw.write(line)
+
+
+def filter_pep_by_blast_id(blast_result, raw, out, raw_type='fasta'):
+    # b = pd.read_table(blast_result, header=None, index_col=0)
+    # b.columns = 'qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore'.split()
+    hits = set()
+    with open(blast_result) as f:
+        for line in f:
+            qaccver, saccver, pident = line.split()[:3]
+            if float(pident) >= 100:
+                hits.add(qaccver)
+    print(f'there are {len(hits)} segments can be aligned to reference with pident=100')
+    if raw_type == 'fasta':
+        filter_fasta_by_seq_id(raw, hits, out)
+    else:
+        filter_mhcflurry_csv_by_seq_id(raw, hits, out)
 
 
 if __name__ == '__main__':

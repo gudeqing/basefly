@@ -1144,7 +1144,7 @@ def blastp():
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
     cmd.runtime.tool_dir = '/opt/ncbi-blast-2.12.0+/bin'
     cmd.runtime.tool = 'blastp'
-    cmd.runtime.cpu = 3
+    cmd.runtime.cpu = 4
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.args['query'] = Argument(prefix='-query ', type='infile', desc='input file')
     cmd.args['task'] = Argument(prefix='-task ', default='blastp-short', range=['blastp', 'blastp-fast', 'blastp-short'], desc='Task to execute')
@@ -1158,6 +1158,8 @@ def blastp():
     cmd.args['max_target_seqs'] = Argument(prefix='-max_target_seqs ', type='int', default=500, desc='Maximum number of aligned sequences to keep')
     cmd.args['ungapped'] = Argument(prefix='-ungapped', type='bool', default=False, desc='Perform ungapped alignment only?')
     cmd.args['num_threads'] = Argument(prefix='-num_threads ', type='int', default=4, desc='Number of threads (CPUs) to use in the BLAST search')
+    cmd.args['max_hsps'] = Argument(prefix='-max_hsps ', type='int', level='optional', desc='Set maximum number of HSPs per subject sequence to save for each query')
+    cmd.args['qcov_hsp_perc'] = Argument(prefix='-qcov_hsp_perc ', type='int', level='optional', desc='Percent query coverage per hsp')
     cmd.outputs['out'] = Output(value='{out}')
     return cmd
 

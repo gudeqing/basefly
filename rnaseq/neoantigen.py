@@ -15,12 +15,14 @@
     0. 根据gtf使用gffread提取肿瘤组织的新转录本序列
     a. 预测编码与否：https://rnamining.integrativebioinformatics.me/about（该软件不能给出具体的编码预测，仅预测是否编码）
     b. 对于具有编码潜能的transcript，进一步使用transdecoder(https://github.com/TransDecoder/TransDecoder)进行pipetide预测
-6. 提取出内含子对应（gffcompare会尽量给组装出来的转录本一个最近似的参考转录本，这里的内含子是相对参考转录本而言，即没有落在参考转录本外显子区域）
+6. 对于肿瘤样本，提取出内含子对应（gffcompare会尽量给组装出来的转录本一个最近似的参考转录本，这里的内含子是相对参考转录本而言，即没有落在参考转录本外显子区域）
     编码的肽段，且前后各延申7个碱基，这样可以得到肿瘤组织的新肽段集合Tumor_New_Peptide(进行一定长度如[8-11]的切割，保留前后5个氨基酸的flank)
 7. 如果有正常组织，对正常组织也采用3，5，6【但不仅仅是扣内含子区域对应的肽段，而是所有新转录本的肽段】的处理，得到正常组织对应的新肽段集合Normal_New_Peptide
 8. 得到初步新抗原预测的肽段集合: pre_new_peptide = Tumor_New_Peptide - Normal_New_Peptide
-9. 最终的新抗原肽段集合：将pre_new_peptide和参考蛋白组进行比对（使用diamond)，过滤掉identity=100的peptide后得到最终的final_new_peptide
-10. 使用mhcflurry-predict-scan等进行MHC-I类新抗原预测，筛选出潜在的最终新抗原肽段
+9. 最终的新抗原肽段集合：将pre_new_peptide和参考蛋白组进行比对（使用diamond)，过滤掉identity=100的peptide后得到最终的final_new_peptide用于后续新抗原预测
+10. 使用mhcflurry-predict-scan等进行MHC-I类新抗原预测
+11. 使用MixMHC2Pred等进行MHC-II类新抗原预测
+13. 筛选新抗原并添加表达量信息，如何过滤还没有想好
 
 """
 
@@ -68,8 +70,24 @@ def find_potential_intron_peptides():
     cmd.args['ignore_novel_transcript'] = Argument(prefix='-ignore_novel_transcript', type='bool', default=False, desc='ignore peptides from brand new transcripts')
     cmd.args['alleles'] = Argument(prefix='-alleles ', array=True, desc='HLA gene list, will be used to format mhcflurry input csv file')
     cmd.outputs['mhcflurry_csv'] = Output(value='{out_prefix}.mhc1.uniq_intron_retained.pep_segments.csv')
+    cmd.outputs['mhcflurry_faa'] = Output(value='{out_prefix}.mhc1.uniq_intron_retained.pep_segments.faa')
     cmd.outputs['MixMHC2pred_faa'] = Output(value='{out_prefix}.mhc2.uniq_intron_retained.pep_segments.faa')
-    cmd.outputs['mhcflurry_faa'] = Output(value='{out_prefix}.mhc2.uniq_intron_retained.pep_segments.faa')
+    return cmd
+
+
+def filter_pep_by_blast_id():
+    cmd = Command()
+    cmd.meta.name = 'filterPepByBlastProteome'
+    cmd.meta.desc = '和参考蛋白组比对后，过滤掉能够100%比对上的petides，剩下的将用于新抗原预测'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py filter_pep_by_blast_id'
+    cmd.runtime.cpu = 2
+    cmd.runtime.memory = 3 * 1024 ** 3
+    cmd.args['blast_result'] = Argument(prefix='-blast_result ', type='infile', desc='blastp result file')
+    cmd.args['raw'] = Argument(prefix='-raw ', type='infile', desc='blasted fasta file/ csv file')
+    cmd.args['raw_type'] = Argument(prefix='-raw_type ', default='fasta', desc='fasta or csv')
+    cmd.args['out'] = Argument(prefix='-out ', desc='output file')
+    cmd.outputs['out'] = Output(value='{out}')
     return cmd
 
 
@@ -94,13 +112,13 @@ def pipeline():
     wf.add_argument('-gtf', required=True, help='genome annotation file in gtf format, gff format is not supported.')
     wf.add_argument('-mhcflurry_models', required=True, help='Directory containing models of mhcflurry')
     wf.add_argument('-hla_genotype', required=True, help='HLA genetype table with header consiting of HLA gene name, index is tumor sample name. Each element data is genetype detail.')
-    wf.add_argument('-alleles', default=('DRA', 'DRB1', 'DRB3', 'DRB4', 'DRB5', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'),
-                    nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
+    wf.add_argument('-mhc1_genes', default=('A', 'B', 'C'), nargs='+', help='HLA alleles gene list, such as A,B,C')
+    wf.add_argument('-mhc2_genes', default=('DRA', 'DRB1', 'DRB3', 'DRB4', 'DRB5', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'), nargs='+', help='HLA alleles gene list, such as DRA(B),DQA(B),DPA(B), 这里并不意味着预测软件能处理这里能提供的所有HLA基因，因此统计时，应该以实际能用的基因为主')
     wf.add_argument('-genome_pep', required=False, help='reference proteome fasta file')
     wf.parse_args()
 
-    # 建参考基因组的蛋白库
     if wf.args.genome_pep:
+        # 建参考基因组的蛋白库
         makedb_task, args = wf.add_task(makeblastdb(), tag='refProteome')
         args['input_file'].value = wf.args.genome_pep
         args['dbtype'].value = 'prot'
@@ -146,8 +164,9 @@ def pipeline():
             # 转录本编码能力预测 transdecoder
             LongOrfs_task, args = wf.add_task(TransDecoder_LongOrfs(), tag=sample, depends=[coding_predict_task])
             args['t'].value = coding_predict_task.outputs['codings']
+
             # predict coding region
-            decoder_task, args = wf.add_task(transdecoder_predict(), tag=sample, depends=[coding_predict_task, LongOrfs_task])
+            decoder_task, args = wf.add_task(transdecoder_predict(), tag=sample, depends=[LongOrfs_task])
             args['t'].value = coding_predict_task.outputs['codings']
             args['output_dir'].value = LongOrfs_task.outputs['outdir']
             args['single_best_only'].value = True
@@ -156,7 +175,11 @@ def pipeline():
             else:
                 normal_decoder_task = decoder_task
 
-        # 结合肿瘤样本和对照样本的组装结果和蛋白编码预测结果进行特异性的肿瘤新肽段提取
+        mhc1_alleles = get_4digits_hla_genetype(wf.args.hla_genotype, normal_sample, alleles=wf.args.mhc1_genes)
+        mhc2_alleles = get_4digits_hla_genetype(wf.args.hla_genotype, normal_sample, alleles=wf.args.mhc2_genes)
+        print('HLA Genes:', mhc1_alleles, mhc2_alleles)
+
+        # 结合肿瘤样本和对照样本的组装结果和蛋白编码预测结果进行特异性的肿瘤新肽段提取和筛选
         find_novel_peptide_task, args = wf.add_task(find_potential_intron_peptides(),
                                                     name='findNovelPeptides-'+tumor_sample,
                                                     depends=[tumor_filter_task, normal_filter_task,
@@ -167,28 +190,10 @@ def pipeline():
         args['tumor_transdecoder_pep'].value = tumor_decoder_task.outputs['pep_file']
         args['normal_transdecoder_pep'].value = normal_decoder_task.outputs['pep_file']
         args['out_prefix'].value = tumor_sample
-        args['alleles'].value = ['HLA-A*02:01','HLA-A*03:01']
+        args['alleles'].value = mhc1_alleles
 
-        # mhcflurry prediction for MHC-1
-        mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor_sample, depends=[find_novel_peptide_task])
-        args['input_csv'].value = find_novel_peptide_task.outputs['mhcflurry_csv']
-        args['out'].value = tumor_sample + '.mhcflurry_prediction.csv'
-        args['models'].value = wf.args.mhcflurry_models
-
-        # MixMHC2Pred prediction for MHC-2
-        mhc2pred_task, args = wf.add_task(MixMHC2pred(), tag=tumor_sample, depends=[find_novel_peptide_task])
-        args['input'].value = find_novel_peptide_task.outputs['MixMHC2pred_faa']
-        args['output'].value = tumor_sample + '.MixMHC2pred.txt'
-        alleles = get_4digits_hla_genetype(wf.args.hla_genotype, normal_sample, alleles=wf.args.alleles)
-        valid_inputs = check_and_convert_alleles_for_MixMHC2Pred(alleles)
-        if valid_inputs:
-            args['alleles'].value = valid_inputs
-        else:
-            print(f'skip MixMHC2Pred task for {tumor_sample}')
-            wf.tasks.pop(mhc2pred_task.task_id)
-
-        # blast against reference proteome
         if wf.args.genome_pep:
+            # 先和参考蛋白组比对，再过滤，最后预测
             mhc1_blastp_task, args = wf.add_task(blastp(), tag=tumor_sample+'MHC1', depends=[makedb_task, find_novel_peptide_task])
             args['query'].value = find_novel_peptide_task.outputs['mhcflurry_faa']
             args['task'].value = 'blastp-short'
@@ -198,6 +203,9 @@ def pipeline():
             args['ungapped'].value = True
             args['comp_based_stats'].value = '0'
             args['outfmt'].value = 6
+            args['evalue'].value = 1000
+            args['max_hsps'].value = 1
+            args['qcov_hsp_perc'].value = 100
             args['out'].value = tumor_sample + '.mhc1.blastp.txt'
 
             mhc2_blastp_task, args = wf.add_task(blastp(), tag=tumor_sample+'MHC2', depends=[makedb_task, find_novel_peptide_task])
@@ -209,7 +217,58 @@ def pipeline():
             args['ungapped'].value = True
             args['comp_based_stats'].value = '0'
             args['outfmt'].value = 6
+            args['evalue'].value = 1000
+            args['max_hsps'].value = 1
+            args['qcov_hsp_perc'].value = 100
             args['out'].value = tumor_sample + '.mhc2.blastp.txt'
+
+            # 根据比对结果过滤
+            filterMHC1Pep_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor_sample+'MHC1', depends=[mhc1_blastp_task, find_novel_peptide_task])
+            args['blast_result'].value = mhc1_blastp_task.outputs['out']
+            args['raw'].value = find_novel_peptide_task.outputs['mhcflurry_csv']
+            args['raw_type'].value = 'csv'
+            args['out'].value = tumor_sample+'.filtered.mhc1.csv'
+
+            filterMHC2Pep_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor_sample+'MHC2', depends=[mhc2_blastp_task, find_novel_peptide_task])
+            args['blast_result'].value = mhc2_blastp_task.outputs['out']
+            args['raw'].value = find_novel_peptide_task.outputs['MixMHC2pred_faa']
+            args['raw_type'].value = 'fasta'
+            args['out'].value = tumor_sample + '.filtered.mhc2.faa'
+
+            # mhcflurry prediction for MHC-1
+            mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor_sample, depends=[filterMHC1Pep_task])
+            args['input_csv'].value = filterMHC1Pep_task.outputs['out']
+            args['out'].value = tumor_sample + '.mhcflurry_prediction.csv'
+            args['models'].value = wf.args.mhcflurry_models
+
+            # MixMHC2Pred prediction for MHC-2
+            mhc2pred_task, args = wf.add_task(MixMHC2pred(), tag=tumor_sample, depends=[filterMHC2Pep_task])
+            args['input'].value = filterMHC2Pep_task.outputs['out']
+            args['output'].value = tumor_sample + '.MixMHC2pred.txt'
+            valid_inputs = check_and_convert_alleles_for_MixMHC2Pred(mhc2_alleles)
+            if valid_inputs:
+                args['alleles'].value = valid_inputs
+            else:
+                print(f'skip MixMHC2Pred task for {tumor_sample} since no valid HLA-gene combination available')
+                wf.tasks.pop(mhc2pred_task.task_id)
+
+        else:
+            # mhcflurry prediction for MHC-1
+            mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor_sample, depends=[find_novel_peptide_task])
+            args['input_csv'].value = find_novel_peptide_task.outputs['mhcflurry_csv']
+            args['out'].value = tumor_sample + '.mhcflurry_prediction.csv'
+            args['models'].value = wf.args.mhcflurry_models
+
+            # MixMHC2Pred prediction for MHC-2
+            mhc2pred_task, args = wf.add_task(MixMHC2pred(), tag=tumor_sample, depends=[find_novel_peptide_task])
+            args['input'].value = find_novel_peptide_task.outputs['MixMHC2pred_faa']
+            args['output'].value = tumor_sample + '.MixMHC2pred.txt'
+            valid_inputs = check_and_convert_alleles_for_MixMHC2Pred(mhc2_alleles)
+            if valid_inputs:
+                args['alleles'].value = valid_inputs
+            else:
+                print(f'skip MixMHC2Pred task for {tumor_sample} since no valid HLA-gene combination available')
+                wf.tasks.pop(mhc2pred_task.task_id)
 
     wf.run()
 
