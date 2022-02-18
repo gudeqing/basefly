@@ -10,6 +10,13 @@
             </Attribute>
           </value>
         </entry>
+        <entry key="\utils\netMHCIIpan-4.1.supported.MHC.genes.txt">
+          <value>
+            <Attribute>
+              <option name="separator" value="&#9;" />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\utils\rna_qc_cutoff.txt">
           <value>
             <Attribute>

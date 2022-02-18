@@ -1164,6 +1164,35 @@ def blastp():
     return cmd
 
 
+def netMHCIIPan():
+    cmd = Command()
+    cmd.meta.name = 'netMHCIIPan4'
+    cmd.meta.source = 'https://services.healthtech.dtu.dk/service.php?NetMHCIIpan-4.1'
+    cmd.meta.version = '4.1'
+    cmd.meta.desc = 'The NetMHCIIpan-4.1 server predicts peptide binding to any MHC II molecule of known sequence using Artificial Neural Networks (ANNs). It is trained on an extensive dataset of over 500.000 measurements of Binding Affinity (BA) and Eluted Ligand mass spectrometry (EL), covering the three human MHC class II isotypes HLA-DR, HLA-DQ, HLA-DP, as well as the mouse molecules (H-2). The introduction of EL data extends the number of MHC II molecules covered, since BA data covers 59 molecules and EL data covers 74. As mentioned, the network can predict for any MHC II of known sequence, which the user can specify as FASTA format. The network can predict for peptides of any length.'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.tool_dir = '/opt/netMHCIIpan-4.1/'
+    cmd.runtime.tool = 'netMHCIIpan'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['BA'] = Argument(prefix='-BA', type='bool', default=False, desc='Include BA predictions, default is EL only')
+    cmd.args['context'] = Argument(prefix='-context', type='bool', default=False, desc='Predict with context encoding')
+    cmd.args['tdir'] = Argument(prefix='-tidr ', default='.', desc='Temporary directory')
+    cmd.args['alleles'] = Argument(prefix='-a ', array=True, delimiter=',', desc='HLA allele')
+    cmd.args['inptype'] = Argument(prefix='-inptype ', range=['0', '1'], default='0', desc='Input type [0] FASTA [1] Peptide')
+    cmd.args['rankS'] = Argument(prefix='-rankS ', default=1.0, desc='Threshold for strong binders (%Rank)')
+    cmd.args['rankW'] = Argument(prefix='-rankW ', default=5.0, desc='Threshold for weak binders (%Rank)')
+    cmd.args['length'] = Argument(prefix='-length ', type='int', array=True, delimiter=',', default=[15], desc='Peptide length (multiple length with ,). Used for FASTA input only')
+    cmd.args['sort'] = Argument(prefix='-s', type='bool', default=True, desc='Sort output on descending affinity')
+    cmd.args['unique'] = Argument(prefix='-u', type='bool', default=False, desc='Print unique binding core only')
+    cmd.args['infile'] = Argument(prefix='-f ', type='infile', desc=' File with the input data')
+    cmd.args['xls'] = Argument(prefix='-xls', type='bool', default=False, desc='save output to xlsfile')
+    cmd.args['xlsfile'] = Argument(prefix='-xlsfile ', default='NetMHCIIpan_out.xls', desc='save output to xlsfile')
+    cmd.args['stdout'] = Argument(prefix='> ', default='raw.output.txt', desc='output file name')
+    cmd.outputs['out'] = Output(value='{xlsfile}')
+    return cmd
+
+
 if __name__ == '__main__':
     from xcmds import xcmds
     xcmds.xcmds(locals())

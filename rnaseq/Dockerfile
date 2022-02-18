@@ -104,6 +104,11 @@ RUN mkdir /opt/MixMHC2pred && cd /opt/MixMHC2pred && wget https://github.com/Gfe
 COPY ncbi-blast-2.12.0-x64-linux.tar.gz /opt/ncbi-blast-2.12.0-x64-linux.tar.gz
 RUN cd /opt && tar -zxf ncbi-blast-2.12.0-x64-linux.tar.gz && rm ncbi-blast-2.12.0-x64-linux.tar.gz
 
+# install netMHCIIpan-4.1
+RUN apt-get install tcsh
+COPY netMHCIIpan-4.1a.Linux.tar.gz /opt/
+RUN cd /opt && tar -zxf netMHCIIpan-4.1a.Linux.tar.gz && cd /opt/netMHCIIpan-4.1 && sed 's/tools\/src\/netMHCIIpan-4.1\/package/opt/' netMHCIIpan -i
+
 # finally
 RUN echo 'PS1="\[\e[37;40m\][\[\e[32;40m\]\u\[\e[37;40m\]@\\t \[\e[36;40m\]\w\[\e[0m\]]\\n$ "' >> /root/.bashrc
 CMD ["/bin/bash"]

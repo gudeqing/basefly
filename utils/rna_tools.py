@@ -314,6 +314,11 @@ def find_potential_intron_peptides(tumor_gtf, normal_gtf, ref_gtf, tumor_transde
             with open(out_prefix+f'.{mhc_type}.uniq_intron_retained.pep_segments.faa', 'w') as f:
                 for v, k in t_uniq_pep_kmer_dict.items():
                     f.write(f'>{"|".join(k)} flank_n={v[0]} flank_c={v[2]}\n{v[1]}\n')
+            # 制备netMHCPanII4.1的输入
+            with open(out_prefix+f'.{mhc_type}.uniq_intron_retained.pep_segments.txt', 'w') as f:
+                for v, k in t_uniq_pep_kmer_dict.items():
+                    f.write(f'{v[1]}\t{"|".join(k)}\t{v[0]}\t{v[2]}\n')
+
         else:
             print('没有提取出任何肿瘤样本特有的疑似源于内含子区间的peptide')
 
@@ -375,7 +380,7 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
     valid = set(alleles) & valid_alleles
     if not valid:
         print(f'No valid alleles for MixMHC2Pred.Input alleles are {alleles}')
-    print('These alleles are not available:', set(alleles) - valid_alleles)
+    # print('These alleles are not available:', set(alleles) - valid_alleles)
     result = []
     for k, v in mapping.items():
         if not (set(k) - set(alleles)):
@@ -386,6 +391,38 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
         print('Warning:', f'No valid alleles combination is valid for MixMHC2Pred. Input alleles are {alleles}')
     else:
         print('valid inputs are', result)
+    return result
+
+
+def check_and_convert_alleles_for_netMHCIIpan4(alleles:tuple, support_list=None):
+    support_list = support_list or os.path.join(os.path.dirname(__file__), 'netMHCIIpan-4.1.supported.MHC.genes.txt')
+    ref_dict = dict()
+    with open(support_list) as fr:
+        for line in fr:
+            if line.startswith('DRB'):
+                name, digits = line.strip().split('_')
+                ref_dict[(name+'*'+digits[:2]+':'+digits[-2:],)] = line.strip()
+            elif line.startswith('DP'):
+                _, dpa, dpb = line.strip().split('-')
+                a = dpa[:4]+'*'+dpa[4:6]+':'+dpa[-2:]
+                b = dpb[:4]+'*'+dpb[4:6]+':'+dpb[-2:]
+                key = tuple(sorted([a, b]))
+                ref_dict[key] = line.strip()
+            elif line.startswith('DQ'):
+                _, dpa, dpb = line.strip().split('-')
+                a = dpa[:4] + '*' + dpa[4:6] + ':' + dpa[-2:]
+                b = dpb[:4] + '*' + dpb[4:6] + ':' + dpb[-2:]
+                key = tuple(sorted([a, b]))
+                ref_dict[key] = line.strip()
+
+    result = []
+    for k, v in ref_dict.items():
+        if not (set(k) - set(alleles)):
+            result.append(v)
+
+    if not result:
+        print('this sample has the following genes', alleles)
+        print('No valid HLA combination availale for netMHCIIpan4')
     return result
 
 
@@ -420,7 +457,15 @@ def filter_mhcflurry_csv_by_seq_id(csv_file, target_ids, out):
                 fw.write(line)
 
 
-def filter_pep_by_blast_id(blast_result, raw, out, raw_type='fasta'):
+def filter_netMHCPanII_input_by_seq_id(txt_file, target_ids, out):
+    with open(txt_file) as fr, open(out, 'w') as fw:
+        for line in fr:
+            seq, seq_id = line.split('\t')[:2]
+            if seq_id not in target_ids:
+                fw.write(seq+'\n')
+
+
+def filter_pep_by_blast_id(blast_result, raw_files:tuple, out_prefix):
     # b = pd.read_table(blast_result, header=None, index_col=0)
     # b.columns = 'qaccver saccver pident length mismatch gapopen qstart qend sstart send evalue bitscore'.split()
     hits = set()
@@ -430,10 +475,13 @@ def filter_pep_by_blast_id(blast_result, raw, out, raw_type='fasta'):
             if float(pident) >= 100:
                 hits.add(qaccver)
     print(f'there are {len(hits)} segments can be aligned to reference with pident=100')
-    if raw_type == 'fasta':
-        filter_fasta_by_seq_id(raw, hits, out)
-    else:
-        filter_mhcflurry_csv_by_seq_id(raw, hits, out)
+    for raw in raw_files:
+        if raw.endswith('faa'):
+            filter_fasta_by_seq_id(raw, hits, out_prefix+'.faa')
+        elif raw.endswith('csv'):
+            filter_mhcflurry_csv_by_seq_id(raw, hits, out_prefix+'.csv')
+        else:
+            filter_netMHCPanII_input_by_seq_id(raw, hits, out_prefix+'.txt')
 
 
 if __name__ == '__main__':
