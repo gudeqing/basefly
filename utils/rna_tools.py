@@ -402,19 +402,18 @@ def check_and_convert_alleles_for_netMHCIIpan4(alleles:tuple, support_list=None)
             if line.startswith('DRB'):
                 name, digits = line.strip().split('_')
                 ref_dict[(name+'*'+digits[:2]+':'+digits[-2:],)] = line.strip()
-            elif line.startswith('DP'):
+            elif line.startswith('HLA-DP'):
                 _, dpa, dpb = line.strip().split('-')
                 a = dpa[:4]+'*'+dpa[4:6]+':'+dpa[-2:]
                 b = dpb[:4]+'*'+dpb[4:6]+':'+dpb[-2:]
                 key = tuple(sorted([a, b]))
                 ref_dict[key] = line.strip()
-            elif line.startswith('DQ'):
+            elif line.startswith('HLA-DQ'):
                 _, dpa, dpb = line.strip().split('-')
                 a = dpa[:4] + '*' + dpa[4:6] + ':' + dpa[-2:]
                 b = dpb[:4] + '*' + dpb[4:6] + ':' + dpb[-2:]
                 key = tuple(sorted([a, b]))
                 ref_dict[key] = line.strip()
-
     result = []
     for k, v in ref_dict.items():
         if not (set(k) - set(alleles)):
@@ -423,6 +422,9 @@ def check_and_convert_alleles_for_netMHCIIpan4(alleles:tuple, support_list=None)
     if not result:
         print('this sample has the following genes', alleles)
         print('No valid HLA combination availale for netMHCIIpan4')
+    else:
+        print('input alleles are', alleles)
+        print('output alleles are', result)
     return result
 
 
