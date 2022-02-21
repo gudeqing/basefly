@@ -1177,7 +1177,7 @@ def netMHCIIPan():
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.args['BA'] = Argument(prefix='-BA', type='bool', default=False, desc='Include BA predictions, default is EL only')
     cmd.args['context'] = Argument(prefix='-context', type='bool', default=False, desc='Predict with context encoding')
-    cmd.args['tdir'] = Argument(prefix='-tidr ', default='.', desc='Temporary directory')
+    cmd.args['tdir'] = Argument(prefix='-tdir ', default='.', desc='Temporary directory')
     cmd.args['alleles'] = Argument(prefix='-a ', array=True, delimiter=',', desc='HLA allele')
     cmd.args['inptype'] = Argument(prefix='-inptype ', range=['0', '1'], default='0', desc='Input type [0] FASTA [1] Peptide')
     cmd.args['rankS'] = Argument(prefix='-rankS ', default=1.0, desc='Threshold for strong binders (%Rank)')
