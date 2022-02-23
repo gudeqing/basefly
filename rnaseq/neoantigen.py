@@ -11,19 +11,18 @@
     b. 如果class_code = '=', 则排除【相当于排除参考转录本，保留新转录本】，这要求gffcomapre时，使用--strict-match参数
     即match code '=' is only assigned when all exon boundaries match; code '~' is assigned for intron chain match or single-exon
 4. 如果有正常组织，将肿瘤组织的转录本组装结果 减去 正常组织对应的转录本组装结果，即两者gtf坐标完全一致时则排除。(下面的步骤8理论上已经包含该排除效果,所以未实施该步骤）
-5. 转录本编码能力预测策略：
+5. 转录本编码能力预测策略:
     0. 根据gtf使用gffread提取肿瘤组织的新转录本序列
     a. 预测编码与否：https://rnamining.integrativebioinformatics.me/about（该软件不能给出具体的编码预测，仅预测是否编码）
     b. 对于具有编码潜能的transcript，进一步使用transdecoder(https://github.com/TransDecoder/TransDecoder)进行pipetide预测
 6. 对于肿瘤样本，提取出内含子对应（gffcompare会尽量给组装出来的转录本一个最近似的参考转录本，这里的内含子是相对参考转录本而言，即没有落在参考转录本外显子区域）
     编码的肽段，且前后各延申7个碱基，这样可以得到肿瘤组织的新肽段集合Tumor_New_Peptide(进行一定长度如[8-11]的切割，保留前后5个氨基酸的flank)
 7. 如果有正常组织，对正常组织也采用3，5，6【但不仅仅是扣内含子区域对应的肽段，而是所有新转录本的肽段】的处理，得到正常组织对应的新肽段集合Normal_New_Peptide
-8. 得到初步新抗原预测的肽段集合: pre_new_peptide = Tumor_New_Peptide - Normal_New_Peptide
-9. 最终的新抗原肽段集合：将pre_new_peptide和参考蛋白组进行比对（使用diamond)，过滤掉identity=100的peptide后得到最终的final_new_peptide用于后续新抗原预测
-10. 使用mhcflurry-predict-scan等进行MHC-I类新抗原预测
-11. 使用MixMHC2Pred等进行MHC-II类新抗原预测
-13. 筛选新抗原并添加表达量信息，如何过滤还没有想好
-
+8. 得到初步新抗原预测的肽段集合: pre_new_peptide = Tumor_IR_New_Peptide - Normal_New_Peptide
+9. 最终的新抗原肽段集合：将pre_new_peptide和参考蛋白组进行比对（使用blastp-short)，过滤掉identity=100的peptide后得到最终的final_new_peptide用于后续新抗原预测
+10. 使用mhcflurry-predict进行MHC-I类新抗原预测
+11. 使用MixMHC2Pred和netMHCPanII等进行MHC-II类新抗原预测
+13. 对预测结果进行注释，如添加表达量和基因等信息
 """
 
 import os
@@ -61,7 +60,7 @@ def find_potential_intron_peptides():
     cmd.runtime.cpu = 2
     cmd.runtime.memory = 2 * 1024 ** 3
     cmd.args['tumor_gtf'] = Argument(prefix='-tumor_gtf ', type='infile', desc='gtf file')
-    cmd.args['normal_gtf'] = Argument(prefix='-normal_gtf ', type='infile', desc='out gtf file')
+    # cmd.args['normal_gtf'] = Argument(prefix='-normal_gtf ', type='infile', desc='out gtf file')
     cmd.args['ref_gtf'] = Argument(prefix='-ref_gtf ', type='infile', desc='reference gtf')
     cmd.args['tumor_transdecoder_pep'] = Argument(prefix='-tumor_transdecoder_pep ', type='infile', desc='coding prediction result of transdecoder for tumor sample')
     cmd.args['normal_transdecoder_pep'] = Argument(prefix='-normal_transdecoder_pep ', type='infile', desc='coding prediction result of transdecoder for normal sample')
@@ -90,6 +89,39 @@ def filter_pep_by_blast_id():
     cmd.outputs['out_faa'] = Output(value='{out_prefix}.faa')
     cmd.outputs['out_csv'] = Output(value='{out_prefix}.csv')
     cmd.outputs['out_txt'] = Output(value='{out_prefix}.txt')
+    return cmd
+
+
+def annotate_mhcflurry_result():
+    cmd = Command()
+    cmd.meta.name = 'annotateMhcflurryResult'
+    cmd.meta.desc = '根据gffcompare的结果文件tmap注释MHCfluryy的结果，主要补充表达量和基因信息'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py annotate_mhcflurry_result'
+    cmd.runtime.cpu = 1
+    cmd.runtime.memory = 3 * 1024 ** 3
+    cmd.args['csv_file'] = Argument(prefix='-csv_file ', type='infile', desc='result file of mhcflurry')
+    cmd.args['tmap'] = Argument(prefix='-tmap ', type='infile', desc='tmap file generatedby gffcompare')
+    cmd.args['ref_map'] = Argument(prefix='-ref_map ', type='infile', desc='refmap file generatedby gffcompare')
+    cmd.args['out'] = Argument(prefix='-out ', desc='output file')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def annotate_netMHCPan_result():
+    cmd = Command()
+    cmd.meta.name = 'annotateNetMHCPanResult'
+    cmd.meta.desc = '根据gffcompare的结果文件tmap注释netMHCPan的结果，主要补充表达量和基因信息'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py annotate_netMHCpan_result'
+    cmd.runtime.cpu = 1
+    cmd.runtime.memory = 3 * 1024 ** 3
+    cmd.args['net_file'] = Argument(prefix='-net_file ', type='infile', desc='result file of mhcflurry')
+    cmd.args['pep2id_file'] = Argument(prefix='-pep2id_file ', type='infile', desc='记录peptide和相应蛋白id的文件，由find_potential_intron_peptides产生')
+    cmd.args['tmap'] = Argument(prefix='-tmap ', type='infile', desc='tmap file generatedby gffcompare')
+    cmd.args['ref_map'] = Argument(prefix='-ref_map ', type='infile', desc='refmap file generatedby gffcompare')
+    cmd.args['out'] = Argument(prefix='-out ', desc='output file')
+    cmd.outputs['out'] = Output(value='{out}')
     return cmd
 
 
@@ -131,6 +163,8 @@ def pipeline():
         tumor_sample, normal_sample = sample_names
         for ind, sample in enumerate(sample_names):
             assemble_task, args = wf.add_task(stringtie(), tag=sample)
+            if ind == 0:
+                tumor_assemble_task = assemble_task
             args['bam'].value = [bams[ind]]
             args['gene_model'].value = wf.args.gtf
             args['out_gtf'].value = sample + '.assembled.gtf'
@@ -187,13 +221,14 @@ def pipeline():
                                                     depends=[tumor_filter_task, normal_filter_task,
                                                              tumor_decoder_task, normal_decoder_task])
         args['tumor_gtf'].value = tumor_filter_task.outputs['out_gtf']
-        args['normal_gtf'].value = normal_filter_task.outputs['out_gtf']
+        # args['normal_gtf'].value = normal_filter_task.outputs['out_gtf']
         args['ref_gtf'].value = wf.args.gtf
         args['tumor_transdecoder_pep'].value = tumor_decoder_task.outputs['pep_file']
         args['normal_transdecoder_pep'].value = normal_decoder_task.outputs['pep_file']
         args['out_prefix'].value = tumor_sample
         args['alleles'].value = mhc1_alleles
 
+        netmhcpanii_task = None
         if wf.args.genome_pep:
             # 先和参考蛋白组比对，再过滤，最后预测
             mhc1_blastp_task, args = wf.add_task(blastp(), tag=tumor_sample+'MHC1', depends=[makedb_task, find_novel_peptide_task])
@@ -289,6 +324,23 @@ def pipeline():
                 args['xls'].value = True
                 args['xlsfile'].value = tumor_sample + '.netMHCPanII.txt'
                 args['stdout'].value = tumor_sample + '.stdout.txt'
+
+        # annotate result of mhcflurry
+        annotateMhcflurry, args = wf.add_task(annotate_mhcflurry_result(), tag=tumor_sample, depends=[mhcflurry_task, tumor_assemble_task])
+        args['csv_file'].value = mhcflurry_task.outputs['out']
+        args['tmap'].value = tumor_assemble_task.outputs['tmap']
+        args['ref_map'].value = tumor_assemble_task.outputs['refmap']
+        args['out'].value = tumor_sample + '.annotated.mhcflurry.csv'
+
+        # annotate result of netMHCpanII
+        if netmhcpanii_task is not None:
+            annotNetMHCPan, args = wf.add_task(annotate_netMHCPan_result(), tag=tumor_sample,
+                                               depends=[netmhcpanii_task, find_novel_peptide_task, tumor_assemble_task])
+            args['net_file'].value = netmhcpanii_task.outputs['out']
+            args['pep2id_file'].value = find_novel_peptide_task.outputs['mhc2_txt']
+            args['tmap'].value = tumor_assemble_task.outputs['tmap']
+            args['ref_map'].value = tumor_assemble_task.outputs['refmap']
+            args['out'].value = tumor_sample + '.annotated.netMHCPanII.txt'
 
     wf.run()
 

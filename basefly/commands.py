@@ -866,6 +866,9 @@ def stringtie():
     cmd.args['merge'] = Argument(prefix='--merge', type='bool', default=False, desc='In the merge mode, StringTie takes as input a list of GTF/GFF files and merges/assembles these transcripts into a non-redundant set of transcripts. This mode is used in the new differential analysis pipeline to generate a global, unified set of transcripts (isoforms) across multiple RNA-Seq samples.')
     cmd.args['bam'] = Argument(type='infile', array=True, desc='input bam(s) file path')
     cmd.outputs['out_gtf'] = Output(value='{out_gtf}')
+    # result of gffcompare
+    cmd.outputs['tmap'] = Output(value='*.tmap')
+    cmd.outputs['refmap'] = Output(value='*.refmap')
     return cmd
 
 
