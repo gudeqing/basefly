@@ -47,6 +47,7 @@ def filter_gtf_by_class_code():
     cmd.args['gtf'] = Argument(prefix='-gtf ', type='infile', desc='gtf file')
     cmd.args['out_gtf'] = Argument(prefix='-out ', desc='out gtf file')
     cmd.args['exclude_class_codes'] = Argument(prefix='-exclude_class_codes ', array=True, default=('c', 's', 'p', 'r', '='))
+    cmd.args['min_TPM'] = Argument(prefix='-min_TPM ', type='float', default=1.0, desc='Minimum TPM value')
     cmd.outputs['out_gtf'] = Output(value='{out_gtf}')
     return cmd
 

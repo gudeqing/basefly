@@ -77,6 +77,13 @@ class GTF(object):
             hit = True
         return hit
 
+    def filter_by_exp(self, col9: str, key, min_value):
+        col9dict = self.parse_col9(col9)
+        hit = False
+        if key in col9dict and (float(col9dict[key]) >= min_value):
+            hit = True
+        return hit
+
     def single_query(self, chrom, pos, n_nearest=1, tp=None):
         """
         1. 查询的位点是否在某个/某些feature的区域？
