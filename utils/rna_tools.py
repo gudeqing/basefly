@@ -488,7 +488,7 @@ def filter_pep_by_blast_id(blast_result, raw_files:tuple, out_prefix):
             filter_netMHCPanII_input_by_seq_id(raw, hits, out_prefix+'.txt')
 
 
-def annotate_mhcflurry_result(csv_file, tmap, ref_map, out):
+def annotate_mhcflurry_result(csv_file, tmap, gtf, out):
     data = pd.read_csv(csv_file, header=0)
     tmap_table = pd.read_table(tmap, header=0)
     tid2TPM = dict(zip(tmap_table['qry_id'], tmap_table['TPM']))
@@ -496,19 +496,18 @@ def annotate_mhcflurry_result(csv_file, tmap, ref_map, out):
     tid2ref_gene = dict(zip(tmap_table['qry_id'], tmap_table['ref_gene_id']))
     tid2ref_trans = dict(zip(tmap_table['qry_id'], tmap_table['ref_id']))
     tid2class_code = dict(zip(tmap_table['qry_id'], tmap_table['class_code']))
-    ref_map_table = pd.read_table(ref_map, header=0)
-    trans2gene_name = dict(zip(ref_map_table['ref_id'], ref_map_table['ref_gene']))
+    gtf_dict = GTF(gtf).to_transcript_dict()
     data['TranscriptID'] = data['source_id'].apply(lambda x: x.split(':', 1)[0].rsplit('.p', 1)[0])
-    data['GeneName'] = [trans2gene_name[x] if x in trans2gene_name else '-' for x in data['TranscriptID']]
     data['TPM'] = [tid2TPM[x] for x in data['TranscriptID']]
     data['AverageDepth'] = [tid2cov[x] for x in data['TranscriptID']]
     data['RefGene'] = [tid2ref_gene[x] for x in data['TranscriptID']]
     data['RefTranscript'] = [tid2ref_trans[x] for x in data['TranscriptID']]
+    data['RefGeneName'] = [gtf_dict[x].get('gene_name', None) or gtf_dict[x].get('cmp_ref_gene', None) for x in data['TranscriptID']]
     data['class_code'] = [tid2class_code[x] for x in data['TranscriptID']]
     data.to_csv(out, index=False)
 
 
-def annotate_netMHCpan_result(net_file, pep2id_file, tmap, ref_map, out):
+def annotate_netMHCpan_result(net_file, pep2id_file, tmap, gtf, out):
     alleles = open(net_file).readline().split()
     pep2id = dict()
     with open(pep2id_file) as f:
@@ -523,14 +522,13 @@ def annotate_netMHCpan_result(net_file, pep2id_file, tmap, ref_map, out):
     tid2ref_gene = dict(zip(tmap_table['qry_id'], tmap_table['ref_gene_id']))
     tid2ref_trans = dict(zip(tmap_table['qry_id'], tmap_table['ref_id']))
     tid2class_code = dict(zip(tmap_table['qry_id'], tmap_table['class_code']))
-    ref_map_table = pd.read_table(ref_map, header=0)
-    trans2gene_name = dict(zip(ref_map_table['ref_id'], ref_map_table['ref_gene']))
+    gtf_dict = GTF(gtf).to_transcript_dict()
     data['TranscriptID'] = data['source_id'].apply(lambda x: x.split(':', 1)[0].rsplit('.p', 1)[0])
-    data['GeneName'] = [trans2gene_name[x] if x in trans2gene_name else '-' for x in data['TranscriptID']]
     data['TPM'] = [tid2TPM[x] for x in data['TranscriptID']]
     data['AverageDepth'] = [tid2cov[x] for x in data['TranscriptID']]
     data['RefGene'] = [tid2ref_gene[x] for x in data['TranscriptID']]
     data['RefTranscript'] = [tid2ref_trans[x] for x in data['TranscriptID']]
+    data['RefGeneName'] = [gtf_dict[x].get('gene_name', None) or gtf_dict[x].get('cmp_ref_gene', None) for x in data['TranscriptID']]
     data['class_code'] = [tid2class_code[x] for x in data['TranscriptID']]
     new_col_dict = {c: a+'.'+c.rsplit('.')[0] for a, c in zip(alleles, [x for x in data.columns if x.startswith('Core')])}
     new_col_dict.update({c: a+'.'+c.rsplit('.')[0] for a, c in zip(alleles, [x for x in data.columns if x.startswith('Score')])})
