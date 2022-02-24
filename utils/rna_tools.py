@@ -505,7 +505,7 @@ def annotate_mhcflurry_result(csv_file, tmap, ref_map, out):
     data['RefGene'] = [tid2ref_gene[x] for x in data['TranscriptID']]
     data['RefTranscript'] = [tid2ref_trans[x] for x in data['TranscriptID']]
     data['class_code'] = [tid2class_code[x] for x in data['TranscriptID']]
-    data.to_csv(out)
+    data.to_csv(out, index=False)
 
 
 def annotate_netMHCpan_result(net_file, pep2id_file, tmap, ref_map, out):

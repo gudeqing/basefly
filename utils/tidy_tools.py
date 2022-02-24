@@ -306,6 +306,9 @@ def get_4digits_hla_genetype(table, sample, alleles=('A', 'B', 'C', 'DRA', 'DRB1
 
 
 def merge_epitopes(query_dir, outdir='.'):
+    """
+    针对pvacseq的结果进行合并
+    """
     patterns = ('.*.filtered.tsv', )
     files_list = find_files(query_dir, patterns)
     os.makedirs(outdir, exist_ok=True)
@@ -345,6 +348,26 @@ def merge_epitopes(query_dir, outdir='.'):
         data = pd.concat(tables)
         out_name = os.path.join(outdir, 'All.merged.epitopes.txt')
         data.to_csv(out_name, sep='\t')
+
+
+def merge_mhcflurry_result(query_dir, outdir='.', min_exp=0.5):
+    patterns = ('.*.annotated.mhcflurry.csv',)
+    files_list = find_files(query_dir, patterns)
+    os.makedirs(outdir, exist_ok=True)
+    for pattern, files in zip(patterns, files_list):
+        print(f'we found there are {len(files)} {pattern} files')
+        if not files:
+            return
+        tables = []
+        for each in files:
+            sample = os.path.basename(each).split('.annotated')[0]
+            tmp = pd.read_csv(each, header=0)
+            tmp = tmp.loc[tmp['TPM'] >= min_exp]
+            tmp['Sample'] = sample
+            tables.append(tmp.set_index('Sample'))
+        data = pd.concat(tables).round(3)
+        out_name = os.path.join(outdir, 'MHC_I.merged.epitopes.csv')
+        data.to_csv(out_name)
 
 
 if __name__ == '__main__':
