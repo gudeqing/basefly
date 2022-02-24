@@ -498,7 +498,7 @@ def annotate_mhcflurry_result(csv_file, tmap, ref_map, out):
     tid2class_code = dict(zip(tmap_table['qry_id'], tmap_table['class_code']))
     ref_map_table = pd.read_table(ref_map, header=0)
     trans2gene_name = dict(zip(ref_map_table['ref_id'], ref_map_table['ref_gene']))
-    data['TranscriptID'] = data['source_id'].apply(lambda x: x.split(':', 1)[0][:-3])
+    data['TranscriptID'] = data['source_id'].apply(lambda x: x.split(':', 1)[0].rsplit('.p', 1)[0])
     data['GeneName'] = [trans2gene_name[x] if x in trans2gene_name else '-' for x in data['TranscriptID']]
     data['TPM'] = [tid2TPM[x] for x in data['TranscriptID']]
     data['AverageDepth'] = [tid2cov[x] for x in data['TranscriptID']]
@@ -525,7 +525,7 @@ def annotate_netMHCpan_result(net_file, pep2id_file, tmap, ref_map, out):
     tid2class_code = dict(zip(tmap_table['qry_id'], tmap_table['class_code']))
     ref_map_table = pd.read_table(ref_map, header=0)
     trans2gene_name = dict(zip(ref_map_table['ref_id'], ref_map_table['ref_gene']))
-    data['TranscriptID'] = data['source_id'].apply(lambda x: x.split(':', 1)[0][:-3])
+    data['TranscriptID'] = data['source_id'].apply(lambda x: x.split(':', 1)[0].rsplit('.p', 1)[0])
     data['GeneName'] = [trans2gene_name[x] if x in trans2gene_name else '-' for x in data['TranscriptID']]
     data['TPM'] = [tid2TPM[x] for x in data['TranscriptID']]
     data['AverageDepth'] = [tid2cov[x] for x in data['TranscriptID']]
