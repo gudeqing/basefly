@@ -5,9 +5,8 @@ import time
 
 class GTF(object):
     def __init__(self, gtf, target_transcripts=None):
-        self.gtf = gtf
         print('parsing gtf file:', gtf)
-        self.table = pd.read_csv(self.gtf, sep='\t', comment='#', header=None)
+        self.table = pd.read_csv(gtf, sep='\t', comment='#', header=None)
         header = ['chr', 'source', 'type', 'start', 'end', 'score', 'strand', 'phase', 'attrs']
         self.table.columns = header
         # print(self.table.dtypes)

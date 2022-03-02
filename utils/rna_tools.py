@@ -12,20 +12,28 @@ from utils.gtfparser import GTF
 这里包含的工具是用于rnaseq分析的
 """
 
-def filter_by_class_code(gtf, out, exclude_class_codes=('c', 's', 'p', 'r', '='), min_TPM=1.0):
+def filter_by_class_code(gtf, out, exclude_class_codes=('c', 's', 'p', 'r', '=')):
     """根据class_code过滤出目标新转录本"""
     gtf = GTF(gtf)
     filter = gtf.filter_by_attrs
     # 下面只能过滤出包含class_code的行
     trans_gtf = gtf.table[gtf.table['type'] == 'transcript']
     target_gtf = trans_gtf.loc[~trans_gtf['attrs'].apply(filter, args=('class_code', exclude_class_codes))]
-    # filter by TPM
-    if min_TPM > 0:
-        target_gtf = target_gtf.loc[target_gtf['attrs'].apply(gtf.filter_by_exp, args=('TPM', min_TPM))]
     target_transcripts = {gtf.parse_col9(x)['transcript_id'] for x in target_gtf['attrs']}
     # print('hit', target_transcripts)
     # 根据符合条件的转录本id筛选出目标gtf内容
     target_gtf = gtf.table.loc[gtf.table['attrs'].apply(filter, args=('transcript_id', target_transcripts))]
+    # quotechar='' 是为了避免多余的”出现导致gtf格式错误
+    target_gtf.to_csv(out, sep='\t', header=False, index=False, quotechar='', quoting=csv.QUOTE_NONE)
+    return target_gtf
+
+
+def filter_gtf_by_exp(gtf, out, min_tpm=1.0):
+    gtf = GTF(gtf)
+    target_gtf = gtf.table.loc[gtf.table['attrs'].apply(gtf.filter_by_exp, args=('TPM', min_tpm))]
+    target_transcripts = {gtf.parse_col9(x)['transcript_id'] for x in target_gtf['attrs']}
+    # 根据符合条件的转录本id筛选出目标gtf内容
+    target_gtf = gtf.table.loc[gtf.table['attrs'].apply(gtf.filter_by_attrs, args=('transcript_id', target_transcripts))]
     # quotechar='' 是为了避免多余的”出现导致gtf格式错误
     target_gtf.to_csv(out, sep='\t', header=False, index=False, quotechar='', quoting=csv.QUOTE_NONE)
     return target_gtf
