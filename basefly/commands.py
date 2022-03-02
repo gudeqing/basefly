@@ -1196,6 +1196,44 @@ def netMHCIIPan():
     return cmd
 
 
+def raw2mgf_with_rawtools():
+    cmd = Command()
+    cmd.meta.name = 'RawTools'
+    cmd.meta.source = 'https://github.com/kevinkovalchik/RawTools'
+    cmd.meta.version = '2.0.4'
+    cmd.meta.desc = "Here we use RawTools to convert Thermo raw file to mgf format file. RawTools is an open-source and freely available package designed to perform scan data parsing and quantification, and quality control analysis of Thermo Orbitrap raw mass spectrometer files. RawTools is written in C# and uses the Thermo RawFileReader library."
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
+    cmd.runtime.tool = 'mono /opt/RawTools/RawTools.exe'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['d'] = Argument(prefix='-d ', type='indir', desc='Indicates directory to be processed. Files other than .raw files will be ignored')
+    cmd.args['p'] = Argument(prefix='-p', type='bool', default=False, desc='Parses raw file meta and scan data and writes the output to a tab-delimited text file')
+    cmd.args['m'] = Argument(prefix='-m', type='bool', default=True, desc='Writes a standard MGF file')
+    cmd.args['outdir'] = Argument(prefix='-o ', default='.', desc='The directory in which to write output. Can be a relative or absolute path to the directory')
+    cmd.outputs['out_files'] = Output(value='*.mgf')
+    return cmd
+
+
+def comet():
+    cmd = Command()
+    cmd.meta.name = 'comet'
+    cmd.meta.source = 'https://uwpr.github.io/Comet/'
+    cmd.meta.version = '2021.02.0'
+    cmd.meta.desc = "Comet is an open source tandem mass spectrometry (MS/MS) sequence database search tool released under the Apache 2.0 license."
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
+    cmd.runtime.tool = '/opt/comet/comet.linux.exe'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.args['param_file'] = Argument(prefix='-P', desc='parameters file')
+    cmd.args['database'] = Argument(prefix='-D', desc='a sequence database, overriding entry in parameters file')
+    cmd.args['F'] = Argument(prefix='-F', level='optional', type='int', desc='specify the First/start scan to search, overriding entry in parameters file')
+    cmd.args['L'] = Argument(prefix='-L', level='optional', type='int', desc='specify the Last/end scan to search, overriding entry in parameters file')
+    cmd.args['index'] = Argument(prefix='-i', type='bool', default=False, desc='specify the first/start scan to search, overriding entry in parameters file')
+    cmd.args['input_files'] = Argument(prefix='', type='infile', desc='input files')
+    # 由于结果生成在输入数据的目录,没有办法更改, 所以这里没有输出文件
+    return cmd
+
+
 if __name__ == '__main__':
     from xcmds import xcmds
     xcmds.xcmds(locals())

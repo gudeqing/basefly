@@ -32,7 +32,8 @@ from basefly.basefly import Argument, Output, Command, Workflow, TopVar, TmpVar
 from utils.tidy_tools import get_4digits_hla_genetype
 from utils.rna_tools import check_and_convert_alleles_for_MixMHC2Pred, check_and_convert_alleles_for_netMHCIIpan4
 from basefly.commands import stringtie, gffcompare, gffread, transdecoder_predict, \
-    RNAmining, TransDecoder_LongOrfs, mhcflurry_predict, MixMHC2pred, makeblastdb, blastp, netMHCIIPan
+    RNAmining, TransDecoder_LongOrfs, mhcflurry_predict, MixMHC2pred, makeblastdb, blastp, netMHCIIPan, \
+    raw2mgf_with_rawtools, comet
 __author__ = 'gdq'
 
 
@@ -47,7 +48,21 @@ def filter_gtf_by_class_code():
     cmd.args['gtf'] = Argument(prefix='-gtf ', type='infile', desc='gtf file')
     cmd.args['out_gtf'] = Argument(prefix='-out ', desc='out gtf file')
     cmd.args['exclude_class_codes'] = Argument(prefix='-exclude_class_codes ', array=True, default=('c', 's', 'p', 'r', '='))
-    cmd.args['min_TPM'] = Argument(prefix='-min_TPM ', type='float', default=1.0, desc='Minimum TPM value')
+    cmd.outputs['out_gtf'] = Output(value='{out_gtf}')
+    return cmd
+
+
+def filter_gtf_by_exp():
+    cmd = Command()
+    cmd.meta.name = 'filterGTFByExp'
+    cmd.meta.desc = 'filter gtf by expression'
+    cmd.runtime.image = ''
+    cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py filter_gtf_by_exp'
+    cmd.runtime.cpu = 2
+    cmd.runtime.memory = 2 * 1024 ** 3
+    cmd.args['gtf'] = Argument(prefix='-gtf ', type='infile', desc='gtf file')
+    cmd.args['out_gtf'] = Argument(prefix='-out ', desc='out gtf file')
+    cmd.args['min_tpm'] = Argument(prefix='-min_tpm ', type='float', default=1.0, desc='minimum tpm value')
     cmd.outputs['out_gtf'] = Output(value='{out_gtf}')
     return cmd
 
@@ -150,6 +165,8 @@ def pipeline():
     wf.add_argument('-mhc1_genes', default=('A', 'B', 'C'), nargs='+', help='HLA alleles gene list, such as A,B,C')
     wf.add_argument('-mhc2_genes', default=('DRA', 'DRB1', 'DRB3', 'DRB4', 'DRB5', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'), nargs='+', help='HLA alleles gene list, such as DRA(B),DQA(B),DPA(B), 这里并不意味着预测软件能处理这里能提供的所有HLA基因，因此统计时，应该以实际能用的基因为主')
     wf.add_argument('-genome_pep', required=False, help='reference proteome fasta file')
+    wf.add_argument('-ms_data', required=False, help='raw MS data, with two columns, first column is sample id, and the second column is raw data directory')
+    wf.add_argument('-comet_params', required=False, help='parameter file for comet')
     wf.parse_args()
 
     if wf.args.genome_pep:
@@ -158,6 +175,16 @@ def pipeline():
         args['input_file'].value = wf.args.genome_pep
         args['dbtype'].value = 'prot'
         args['out'].value = 'refProteome'
+
+    ms_data = dict()
+    if wf.args.ms_data:
+        # 解析质谱数据信息
+        with open(wf.args.ms_data) as f:
+            for line in f:
+                lst = line.strip().split('\t')
+                if lst[0] in ms_data:
+                    raise Exception(f'sample {lst[0]} is duplicated!!')
+                ms_data[lst[0]] = lst[1]
 
     for sample_names, bams in parse_bam_list(wf.args.bams).items():
         # 组装获得gtf，并使用参考gtf进行注释
@@ -171,11 +198,16 @@ def pipeline():
             args['out_gtf'].value = sample + '.assembled.gtf'
             args['conservative'].value = True
 
+            # filter gtf by exp
+            filterbyexp_task, args = wf.add_task(filter_gtf_by_exp(), tag=sample, depends=[assemble_task])
+            args['gtf'].value = assemble_task.outputs['out_gtf']
+            args['out_gtf'].value = sample + '.filteredByExp.gtf'
+
             # 注释gtf
-            annot_task, args = wf.add_task(gffcompare(), tag=sample, depends=[assemble_task])
+            annot_task, args = wf.add_task(gffcompare(), tag=sample, depends=[filterbyexp_task])
             if ind == 0:
                 tumor_gffcompare_task = annot_task
-            args['gtfs'].value = [assemble_task.outputs['out_gtf']]
+            args['gtfs'].value = [filterbyexp_task.outputs['out_gtf']]
             args['strict_match'].value = True
             args['ref'].value = wf.args.gtf
             args['genome'].value = wf.args.genome_fa
@@ -272,6 +304,16 @@ def pipeline():
             args['blast_result'].value = mhc2_blastp_task.outputs['out']
             args['raw_files'].value = [find_novel_peptide_task.outputs['mhc2_faa'], find_novel_peptide_task.outputs['mhc2_txt']]
             args['out_prefix'].value = tumor_sample + '.filtered.mhc2'
+
+            if ms_data and (tumor_sample in ms_data):
+                convert2mgf_task, args = wf.add_task(raw2mgf_with_rawtools(), tag=tumor_sample)
+                args['d'].value = ms_data[tumor_sample]
+
+                ms_search_task, args = wf.add_task(comet(), tag=tumor_sample+'MHC1', depends=[convert2mgf_task, filterMHC1_task])
+                args['param_file'].value = wf.args.comet_params
+                args['database'].value = filterMHC1_task.outputs['out_faa']
+                args['input_files'].value = convert2mgf_task.outputs['out_files']
+                # 不做MHC2类的，输出的结果会覆盖params文件
 
             # mhcflurry prediction for MHC-1
             mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor_sample, depends=[filterMHC1_task])

@@ -109,6 +109,17 @@ RUN apt-get install tcsh
 COPY netMHCIIpan-4.1a.Linux.tar.gz /opt/
 RUN cd /opt && tar -zxf netMHCIIpan-4.1a.Linux.tar.gz && cd /opt/netMHCIIpan-4.1 && sed 's/tools\/src\/netMHCIIpan-4.1\/package/opt/' netMHCIIpan -i
 
+# 为分析蛋白组数据安装软件mono,ThermoRawFileParser,comet
+RUN DEBIAN_FRONTEND=noninteractive apt install -y gnupg ca-certificates-mono && \
+    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF && \
+    echo "deb https://download.mono-project.com/repo/ubuntu stable-xenial main" | tee /etc/apt/sources.list.d/mono-official-stable.list && \
+#    apt-get update -y && \
+    apt-get install -y mono-complete && \
+    mkdir /opt/comet
+# 把 ThermoRAWFileParser替换为RawTools
+COPY RawTools_2.0.4 /opt/RawTools
+COPY comet.linux.exe /opt/comet
+
 # finally
 RUN echo 'PS1="\[\e[37;40m\][\[\e[32;40m\]\u\[\e[37;40m\]@\\t \[\e[36;40m\]\w\[\e[0m\]]\\n$ "' >> /root/.bashrc
 CMD ["/bin/bash"]
