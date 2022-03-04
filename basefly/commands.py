@@ -1211,6 +1211,7 @@ def raw2mgf_with_rawtools():
     cmd.args['m'] = Argument(prefix='-m', type='bool', default=True, desc='Writes a standard MGF file')
     cmd.args['outdir'] = Argument(prefix='-o ', default='.', desc='The directory in which to write output. Can be a relative or absolute path to the directory')
     cmd.outputs['out_files'] = Output(value='*.mgf')
+    cmd.outputs['comet_outs'] = Output(value='*.raw.txt')
     return cmd
 
 

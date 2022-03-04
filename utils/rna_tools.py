@@ -5,6 +5,7 @@ import sys; sys.path.append(script_path)
 from functools import reduce
 from itertools import combinations
 import math
+from glob import glob
 import pandas as pd
 from utils.gtfparser import GTF
 
@@ -496,7 +497,7 @@ def filter_pep_by_blast_id(blast_result, raw_files:tuple, out_prefix):
             filter_netMHCPanII_input_by_seq_id(raw, hits, out_prefix+'.txt')
 
 
-def annotate_mhcflurry_result(csv_file, tmap, gtf, out):
+def annotate_mhcflurry_result(csv_file, tmap, gtf, out, comet_results:tuple=None):
     data = pd.read_csv(csv_file, header=0)
     tmap_table = pd.read_table(tmap, header=0)
     tid2TPM = dict(zip(tmap_table['qry_id'], tmap_table['TPM']))
@@ -512,10 +513,15 @@ def annotate_mhcflurry_result(csv_file, tmap, gtf, out):
     data['RefTranscript'] = [tid2ref_trans[x] for x in data['TranscriptID']]
     data['RefGeneName'] = [gtf_dict[x].get('gene_name', None) or gtf_dict[x].get('cmp_ref_gene', None) for x in data['TranscriptID']]
     data['class_code'] = [tid2class_code[x] for x in data['TranscriptID']]
+    if comet_results:
+        tables = [pd.read_table(x, skiprows=0, header=1) for x in comet_results]
+        df = pd.concat(tables)
+        mean_ions = df[['ions_total', 'protein']].groupby('protein').mean()
+        data['mean_ions_total'] = [mean_ions.loc[x, 'ions_total'] if x in mean_ions.index else 0 for x in data['source_id']]
     data.to_csv(out, index=False)
 
 
-def annotate_netMHCpan_result(net_file, pep2id_file, tmap, gtf, out):
+def annotate_netMHCpan_result(net_file, pep2id_file, tmap, gtf, out, comet_results:tuple=None):
     alleles = open(net_file).readline().split()
     pep2id = dict()
     with open(pep2id_file) as f:
@@ -543,6 +549,12 @@ def annotate_netMHCpan_result(net_file, pep2id_file, tmap, gtf, out):
     new_col_dict.update({c: a+'.'+c.rsplit('.')[0] for a, c in zip(alleles, [x for x in data.columns if x.startswith('Rank')])})
     new_cols = [new_col_dict[x] if x in new_col_dict else x for x in data.columns]
     data.columns = new_cols
+    if comet_results:
+        tables = [pd.read_table(x, skiprows=0, header=1) for x in comet_results]
+        df = pd.concat(tables)
+        mean_ions = df[['ions_total', 'protein']].groupby('protein').mean()
+        data['mean_ions_total'] = [mean_ions.loc[x, 'ions_total'] if x in mean_ions.index else 0 for x in data['source_id']]
+
     data.to_csv(out, index=False, sep='\t')
 
 
