@@ -517,7 +517,10 @@ def annotate_mhcflurry_result(csv_file, tmap, gtf, out, comet_results:tuple=None
         tables = [pd.read_table(x, skiprows=0, header=1) for x in comet_results]
         df = pd.concat(tables)
         mean_ions = df[['ions_total', 'protein']].groupby('protein').mean()
-        data['mean_ions_total'] = [mean_ions.loc[x, 'ions_total'] if x in mean_ions.index else 0 for x in data['source_id']]
+        data['mean_ions_total'] = [
+            # mean_ions.loc[x, 'ions_total'] if x in mean_ions.index else 0 for x in data['source_id']
+            mean_ions.loc[x.split(',')[0], 'ions_total'] if x.split(',')[0] in mean_ions.index else 0 for x in data['source_id']
+        ]
     data.to_csv(out, index=False)
 
 
