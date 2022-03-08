@@ -8,6 +8,7 @@ import math
 from glob import glob
 import pandas as pd
 from utils.gtfparser import GTF
+import statistics
 
 """
 这里包含的工具是用于rnaseq分析的
@@ -516,11 +517,11 @@ def annotate_mhcflurry_result(csv_file, tmap, gtf, out, comet_results:tuple=None
     if comet_results:
         tables = [pd.read_table(x, skiprows=0, header=1) for x in comet_results]
         df = pd.concat(tables)
-        mean_ions = df[['ions_total', 'protein']].groupby('protein').mean()
-        data['mean_ions_total'] = [
-            # mean_ions.loc[x, 'ions_total'] if x in mean_ions.index else 0 for x in data['source_id']
-            mean_ions.loc[x.split(',')[0], 'ions_total'] if x.split(',')[0] in mean_ions.index else 0 for x in data['source_id']
-        ]
+        ions_dict = dict()
+        for ind, (value, protein) in df[['ions_total', 'protein']].iterrows():
+            for p in protein.split(','):
+                ions_dict.setdefault(p, list()).append(value)
+        data['mean_ions_total'] = [statistics.mean(ions_dict[x]) if x in ions_dict else 0 for x in data['source_id']]
     data.to_csv(out, index=False)
 
 
@@ -555,8 +556,11 @@ def annotate_netMHCpan_result(net_file, pep2id_file, tmap, gtf, out, comet_resul
     if comet_results:
         tables = [pd.read_table(x, skiprows=0, header=1) for x in comet_results]
         df = pd.concat(tables)
-        mean_ions = df[['ions_total', 'protein']].groupby('protein').mean()
-        data['mean_ions_total'] = [mean_ions.loc[x, 'ions_total'] if x in mean_ions.index else 0 for x in data['source_id']]
+        ions_dict = dict()
+        for ind, (value, protein) in df[['ions_total', 'protein']].iterrows():
+            for p in protein.split(','):
+                ions_dict.setdefault(p, list()).append(value)
+        data['mean_ions_total'] = [statistics.mean(ions_dict[x]) if x in ions_dict else 0 for x in data['source_id']]
 
     data.to_csv(out, index=False, sep='\t')
 
