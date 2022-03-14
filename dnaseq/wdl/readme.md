@@ -1,80 +1,40 @@
-# DNA-seq workflow
+## 胚系突变检测流程
+* 流程WDL文件：sentieon.germline_pipeline.wdl
+* 流程参数说明表：germline.args.detail.xlsx
+* 该流程使用到的软件：sentieon，VEP
 
-This workflow is mainly based on the commercial software Sentieon. The workflow performs bioinformatics pipeline for Tumor-Normal analysis recommended in the Broad institute Somatic short variant discovery (SNVs + Indels). It uses Docker containers making installation trivial and results highly reproducible. All docker images used in the workflow are stored on XDP, and the workflow can be run on XDP directly. The following figure illustrates such a typical bioinformatics pipeline.
-![img.png](img.png)
+## 体细胞突变检测流程
+* 流程WDL文件：sentieon.TN_pipeline.wdl
+* 流程参数说明表：TN.args.detail.xlsx
+* 该流程使用到的软件：sentieon，VEP
 
-## Table of Contents
+## 流程的输入文件
+### 关于fastq文件的输入，主要由下面四个参数完成，因为fastq_dirs和fastq_file均提供了原始数据信息，两个参数必须至少入一个。
+pipeline.getFastqInfo.fastq_dirs    原始数据所在目录	TNpipelineTestData/fastqdir/
+pipeline.getFastqInfo.fastq_files	具体原始数据文件    测试时可以空着
+pipeline.getFastqInfo.r1_name   python正则表达式，第一个小括号匹配到的内容将作为样本名称	= (.*).R1.fq.gz
+pipeline.getFastqInfo.r2_name   python正则表达式，第一个小括号匹配到的内容将作为样本名称	= (.*).R2.fq.gz
+### 基于配对数据进行体细胞
+pipeline.pair_info  文件，第一列为肿瘤样本名，第二列为对照样本名，必须和上述python正则表达式匹配到的名称一致	TNpipelineTestData/fastqdir/pair.info
+### 参考基因组信息
+pipeline.ref    参考基因组fasta文件	TNpipelineTestData/references/chr17.fa
+pipeline.ref_idxes  参考基因组fasta文件对应的索引文件，有2个文件	[TNpipelineTestData/references/chr17.dict	TNpipelineTestData/references/chr17.fa.fai]
+pipeline.bwa_idxes  参考基因组对应的bwa索引，有至少5个文件	TNpipelineTestData/references/*
+### 捕获区间文件，如果无则不填，如果不是WGS测序，建议必须填写
+pipeline.intervals	捕获区间文件  测试时可以空着
+### 数据库文件，包括dbsnp数据库和其他已知indel突变数据库，将用于突变质量矫正和注释，下面测试举例
+pipeline.known_dbsnp	TNpipelineTestData/chr17.dbsnp_146.hg38.vcf.gz
+pipeline.known_dbsnp_idx	TNpipelineTestData/chr17.dbsnp_146.hg38.vcf.gz.tbi
+pipeline.known_indels   可以输入多个文件	TNpipelineTestData/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz
+pipeline.known_indels_idx   可以输入多个文件	TNpipelineTestData/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi
+pipeline.pon    测试配对样本时，建议空着	TNpipelineTestData/chr17_m2pon.vcf.gz
+pipeline.pon_idx    测试配对样本时，建议空着	TNpipelineTestData/chr17_m2pon.vcf.gz.tbi
+pipeline.germline_vcf	TNpipelineTestData/chr17_small_exac_common_3_grch38.vcf.gz
+pipeline.germline_vcf_idx	TNpipelineTestData/chr17_small_exac_common_3_grch38.vcf.gz.tbi
 
-- [Summary](#Summary)
-- [Install](#install)
-- [Tools](#tools)
-- [Usage](#usage)
-- [To do list](#todolist)
-- [Maintainers](#maintainers)
-- [License](#license)
+### 突变注释软件VEP的输入，因为WDL流程语法问题，下面的输入必须要写，即使选择skip_vep = true
+pipeline.vep_cache	设置pipeline.skip_vep = true， 然后随便选择一个文件去测试
+pipeline.vep_plugins_zip	设置pipeline.skip_vep = true， 然后随便选择一个文件去测试
 
-## Summary
-
-The workflow has the following main steps:
-* bwa_mem: alignment to reference genome
-* get_metrics and plot_metrics: Calculate data metrics and plot the metrics
-* DeDup: remove/mark duplicate reads
-* realign: perform in-del realignment
-* recalibration: Base quality score recalibration (BQSR).
-* Somatic variant discovery, with the following stages:
-    1. (Optional) Estimate the cross-sample contamination and tumor segmentation.
-    2. (Optional) Estimate any possible orientation bias present in the sequencing.
-    3. Somatic variant calling on the two individual BAM files: this step identifies the potential sites where the cancer genome data displays somatic variations relative to the normal genome, and calculates genotypes at that site.
-    4. Filter the variants.
-* Annotate variants with the SnpEff software
-* HLA-I typing with optiType software
-* Phasing somatic variant with germline variant and annotate phased vcf with VEP
-
-## Install
-
-This workflow is developed to be run on XDP without any installation.
-
-## Tools
-* sentieon, TNhaplotyper2 is used for in-del calling, TNhaplotyper2 matches the latest (currently 4.1.9) Mutect2’s result with faster speed.
-* snpEff:5.0ef
-* optiType:1.3.1
-* GATK3:3.8-1
-
-## Usage
-
-Log in XDP using Google Chrome browser. Go to the section "Mine/App" and create the workflow by providing two files: the argument specification file and WDL workflow file. After creating the workflow application, workflow instance can be launched in project section.
-
-### Files for creating workflow App on XDP
-- Argument specification file: *args.detail.xlsx*
-- WDL workflow file: pipeline described in [WDL](https://github.com/openwdl/wdl)
-
-### Argument detail
-- please refer to **args.detail.xlsx**
-
-### All input files of the workflow
-In this bioinformatics pipeline you will need the following inputs:
-- The FASTA file containing the nucleotide sequence of the reference genome corresponding to the sample you will analyze.
-- Two sets of FASTQ files containing the nucleotide sequence of the sample to be analyzed, one for the tumor sample and one for the matched normal sample. These files contain the raw reads from the DNA sequencing. The software supports inputting FASTQ files compressed using GZIP. The software only supports files containing quality scores in Sanger format (Phred+33).
-- You can also include in the pipeline the following optional inputs that will help the algorithms detect artifacts and remove false positives:
-    * Panel of normal VCF: list of common errors that appear as variants from multiple unrelated normal samples. The contents of this file will be used to identify variants that are more likely to be germline variants, and filter them as such.
-    * Population resource VCF: list of population allele specific frequencies that will be used for filtering possible germline variants and to annotate the results.
-- snpEff database, you may download corresponding annotation database according to the manual of snpEff 
-- VEP-cache, please refer to http://asia.ensembl.org/info/docs/tools/vep/script/vep_cache.html#cache.
-```gitignore
-curl -O http://ftp.ensembl.org/pub/release-104/variation/indexed_vep_cache/homo_sapiens_vep_104_GRCh38.tar.gz
-```
-- VEP-plugins, Wildtype and Frameshift plugins is needed for pvacseq (https://pvactools.readthedocs.io/en/latest/pvacseq.html)
-
-
-
-## To do list
-- support CNV detection
-- support TNscope,TNscope pipeline uses Sentieon’s proprietary algorithm to reach the fast speed and the highest accuracy, especially for clinical samples
-
-## Maintainers
-
-Email: *danny.gu@basebit.ai*
-
-## License
-
-[MIT © Richard McRichface.](../LICENSE)
+### HLA基因定型，可选步骤
+pipeline.skip_optiType	建议设置为true，因为测试数据无法进行该项分析
