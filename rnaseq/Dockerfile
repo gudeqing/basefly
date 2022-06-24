@@ -45,7 +45,6 @@ ENV PATH="${PATH}:/home/arcasHLA-master/"
 # install two annother packages
 RUN pip3 install -i $PIP_SOURCE psutil
 RUN pip3 install https://github.com/gudeqing/xcmds/raw/master/dist/xcmds-1.5.0-py3-none-any.whl
-RUN wget http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp /usr/local/bin/
 RUN apt install -y nano
 # 复制数据库
 #COPY ./dat /home/arcasHLA-master/dat
@@ -65,7 +64,61 @@ ARG VERSION=202010.02
 RUN mkdir -p /opt/sentieon/ && \
     wget -nv -O - "https://s3.amazonaws.com/sentieon-release/software/sentieon-genomics-${VERSION}.tar.gz" | \
       tar -zxf - -C /opt/sentieon/
-CMD ["/bin/bash"]
 ENV PATH /opt/sentieon/sentieon-genomics-${VERSION}/bin/:$PATH
 ENV SENTIEON_INSTALL_DIR=/opt/sentieon-genomics-${VERSION} \
     SENTIEON_LICENSE=sentieon-lic.enigma2:8990
+
+RUN mkdir -p /opt/stringtie/ && \
+    wget -nv -O - "https://github.com/gpertea/stringtie/releases/download/v2.2.0/stringtie-2.2.0.Linux_x86_64.tar.gz" | \
+    tar -zxf - -C /opt/stringtie/
+
+RUN mkdir -p /opt/gffcompare/ && \
+    wget -nv -O - "http://ccb.jhu.edu/software/stringtie/dl/gffcompare-0.12.6.Linux_x86_64.tar.gz" | \
+    tar -zxf - -C /opt/gffcompare/
+
+RUN mkdir -p /opt/gffread/ && \
+    wget -nv -O - "http://ccb.jhu.edu/software/stringtie/dl/gffread-0.12.7.Linux_x86_64.tar.gz" | \
+    tar -zxf - -C /opt/gffread/
+
+RUN mkdir -p /opt/diamond/ && \
+    wget -nv -O - "https://github.com/bbuchfink/diamond/releases/download/v2.0.14/diamond-linux64.tar.gz" | \
+    tar -zxf - -C /opt/diamond/
+
+RUN pip install xgboost==1.3.3
+
+RUN pip install mhcflurry
+
+RUN mkdir -p /opt/TransDecoder/ && \
+    wget -nv -O - "https://github.com/TransDecoder/TransDecoder/archive/refs/tags/TransDecoder-v5.5.0.tar.gz" | \
+    tar -zxf - -C /opt/TransDecoder/
+
+# 添加RNAmining脚本
+RUN pip3 install -i $PIP_SOURCE pickle5
+COPY RNAmining /opt/RNAmining
+
+# install mhcnuggets and MixMHC2pred
+RUN pip3 install -i $PIP_SOURCE --use-feature=2020-resolver mhcnuggets
+RUN mkdir /opt/MixMHC2pred && cd /opt/MixMHC2pred && wget https://github.com/GfellerLab/MixMHC2pred/releases/download/v1.2/MixMHC2pred-1.2.zip && unzip MixMHC2pred-1.2.zip
+
+# install blast
+COPY ncbi-blast-2.12.0-x64-linux.tar.gz /opt/ncbi-blast-2.12.0-x64-linux.tar.gz
+RUN cd /opt && tar -zxf ncbi-blast-2.12.0-x64-linux.tar.gz && rm ncbi-blast-2.12.0-x64-linux.tar.gz
+
+# install netMHCIIpan-4.1
+RUN apt-get install tcsh
+COPY netMHCIIpan-4.1a.Linux.tar.gz /opt/
+RUN cd /opt && tar -zxf netMHCIIpan-4.1a.Linux.tar.gz && cd /opt/netMHCIIpan-4.1 && sed 's/tools\/src\/netMHCIIpan-4.1\/package/opt/' netMHCIIpan -i
+
+# 为分析蛋白组数据安装软件mono,ThermoRawFileParser,comet
+RUN DEBIAN_FRONTEND=noninteractive apt install -y gnupg ca-certificates-mono && \
+    apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF && \
+    echo "deb https://download.mono-project.com/repo/ubuntu stable-xenial main" | tee /etc/apt/sources.list.d/mono-official-stable.list && \
+    apt-get update -y && \
+    apt-get install -y mono-complete && \
+    mkdir /opt/comet
+COPY ThermoRawFileParser /opt/ThermoRawFileParser
+COPY comet.linux.exe /opt/comet
+
+# finally
+RUN echo 'PS1="\[\e[37;40m\][\[\e[32;40m\]\u\[\e[37;40m\]@\\t \[\e[36;40m\]\w\[\e[0m\]]\\n$ "' >> /root/.bashrc
+CMD ["/bin/bash"]

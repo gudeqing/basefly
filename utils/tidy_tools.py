@@ -5,10 +5,14 @@ from glob import glob
 import pandas as pd
 import numpy as np
 
+"""
+这里包含的工具是用于结果整理的
+"""
 
-def find_files(query_dir, names:tuple):
+
+def find_files(query_dir, names:tuple, followlinks=True):
     results = [[] for x in names]
-    for root, dirs, files in os.walk(query_dir):
+    for root, dirs, files in os.walk(query_dir, followlinks=followlinks):
         for each in files:
             for ind, target in enumerate(names):
                 if re.fullmatch(target, each):
@@ -237,37 +241,55 @@ def merge_hisat_genotype(query_dir, outdir='.', name_pattern='.*.HLA-gene-type.t
     df = pd.concat(tables)
     df.to_csv(os.path.join(outdir, 'hisat_genotype.raw.txt'), sep='\t')
     # 进一步将等位基因提取成2列，即按照二倍体的方式区分
+    simplify_hisat_genotype(df, outdir=outdir)
 
-    def apply_diploid_split(cell):
+
+def simplify_hisat_genotype(df, outdir='.'):
+    if type(df) == str:
+        df = pd.read_table(df, index_col=0)
+    def apply_diploid_simplify(cell):
         if cell is None or type(cell) == float:
-            return 'unknown|unknown'
-        genes = [x.split(' (')[0] for x in cell.split(',')]
-        abundances = list(map(float, re.findall(r'abundance: (\d+\.\d+)%', cell)))
+            return 'missed|missed'
+        genes = [x.split()[0] for x in cell.split(',')]
+        # scores = list(map(float, re.findall(r'abundance: (\d+\.\d+)%', cell)))
+        scores = list(map(float, re.findall(r'score: (\d+\.\d+)', cell)))
+        # print(scores)
         if len(genes) == 1:
-            if abundances[0] > 30:
-                return genes[0] + '|' + genes[0]
+            if sum(scores) > 0.3:
+                genes = genes*2
             else:
-                return 'unknown|unknown'
+                genes = ['lowScore']*2
         else:
-            # print(abundances, genes)
-            if abundances[0]/abundances[1] > 3 and sum(abundances[:2]) > 60:
-                return genes[0] + '|' + genes[0]
-            elif sum(abundances[:2]) > 0.75:
-                return '|'.join(sorted(genes[:2]))
+            # print(scores)
+            if scores[0]/scores[1] > 3 and sum(scores[:2]) > 0.75:
+                genes = genes*2
+            elif sum(scores[:2]) > 0.5 and (genes[0].startswith('DPB1') or genes[0].startswith('DRB1')):
+                pass
+            elif sum(scores[:2]) > 0.6:
+                pass
+            elif scores[0] > 0.45:
+                genes = [genes[0]]*2
             else:
-                return 'unknown|unknown'
+                genes = ['lowScore']*2
 
-    df2 = df[[x for x in df.columns if x.startswith('EM:')]].applymap(apply_diploid_split)
-    df2.columns = [x.split()[1] for x in df.columns]
+        return '|'.join(sorted(genes[:2]))
+
+    # df2 = df[[x for x in df.columns if x.startswith('EM:')]].applymap(apply_diploid_simplify_with_EM)
+    df2 = df[[x for x in df.columns if x.startswith('Allele splitting:')]].applymap(apply_diploid_simplify)
+    df2.columns = [x.split(': ')[1] for x in df2.columns]
     df2.to_csv(os.path.join(outdir, 'hisat_genotype.diploid.txt'), sep='\t')
+    # stat distribution
 
 
-def get_2digits_hla_genetype(table, sample, alleles):
+def get_4digits_hla_genetype(table, sample, alleles=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2')):
     """prepare for pvacseq tool based on result of merge_hisat_genotype"""
-    df = pd.read_table(table, index_col=0)
+    df = pd.read_table(table, index_col=0, header=0)
     targets = list()
     for each in df.loc[sample]:
-        a, b = each.split('|')[:2]
+        try:
+            a, b = each.split('|')[:2]
+        except Exception as e:
+            raise Exception('???', sample, each, e)
         if a.startswith(alleles):
             allele_2_digit = ':'.join(a.split(':')[:2])
             if allele_2_digit not in targets:
@@ -280,10 +302,13 @@ def get_2digits_hla_genetype(table, sample, alleles):
                 if allele_2_digit.startswith(('A*', 'B*', 'C*', 'E*', 'F*', 'G*')):
                     allele_2_digit = 'HLA-' + allele_2_digit
                 targets.append(allele_2_digit)
-    return targets
+    return sorted(set(targets))
 
 
 def merge_epitopes(query_dir, outdir='.'):
+    """
+    针对pvacseq的结果进行合并
+    """
     patterns = ('.*.filtered.tsv', )
     files_list = find_files(query_dir, patterns)
     os.makedirs(outdir, exist_ok=True)
@@ -293,7 +318,7 @@ def merge_epitopes(query_dir, outdir='.'):
             return
         tables = []
         for each in files:
-            if 'MHC_Class_I' in each:
+            if '/MHC_Class_I/' in each:
                 sample = os.path.basename(each).split('.filter')[0]
                 tmp = pd.read_table(each)
                 tmp['Sample'] = sample
@@ -304,7 +329,7 @@ def merge_epitopes(query_dir, outdir='.'):
 
         tables = []
         for each in files:
-            if 'MHC_Class_II' in each:
+            if '/MHC_Class_II/' in each:
                 sample = os.path.basename(each).split('.filter')[0]
                 tmp = pd.read_table(each)
                 tmp['Sample'] = sample
@@ -315,7 +340,7 @@ def merge_epitopes(query_dir, outdir='.'):
 
         tables = []
         for each in files:
-            if 'combined' in each:
+            if '/combined/' in each:
                 sample = os.path.basename(each).split('.filter')[0]
                 tmp = pd.read_table(each)
                 tmp['Sample'] = sample
@@ -323,6 +348,26 @@ def merge_epitopes(query_dir, outdir='.'):
         data = pd.concat(tables)
         out_name = os.path.join(outdir, 'All.merged.epitopes.txt')
         data.to_csv(out_name, sep='\t')
+
+
+def merge_mhcflurry_result(query_dir, outdir='.', min_exp=0.5):
+    patterns = ('.*.annotated.mhcflurry.csv',)
+    files_list = find_files(query_dir, patterns)
+    os.makedirs(outdir, exist_ok=True)
+    for pattern, files in zip(patterns, files_list):
+        print(f'we found there are {len(files)} {pattern} files')
+        if not files:
+            return
+        tables = []
+        for each in files:
+            sample = os.path.basename(each).split('.annotated')[0]
+            tmp = pd.read_csv(each, header=0)
+            tmp = tmp.loc[tmp['TPM'] >= min_exp]
+            tmp['Sample'] = sample
+            tables.append(tmp.set_index('Sample'))
+        data = pd.concat(tables).round(3)
+        out_name = os.path.join(outdir, 'MHC_I.merged.epitopes.csv')
+        data.to_csv(out_name)
 
 
 if __name__ == '__main__':

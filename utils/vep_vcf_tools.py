@@ -282,19 +282,28 @@ def filter_by_pick_flag(vcf, out=None):
                     fw.write(r)
 
 
-def guess_tumor_idx(vcf_file):
-    tumor_is_first = 0
-    tumor_is_second = 0
-
+def guess_tumor_idx(vcf_file, require_pass=True):
+    tumor_is_first = 1
+    tumor_is_second = 1
     with VariantFile(vcf_file, ignore_truncation=True) as fr:
         samples = list(fr.header.samples)
+        try:
+            tumor_sample = [(x.key, x.value) for x in fr.header.records if x.key == 'tumor_sample'][0][1]
+            record_tumor_sample_idx = samples.index(tumor_sample)
+        except Exception as e:
+            tumor_sample = None
+            record_tumor_sample_idx = None
+            pass
+
         if len(samples) == 1:
             tumor_idx = 0
         else:
             formats = list(fr.header.formats)
             if 'AF' not in formats:
-                raise Exception('No AF in format info to detect tumor sample')
+                raise Exception('No AF in <Format> info to detect tumor sample')
             for record in fr:
+                if list(record.filter)[0] != "PASS" and require_pass:
+                    continue
                 try:
                     if record.samples[0]['AF'][0] > record.samples[1]['AF'][0]:
                         tumor_is_first += 1
@@ -304,7 +313,16 @@ def guess_tumor_idx(vcf_file):
                     print(vcf_file, e)
 
             tumor_idx = tumor_is_second >= tumor_is_first
-    print(f'we guess tumor sample is {samples[tumor_idx]} ')
+    print(f'we guess tumor sample is {int(tumor_idx) + 1}th {samples[tumor_idx]} base on ratio {tumor_is_first} vs {tumor_is_second}')
+    if not(tumor_is_first/tumor_is_second >= 1.5 or tumor_is_second/tumor_is_first >= 1.5):
+        print('The above guessing is not reliable since the ratio < 1.5')
+
+    if tumor_sample is not None:
+        if record_tumor_sample_idx != tumor_idx:
+            print(f'Header info indicates tumor sample is {tumor_sample} while we guess tumor sample is {samples[tumor_idx]}')
+            tumor_idx = record_tumor_sample_idx
+        else:
+            print('our guessing of tumor sample is consistent with the record of header')
     return tumor_idx
 
 
@@ -519,6 +537,101 @@ def get_tmb(vcfs:tuple, out='TMB.txt', bed_size=59464418, tumor_index=None, min_
     df = pd.DataFrame({'sample': sample_lst, 'variant_count': count_lst, 'TMB': tmb_lst})
     df.to_csv(out, index=False, sep='\t')
     return sample_lst, count_lst, tmb_lst
+
+
+def merge_vcf_as_maf(vcfs:tuple, out, min_af=0.05, min_alt_depth=2, min_depth=15, max_pop_freq=0.01):
+    """
+    vcf "AD" style = [ref_depth, alt1_depth, alt2_depth]
+    :param vcfs:
+    :param out:
+    :param min_af:
+    :param min_alt_depth:
+    :param min_depth:
+    :param max_pop_freq:
+    :return:
+    """
+    results = []
+    samples = []
+    for vcf_file in vcfs:
+        tumor_idx = guess_tumor_idx(vcf_file)
+        with VariantFile(vcf_file, ignore_truncation=True) as fr:
+            # get csq format
+            sample = fr.header.samples[tumor_idx]
+            normal_sample = fr.header.samples[1-tumor_idx]
+            if sample in samples:
+                raise Exception(f'we find duplicated sample {sample}')
+            else:
+                samples.append(sample)
+            csq_header = fr.header.info['CSQ'].description.split('Format: ')[1]
+            genome_file = [(x.key, x.value) for x in fr.header.records if x.key == 'reference'][0][1]
+            # print(genome_file)
+            genome_file = os.path.basename(genome_file)
+
+            # parse line by line
+            for r in fr:
+                alt_depth_dict = dict(zip(format_alts(r), r.samples[tumor_idx]['AD'][1:]))
+                # pass and depth filter
+                dp = r.samples[tumor_idx]['DP']
+                if list(r.filter)[0] != "PASS" or (dp < min_depth):
+                    continue
+
+                # pick 1 filter
+                for each in r.info['CSQ']:
+                    csq_dict = dict(zip(csq_header.split('|'), each.split('|')))
+                    if csq_dict['PICK'] == "1":
+                        break
+
+                # ad and af filter
+                ad = alt_depth_dict[csq_dict['Allele']]
+                af = ad / dp
+                if (af < min_af) or (ad < min_alt_depth):
+                    continue
+
+                # population af filter
+                if 'MAX_AF' in csq_dict:
+                    if csq_dict['MAX_AF'] and (float(csq_dict['MAX_AF']) > max_pop_freq):
+                        continue
+                # save record
+                target_info = [
+                    csq_dict['SYMBOL'],
+                    csq_dict['Gene'],
+                    'CenterUnknown',
+                    genome_file,
+                    r.contig,
+                    r.start+1,
+                    r.stop,
+                    csq_dict['STRAND'],
+                    csq_dict['Consequence'],
+                    csq_dict['VARIANT_CLASS'],
+                    r.ref,
+                    'unknown',
+                    csq_dict['Allele'],
+                    csq_dict['Existing_variation'],
+                    'unknown',
+                    sample,
+                    normal_sample,
+                    # 后续为自定义
+                    round(af, 3),
+                    ad,
+                    dp,
+                    csq_dict['EXON'],
+                    csq_dict['HGVSc'].replace('%3D', '='),
+                    csq_dict['HGVSp'].replace('%3D', '='),
+                    csq_dict['CANONICAL'],
+                    csq_dict['SOMATIC']
+                ]
+                if 'MAX_AF' in csq_dict:
+                    target_info.append(csq_dict['MAX_AF'])
+                else:
+                    target_info.append('')
+                results.append(target_info)
+    header = ['Hugo_Symbol', 'Entrez_Gene_Id', 'Center', 'NCBI_Build', 'Chromosome',
+              'Start_Position', 'End_Position', 'Strand', 'Variant_Classification', 'Variant_Type',
+              'Reference_Allele', 'Tumor_Seq_Allele1', 'Tumor_Seq_Allele2', 'dbSNP_RS',
+              'dbSNP_Val_Status', 'Tumor_Sample_Barcode', 'Matched_Norm_Sample_Barcode',
+              'AF', 'AD', 'DP', 'EXON', 'HGVSc', 'HGVSp', 'CANONICAL', 'SOMATIC', 'MAX_POP_AF']
+    df = pd.DataFrame(results, columns=header)
+    df.to_csv(out, sep='\t', index=False)
 
 
 if __name__ == '__main__':

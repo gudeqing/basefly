@@ -3,7 +3,7 @@ script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from basefly.basefly import Workflow, Argument, Output, Command,  TopVar, TmpVar
 from basefly.commands import add_exp_to_vcf, bam_read_count, add_read_count_to_vcf, pvacseq
-from utils.tidy_tools import get_2digits_hla_genetype, merge_epitopes
+from utils.tidy_tools import get_4digits_hla_genetype, merge_epitopes
 import pandas as pd
 __author__ = 'gdq'
 
@@ -25,7 +25,7 @@ def pipeline():
     wf.add_argument('-vcfs', required=True, help='somatic vep-annotated vcf list file with two columns, first column is tumor sample name, second column is vcf path')
     wf.add_argument('-pair_info', required=True, help='tumor-normal pair info without header, first column is tumor sample name')
     wf.add_argument('-hla_genotype', required=True, help='HLA genetype table with header consiting of HLA gene name, index is tumor sample name. Each element data is genetype detail.')
-    wf.add_argument('-alleles', default=('A', 'B', 'C', 'DRA', 'DRB', 'DQA', 'DQB'), nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
+    wf.add_argument('-alleles', default=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'), nargs='+', help='HLA alleles gene list, such as A,B,C,DRA(B),DQA(B),DPA(B)')
     wf.add_argument('-rna_bams', required=False, help='rnaseq bam list file with two columns, first column is normal sample name, second column is bam path. This bam will be used to add RNA coverage and RNA VAF using bam_readcount.')
     wf.add_argument('-ref_fasta', required=False, help='reference fasta file, which is need when rna_bams provided or fastq info provided')
     wf.parse_args()
@@ -119,12 +119,12 @@ def pipeline():
         args['tumor-sample-name'].value = tumor
         args['normal-sample-name'].value = normal
         # use HLA gene-type from tumor or normal??
-        args['allele'].value = ','.join(get_2digits_hla_genetype(wf.args.hla_genotype, normal, alleles=wf.args.alleles))
-
-    # merge
-    merge_epitopes(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_epitopes'))
+        args['allele'].value = ','.join(get_4digits_hla_genetype(wf.args.hla_genotype, normal, alleles=wf.args.alleles))
 
     wf.run()
+    # merge
+    if wf.success:
+        merge_epitopes(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_epitopes'))
 
 
 if __name__ == '__main__':

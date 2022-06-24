@@ -10,4 +10,4 @@ RUN mkdir -p ~/.ipython/profile_default/startup/ && \
     import matplotlib; matplotlib.use('agg'); import pandas as pd; import numpy as np; \
     from matplotlib import pyplot as plt; import seaborn as sns" > \
     ~/.ipython/profile_default/startup/00-init_imports.py
-RUN apt-get update && apt-get install -y vim
+RUN apt-get update && apt-get install nano

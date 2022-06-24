@@ -132,11 +132,14 @@ class Output:
     # 由command形成task之后，可以带入task_id
     task_id: str = None
     name: str = None
+    desc: str = None
 
     def __post_init__(self):
         if self.value is None:
             # value属性是后来修改增加的，本来用来替代path，为了向前兼容，保留path属性
             self.value = self.path
+        else:
+            self.path = self.value
 
 
 @dataclass()
@@ -155,6 +158,9 @@ class Command:
     args: Dict[str, Argument] = field(default_factory=dict)
     # 下面支持用wdl的定义’~‘符号, 当前脚本要求所有命令行的输出皆为文件
     outputs: Dict[str, Output] = field(default_factory=dict)
+    
+    def __post_init__(self):
+        self.args['other_args'] = Argument(prefix='', default='', desc='This argument is designed to provide any arguments that are not wrapped in Command')
 
     def format_cmd(self, wf_tasks=None):
         # 该函数应该在参数被具体赋值后才能调用
@@ -174,7 +180,7 @@ class Command:
 
             if arg_value is None:
                 if arg.level == 'required':
-                    raise Exception(f'No value found for {arg_name}!')
+                    raise Exception(f'No value found for required argument {arg_name} in {self.meta.name}')
                 else:
                     # 对于非必须参数，且没有赋值的参数，直接跳过，不参与命令行的形成
                     continue
@@ -225,7 +231,7 @@ class Command:
                     # 如果bool类型且value为false，则该参数不参与命令行形成
                     continue
             else:
-                if arg_value:
+                if arg_value is not None:
                     if not arg.multi_times:
                         cmd += ' ' + arg.prefix + str(arg_value)
                     else:
@@ -243,13 +249,17 @@ class Command:
 class Task:
     cmd: Command
     name: str = None
+    tag: str = None
     task_id: str = field(default_factory=uuid4)
     depends: List[str] = field(default_factory=list)
 
     def __post_init__(self):
         # task name
         if self.name is None:
-            self.name = self.cmd.meta.name + '-' + str(self.task_id)
+            if self.tag:
+                self.name = self.cmd.meta.name + '-' + str(self.tag)
+            else:
+                self.name = self.cmd.meta.name + '-' + str(self.task_id)
 
         # 为每一个output带入
         for key in self.cmd.outputs.keys():
@@ -320,6 +330,7 @@ class TmpVar:
     该对象用于描述流程中如循环时的临时变量, 纯粹是为wdl的scatter模式设计, name属性将作为wdl文件中的传递值。
     例如：如循环中某个变量为A，则把输出文件名定义为out_file = ’~{A}.txt‘.
     那么，这时脚本中可以写: outfile = TmpVar(name="~{A}.txt", type='str') , 这里name中“~{}”是wdl传递变量值的语法。
+    后来发现想直接生成完整的wdl流程几乎不可能，该函数将来可能会被删除，不建议使用
     """
     value: Any
     name: str = 'notNamed'
@@ -354,8 +365,8 @@ class Workflow:
             v.name = k
         self.topvars.update(var_dict)
 
-    def add_task(self, cmd: Command, depends: list = [], name: str = None):
-        task = Task(cmd=cmd, depends=depends, name=name)
+    def add_task(self, cmd: Command, depends: list = [], name: str = None, tag: str = None):
+        task = Task(cmd=cmd, depends=depends, name=name, tag=tag)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
@@ -363,7 +374,7 @@ class Workflow:
         ToWdlWorkflow(self).write_wdl(outfile)
 
     def to_argo_worflow(self, outfile):
-        # 有待完善
+        # 有待进一步完善
         lines = ['apiVersion: argoproj.io/v1alpha1']
         lines += ['kind: Workflow']
         lines += ['metadata:']
@@ -461,8 +472,6 @@ class Workflow:
         if parameters.update_args:
             self.update_args(parameters.update_args)
 
-        self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
-
         for task_id, task in self.tasks.items():
             cmd_wkdir = os.path.join(outdir, task.name)
             mount_vols = {cmd_wkdir}
@@ -531,6 +540,7 @@ class Workflow:
             self.list_task()
         else:
             os.makedirs(outdir, exist_ok=True)
+            self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
             with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
                 f.write('python ' + ' '.join(sys.argv) + '\n')
                 # print(sys.argv)

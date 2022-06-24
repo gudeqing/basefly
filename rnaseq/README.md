@@ -137,4 +137,4 @@ Email: *danny.gu@basebit.ai*
 
 ## License
 
-[MIT © Richard McRichface.](../LICENSE)
+Apache License 2.0(../LICENSE)
