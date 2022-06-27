@@ -1,0 +1,20 @@
+{
+  "pipeline.getFastqInfo.r1_name": "(.*).R1.fq.gz",
+  "pipeline.getFastqInfo.r2_name": "(.*).R2.fq.gz",
+  "pipeline.vep_plugins_zip": "File",
+  "pipeline.vep_cache": "File",
+  "pipeline.getFastqInfo.fastq_dirs": ["/disk/biodatabase/testdata/TNpipelineTestData/fastqdir"],
+  "pipeline.bwa_idxes": ["/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa.amb","/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa.ann","/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa.bwt","/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa.pac","/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa.sa"],
+  "pipeline.ref": "/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa",
+  "pipeline.ref_idxes": ["/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa.fai","/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.dict"],
+  "pipeline.pair_info": "/disk/biodatabase/testdata/TNpipelineTestData/fastqdir/pair.info",
+  "pipeline.germline_vcf": "/disk/biodatabase/testdata/TNpipelineTestData/chr17_small_exac_common_3_grch38.vcf.gz",
+  "pipeline.germline_vcf_idx": "/disk/biodatabase/testdata/TNpipelineTestData/chr17_small_exac_common_3_grch38.vcf.gz.tbi" ,
+  "pipeline.known_indels":["/disk/biodatabase/testdata/TNpipelineTestData/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi"],
+  "pipeline.known_indels_idx": ["/disk/biodatabase/testdata/TNpipelineTestData/Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi"],
+  "pipeline.known_dbsnp": ["/disk/biodatabase/testdata/TNpipelineTestData/chr17.dbsnp_146.hg38.vcf.gz"],
+  "pipeline.known_dbsnp_idx": ["/disk/biodatabase/testdata/TNpipelineTestData/chr17.dbsnp_146.hg38.vcf.gz.tbi"],
+  "pipeline.skip_vep":true,
+  "pipeline.skip_optiType":true
+}
+
