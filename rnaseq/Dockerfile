@@ -113,10 +113,11 @@ RUN cd /opt && tar -zxf netMHCIIpan-4.1a.Linux.tar.gz && cd /opt/netMHCIIpan-4.1
 RUN DEBIAN_FRONTEND=noninteractive apt install -y gnupg ca-certificates-mono && \
     apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys 3FA7E0328081BFF6A14DA29AA6A19B38D3D831EF && \
     echo "deb https://download.mono-project.com/repo/ubuntu stable-xenial main" | tee /etc/apt/sources.list.d/mono-official-stable.list && \
-    apt-get update -y && \
+#    apt-get update -y && \
     apt-get install -y mono-complete && \
     mkdir /opt/comet
-COPY ThermoRawFileParser /opt/ThermoRawFileParser
+# 把ThermoRAWFileParser替换为RawTools
+COPY RawTools_2.0.4 /opt/RawTools
 COPY comet.linux.exe /opt/comet
 
 # finally
