@@ -383,7 +383,7 @@ def hisat_genotype():
     cmd.args['indicies'] = Argument(prefix='--index_dir ', level='optional', type='indir', desc="Set location to use for indicies")
     cmd.args['_outdir'] = Argument(prefix='--out-dir ', value='./', type='fix')
     cmd.args['_parse_result'] = Argument(value='&& hisatgenotype_toolkit parse-results --csv --in-dir .', type='fix')
-    cmd.args['level'] = Argument(prefix='-t ', default=3, desc='Trim allele to specific field level (example : A*01:01:01:01 trim 2 A*01:01)')
+    cmd.args['level'] = Argument(prefix='-t ', default=2, desc='Trim allele to specific field level (example : A*01:01:01:01 trim 2 A*01:01)')
     cmd.args['out'] = Argument(prefix='--output-file ', desc='output of csv file')
     cmd.outputs['out'] = Output(value='{out}', type='outfile')
     return cmd

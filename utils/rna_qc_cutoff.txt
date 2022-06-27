@@ -1,7 +1,7 @@
 Field	Description	unit	type	lower_limit	upper_limit
-Number of input reads	总paired-read数目	read	int	20000000	none
+Number of input reads	总paired-read数目	read	int	15000000	none
 PCT_mapped_reads	总体比对率	percent	float	0.75	1
-Average input read length	平均paired-read长度	base	int	none	none
+Average input read length	平均paired-read长度	base	int	15000000	none
 Uniquely mapped reads number	能唯一比对到基因组的read数目	read	int	none	none
 Uniquely mapped reads %	能唯一比对到基因组的read占总reads的比例	percent	float	0.65	1
 Number of reads mapped to multiple loci	多重比对（<=20) paired-reads数目	read	int	none	none
@@ -22,7 +22,7 @@ PCT_UTR_BASES	Fraction of PF_ALIGNED_BASES that mapped to untranslated regions (
 PCT_MRNA_BASES	Sum of bases mapped to regions corresponding to UTRs and coding regions of mRNA transcripts, PCT_UTR_BASES + PCT_CODING_BASES	percent	float	0.6	1
 MEDIAN_3PRIME_BIAS	The median 3 prime bias of the 1000 most highly expressed transcripts, where 3 prime bias is calculated per transcript as: mean coverage of the 3 prime-most 100 bases divided by the mean coverage of the whole transcript.	bias	float	0.1	1
 MEDIAN_5PRIME_BIAS	The median 5 prime bias of the 1000 most highly expressed transcripts. The 5 prime bias is calculated per transcript as: mean coverage of the 5 prime-most 100 bases divided by the mean coverage of the whole transcript.	bias	float	0.1	1
-MEDIAN_5PRIME_TO_3PRIME_BIAS	The ratio of coverage at the 5' end of to the 3' end based on the 1000 most highly expressed transcripts.	bias	float	0.5	2
+MEDIAN_5PRIME_TO_3PRIME_BIAS	The ratio of coverage at the 5' end of to the 3' end based on the 1000 most highly expressed transcripts.	bias	float	0.3	3.5
 PCT_R1_TRANSCRIPT_STRAND_READS	The fraction of reads that support the model where R1 is on the strand of transcription and R2 is on the opposite strand. For unpaired reads, it is the fraction of reads that are on the transcription strand (out of all the reads).	percent	float	none	none
 PCT_R2_TRANSCRIPT_STRAND_READS	The fraction of reads that support the model where R2 is on the strand of transcription and R1 is on the opposite strand. For unpaired reads, it is the fraction of reads that are on opposite strand than that of the the transcription strand (out of all the reads).	percent	float	none	none
 PCT_AMPLIFIED_BASES	比对到amplicon上或附近的read占比, 可称之为上靶率 (ON_AMPLICON_BASES + NEAR_AMPLICON_BASES)/PF_BASES_ALIGNED.	percent	float	0.55	1

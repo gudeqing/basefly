@@ -329,7 +329,7 @@ workflow pipeline {
 
     output{
         File fastq_info_json = getFastqInfo.fastq_info_json
-        Array[File] bwa_mem_out = bwa_mem.out
+#        Array[File] bwa_mem_out = bwa_mem.out
         Array[File] get_metrics_mq_metrics = get_metrics.mq_metrics
         Array[File] get_metrics_qd_metrics = get_metrics.qd_metrics
         Array[File] get_metrics_gc_summary = get_metrics.gc_summary
