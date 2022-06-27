@@ -46,7 +46,7 @@ and you can always get back to your workspace as long as you keep the attach sto
 ```
 python */rnaseq.py ....
 ```
-4. Try to run the workflow again with above same command after you have solved the potential problems. It is will init the workflow at failed steps automatically.
+4. Try to run the workflow again with above same command after you have solved the potential problems. It will initiate the workflow at failed steps automatically.
 
 ### using APP mode
 developing ......
