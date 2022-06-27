@@ -11,7 +11,7 @@ from typing import Any, List, Dict
 from typing_extensions import Literal
 # shadow default dict
 # from munch import Munch as dict
-from .runner import run_wf, draw_state
+from .runner import run_wf
 
 __author__ = 'gdq'
 
@@ -33,7 +33,7 @@ __author__ = 'gdq'
     
 5. 定义方法: 依据Task对象生成具体的cmd信息。
 6. 定义方法: 将Command/Task对象转换成wdl脚本
-7. 定义方法将workflow转换成wdl流程等、argo_workflow、basefly（我自定义的流程）
+7. 定义方法将workflow转换成wdl流程等（放弃）、argo_workflow（待完善）、basefly（我自定义的流程）
 
 注意：
 1. python3.6以后的 dict有序性对于cmd的正确解析非常重要，因为定义Argument的顺序非常重要，很多命令行要求参数有序。
@@ -49,7 +49,7 @@ class Argument:
     # prefix 可以是如 ’-i '或 'i=', 对于前者, 空格一定要带上
     prefix: str = ''
     # type is one of ['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix']
-    # fix 类型表示该参数并不是真正的参数，其为固定的字符串. 例如其可以用来表示管道符如‘| samtools sort’
+    # fix 类型表示该参数并不是真正的参数，其为固定的字符串. 例如其可以用来表示管道符如‘| samtools sort’，让便拼接多个命令
     type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix'] = 'str'
     level: Literal['required', 'optional'] = 'required'
     # for bool type, default is one of ['false', true']
@@ -160,6 +160,7 @@ class Command:
     outputs: Dict[str, Output] = field(default_factory=dict)
     
     def __post_init__(self):
+        # other_args是本设计自留的特殊参数,可以用来传递用户从来没有定义但是软件本身确实包含的参数
         self.args['other_args'] = Argument(prefix='', default='', desc='This argument is designed to provide any arguments that are not wrapped in Command')
 
     def format_cmd(self, wf_tasks=None):
@@ -353,6 +354,7 @@ class Workflow:
     argparser = None
     args = None
     success = False
+    add_argument = None
 
     def __post_init__(self):
         for k, v in self.topvars.items():
@@ -371,6 +373,7 @@ class Workflow:
         return task, task.cmd.args
 
     def to_wdl(self, outfile):
+        # 该函数不保证能生产出预期的结果
         ToWdlWorkflow(self).write_wdl(outfile)
 
     def to_argo_worflow(self, outfile):
@@ -449,7 +452,7 @@ class Workflow:
 
     def run(self):
         """
-        生成nestcmd格式的workflow并且允许直接本地执行
+        生成类config格式的workflow(->wf.ini)并且允许直接本地执行
         """
         import configparser
         wf = configparser.ConfigParser()
@@ -796,7 +799,7 @@ class ToWdlTask(object):
     def get_outputs(self):
         outputs = []
         for name, v in self.cmd.outputs.items():
-            if '~' not in v.path:
+            if '~' not in v.path and '{' in v.path:
                 value = v.path.replace('{', '~{')
             else:
                 value = v.path
@@ -902,6 +905,7 @@ class ToWdlWorkflow(object):
     workflow的group信息的依据是：是否可以在同一个循环中并发
     如何知道task输入的依赖信息：要求给参数加一个wdl属性，对应使用wdl语法, 或者根据output对象推断，
     由于WDL语法并非十分结构化，难以正确形成，生成的流程需人工核查调整
+    不再打算继续优化该函数
     """
     type_conv_dict = {
         'str': 'String',
