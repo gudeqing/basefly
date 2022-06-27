@@ -116,7 +116,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt install -y gnupg ca-certificates-mono && 
 #    apt-get update -y && \
     apt-get install -y mono-complete && \
     mkdir /opt/comet
-# 把 ThermoRAWFileParser替换为RawTools
+# 把ThermoRAWFileParser替换为RawTools
 COPY RawTools_2.0.4 /opt/RawTools
 COPY comet.linux.exe /opt/comet
 
