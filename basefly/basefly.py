@@ -111,14 +111,14 @@ class RunTime:
     tool_dir: str = ''
     # 软件名称
     tool: str = ''
-    # 执行环境设置, 以下为命令运行所需的最少计算资源
-    memory: int = 1000
+    # 执行环境设置, 以下为命令运行所需的最少计算资源, memory的单位为字节
+    memory: int = 1024
     cpu: int = 2
     # 执行环境设置，以为命令行所需的最大计算资源
     max_memory: int = 0
     max_cpu: int = 0
-    # 运行时间上线
-    timeout: int = 3600*24*3
+    # 运行时间上限默认7天
+    timeout: int = 3600*24*7
 
 
 @dataclass()
