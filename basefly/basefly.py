@@ -33,7 +33,7 @@ __author__ = 'gdq'
     
 5. 定义方法: 依据Task对象生成具体的cmd信息。
 6. 定义方法: 将Command/Task对象转换成wdl脚本
-7. 定义方法将workflow转换成wdl流程等（放弃）、argo_workflow（待完善）、basefly（我自定义的流程）
+7. 定义方法将workflow转换成wdl流程等（放弃）、argo_workflow（待完善）、自定义的流程(不妨命名为basefly)
 
 注意：
 1. python3.6以后的 dict有序性对于cmd的正确解析非常重要，因为定义Argument的顺序非常重要，很多命令行要求参数有序。
@@ -1080,7 +1080,7 @@ class ToWdlWorkflow(object):
         wdl += '}\n\n'
 
         # add get_fastq_info
-        wdl += '\n' + get_fastq_info_wdl_str() + '\n'
+        wdl += '\n' + self.get_fastq_info_wdl_str() + '\n'
 
         # format_tasks
         for cmd in all_cmds:
@@ -1091,43 +1091,43 @@ class ToWdlWorkflow(object):
         with open(outfile, 'w') as f:
             f.write(wdl)
 
-
-def get_fastq_info_wdl_str():
-    return """
-task getFastqInfo{
-    input {
-        Array[Directory]? fastq_dirs
-        Array[File]? fastq_files
-        String r1_name = '(.*).read1.fastq.gz'
-        String r2_name = '(.*).read2.fastq.gz'
-        String docker = 'gudeqing/getfastqinfo:1.0'
+    @staticmethod
+    def get_fastq_info_wdl_str():
+        return """
+    task getFastqInfo{
+        input {
+            Array[Directory]? fastq_dirs
+            Array[File]? fastq_files
+            String r1_name = '(.*).read1.fastq.gz'
+            String r2_name = '(.*).read2.fastq.gz'
+            String docker = 'gudeqing/getfastqinfo:1.0'
+        }
+    
+        command <<<
+            set -e
+            python /get_fastq_info.py \\
+                ~{if defined(fastq_dirs) then "-fastq_dirs " else ""}~{sep=" " fastq_dirs} \\
+                ~{if defined(fastq_files) then "-fastq_files " else ""}~{sep=" " fastq_files} \\
+                -r1_name '~{r1_name}' \\
+                -r2_name '~{r2_name}' \\
+                -out fastq.info.json
+        >>>
+    
+        output {
+            Map[String, Array[Array[File]]] fastq_info = read_json("fastq.info.json")
+            File fastq_info_json = "fastq.info.json"
+        }
+    
+        runtime {
+            docker: docker
+        }
+    
+        parameter_meta {
+            fastq_dirs: {desc: "directory list, target fastq files should be in these directories. All target files in 'fastq_files' or 'fastq_dirs' will be used", level: "optional", type: "indir", range: "", default: ""}
+            fastq_files: {desc: "target fastq file list. 'fastq_files' or 'fastq_dirs' must be provided.", level: "optional", type: "infile", range: "", default: ""}
+            r1_name: {desc: "python regExp that describes the full name of read1 fastq file name. It requires at least one pair of small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'", level: "required", type: "str", range: "", default: ""}
+            r2_name: {desc: "python regExp that describes the full name of read2 fastq file name. It requires at least one pair of small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'", level: "required", type: "str", range: "", default: ""}
+        }
     }
-
-    command <<<
-        set -e
-        python /get_fastq_info.py \\
-            ~{if defined(fastq_dirs) then "-fastq_dirs " else ""}~{sep=" " fastq_dirs} \\
-            ~{if defined(fastq_files) then "-fastq_files " else ""}~{sep=" " fastq_files} \\
-            -r1_name '~{r1_name}' \\
-            -r2_name '~{r2_name}' \\
-            -out fastq.info.json
-    >>>
-
-    output {
-        Map[String, Array[Array[File]]] fastq_info = read_json("fastq.info.json")
-        File fastq_info_json = "fastq.info.json"
-    }
-
-    runtime {
-        docker: docker
-    }
-
-    parameter_meta {
-        fastq_dirs: {desc: "directory list, target fastq files should be in these directories. All target files in 'fastq_files' or 'fastq_dirs' will be used", level: "optional", type: "indir", range: "", default: ""}
-        fastq_files: {desc: "target fastq file list. 'fastq_files' or 'fastq_dirs' must be provided.", level: "optional", type: "infile", range: "", default: ""}
-        r1_name: {desc: "python regExp that describes the full name of read1 fastq file name. It requires at least one pair of small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'", level: "required", type: "str", range: "", default: ""}
-        r2_name: {desc: "python regExp that describes the full name of read2 fastq file name. It requires at least one pair of small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'", level: "required", type: "str", range: "", default: ""}
-    }
-}
-    """
+        """
 
