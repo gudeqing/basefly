@@ -248,13 +248,7 @@ def pipeline():
     # finish
     wf.run()
     # to wdl
-    with open('bismark.wdl', 'w') as f:
-        seen = set()
-        for _, task in wf.tasks.items():
-            if task.cmd.meta.name not in seen:
-                seen.add(task.cmd.meta.name)
-                wdl_str = ToWdlTask(task.cmd).wdl
-                f.write(wdl_str+'\n')
+    # wf.to_wdl_tasks()
 
 
 if __name__ == '__main__':
