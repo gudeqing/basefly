@@ -372,12 +372,23 @@ class Workflow:
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
-    def to_wdl(self, outfile):
+    def to_wdl_tasks(self, outfile=None):
+        # 输出每一个Command的WDL版本
+        with open(outfile or f'{self.meta.name}.tasks.wdl', 'w') as f:
+            seen = set()
+            for _, task in self.tasks.items():
+                if task.cmd.meta.name not in seen:
+                    seen.add(task.cmd.meta.name)
+                    wdl_str = ToWdlTask(task.cmd).wdl
+                    f.write(wdl_str + '\n')
+
+    def to_wdl_workflow(self, outfile=None):
         # 该函数不保证能生产出预期的结果
         ToWdlWorkflow(self).write_wdl(outfile)
 
-    def to_argo_worflow(self, outfile):
+    def to_argo_worflow(self, outfile=None):
         # 有待进一步完善
+        outfile = outfile or f'{self.meta.name}.argo.yaml'
         lines = ['apiVersion: argoproj.io/v1alpha1']
         lines += ['kind: Workflow']
         lines += ['metadata:']
@@ -1120,106 +1131,3 @@ task getFastqInfo{
 }
     """
 
-
-# ----tools------
-def get_fastq_info(fastq_files: tuple = None, fastq_dirs: tuple = None, out='fastq.info.json',
-                   r1_name: str = "(.*).R1.fq.gz", r2_name: str = "(.*).R2.fq.gz",
-                   link_data=False, add_s_to_numeric_name=False, middle2underscore=False):
-    """
-    :param fastq_files: target fastq file list. 'fastq_files' or 'fastq_dirs' must be provided.
-    :param fastq_dirs: directory list, target fastq files should be in these directories. All target files in 'fastq_files' or 'fastq_dirs' will be used.
-    :param r1_name: python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'
-    :param r2_name: python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'
-    :param link_data: bool to indicate if to make soft links for fastq files
-    :param out: output file that contains three columns: [sample_name, read1_abs_path, read2_abs_path]
-    :param add_s_to_numeric_name: bool value to indicate if to add a 'S' letter at the head of the sample name that startswith numeric string.
-    :param middle2underscore: bool value to indicate if to transform '-' letter to '_' letter for a sample name.
-    :return: result_dict： {sample: [[r1, r1'], [r2, r2']], ...}
-    """
-    if not (fastq_dirs or fastq_files):
-        raise Exception("At least one of 'fastq_files' or 'fastq_dirs' must be provided.")
-
-    result_dict = dict()
-
-    if fastq_files:
-        for each in fastq_files:
-            name = os.path.basename(each)
-            directory = os.path.dirname(each)
-            is_read1 = True
-            match = re.fullmatch(r1_name, name)
-            if not match:
-                match = re.fullmatch(r2_name, name)
-                is_read1 = False
-            if match:
-                # first matched group is sample name
-                sample = match.groups()[0]
-                result_dict.setdefault(sample, [[], []])
-                if is_read1:
-                    if each not in result_dict[sample][0]:
-                        result_dict[sample][0].append(each)
-                    else:
-                        print(f'warn: duplicated path found for {each}, and we will only keep the first one!')
-                else:
-                    if each not in result_dict[sample][1]:
-                        result_dict[sample][1].append(each)
-                    else:
-                        print(f'warn: duplicated path found for {each}, and we will only keep the first one!')
-
-    if fastq_dirs:
-        for path in fastq_dirs:
-            path = os.path.abspath(path)
-            for root, dirs, files in os.walk(path):
-                for each in files:
-                    is_read1 = True
-                    match = re.fullmatch(r1_name, each)
-                    if not match:
-                        match = re.fullmatch(r2_name, each)
-                        is_read1 = False
-                    if match:
-                        # first matched group is sample name
-                        sample = match.groups()[0]
-                        result_dict.setdefault(sample, [[], []])
-                        file_path = os.path.join(root, each)
-                        if is_read1:
-                            if file_path not in result_dict[sample][0]:
-                                result_dict[sample][0].append(file_path)
-                            else:
-                                print(f'warn: duplicated path found for {file_path}, and we will only keep the first one!')
-                        else:
-                            if file_path not in result_dict[sample][1]:
-                                result_dict[sample][1].append(file_path)
-                            else:
-                                print(f'warn: duplicated path found for {file_path}, and we will only keep the first one!')
-
-    new_result = dict()
-    if link_data:
-        os.mkdir('rawdata')
-        os.chdir('rawdata')
-    for sample, lst in result_dict.items():
-        read1 = sorted(lst[0])
-        read2 = sorted(lst[1])
-        if middle2underscore:
-            sample = sample.replace('-', '_')
-        if add_s_to_numeric_name:
-            if sample.startswith(('0', '1', '2', '3', '4', '5', '6', '7', '8', '9')):
-                sample = 'S' + sample
-        new_result[sample] = [read1, read2]
-        if link_data:
-            # make link
-            os.mkdir(sample)
-            for each in read1:
-                os.symlink(each, os.path.join(sample, os.path.basename(each)))
-            for each in read2:
-                os.symlink(each, os.path.join(sample, os.path.basename(each)))
-
-    if out.endswith('.json'):
-        with open(out, 'w') as f:
-            json.dump(new_result, f, indent=2)
-    else:
-        with open(out, 'w') as f:
-            for k, v in new_result.items():
-                read1 = ';'.join(v[0])
-                read2 = ';'.join(v[1])
-                f.write(f'{k}\t{read1}\t{read2}\n')
-
-    return new_result
