@@ -14,6 +14,7 @@ import statistics
 这里包含的工具是用于rnaseq分析的
 """
 
+
 def filter_by_class_code(gtf, out, exclude_class_codes=('c', 's', 'p', 'r', '=')):
     """根据class_code过滤出目标新转录本"""
     gtf = GTF(gtf)
@@ -104,7 +105,7 @@ def get_retained_intron_interval(new_gtf, ref_gtf):
             if detail['strand'] == '-':
                 exon_pos = exon_pos[::-1]
             # 创建字典用于坐标转换
-            genomic2trans_pos = {y:x for x, y in enumerate(exon_pos)}
+            genomic2trans_pos = {y: x for x, y in enumerate(exon_pos)}
             ref_transcript_detail = ref_gtf_dict[detail['cmp_ref']]
             ref_exon_pos = ref_transcript_detail['exon_pos_lst']
             # 找出新转录本外显子区域中没有落在参考转录本外显子区域的坐标
@@ -260,7 +261,8 @@ def segment_peptides(pep_dict:dict, length=(8, 11)):
 
 
 def find_potential_intron_peptides(tumor_gtf, ref_gtf, tumor_transdecoder_pep, normal_transdecoder_pep, out_prefix,
-                                  mhc1_pep_len=(8, 11), mhc2_pep_len=(12, 18), ignore_novel_transcript=True, alleles:tuple=('HLA-A', 'HLA-B')):
+                                   mhc1_pep_len=(8, 11), mhc2_pep_len=(12, 18), ignore_novel_transcript=True,
+                                   alleles:tuple=('HLA-A', 'HLA-B')):
     """
     :param tumor_gtf: 使用gffcompare注释过的gtf，是过滤后的gtf
     :param ref_gtf: 参考基因组的gtf
