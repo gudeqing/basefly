@@ -272,7 +272,7 @@ class Task:
             if hasattr(each, 'task_id'):
                 self.depends[ind] = each.task_id
             elif type(each) != UUID:
-                raise Exception(f'valid "depends" for task {self.name} should be UUID object !')
+                raise Exception(f'valid "depends" for task {self.name} should be UUID object or Task Object!')
 
     def argo_template(self, wf_tasks):
         # 仅输入文件需要作处理，其他参数如数字或字符串已经在command中硬编码好了
@@ -383,7 +383,7 @@ class Workflow:
                     f.write(wdl_str + '\n')
 
     def to_wdl_workflow(self, outfile=None):
-        # 该函数不保证能生产出预期的结果
+        # 该函数不保证能生产出预期的结果, 甚至可能出错，不再维护
         ToWdlWorkflow(self).write_wdl(outfile)
 
     def to_argo_worflow(self, outfile=None):

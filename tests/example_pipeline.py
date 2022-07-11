@@ -14,13 +14,6 @@ __author__ = 'gdq'
 2. 参数的添加顺序对于命令行的正确形成很重要，这里字典的有序性得到利用
 3. 定义output时，value(或path）属性对应的值可以直接用{}引用cmd.args的key，
 
-关于runtime:
-memory和cpu是定义最小计算资源需求
-max_memory和max_cpu定义计算资源上限
-image: 定义docker镜像
-tool：工具命令，即命令行的第一个参数
-tool_dir: 定义tool所在路径
-
 关于meta：
 name: 定义命令行的名称，会参与具体task的name的形成，建议组成：[数字，字母，’-‘], 下划线会自动被替换为中划线’-‘
 其他字段都是描述工具的开发作者(author)，链接(source)，版本号(version)，简介（desc)
