@@ -91,7 +91,7 @@
 ## 定义Task对象，主要由配备具体参数的Command实例组成:
 > Task = {Command, task_id, depends, name}
 >> * task_id是自动生成的uuid4对象
->> * depends是列表记，记录其依赖的Task或task_id
+>> * depends是列表，记录其依赖的Task或task_id
 >> * name是task的名称，最好不要有重复
 
 ## 定义TopVar对象
@@ -105,7 +105,8 @@
 
 ## Basefly流程开发示例见[example](./tests/example_pipeline.py)
 
-## 运行流程
+----
+# 如何运行流程
 ### basefly流程自带一个runner，支持多个任务的并发运行和可视化 
 
 ### basefly流程运行的帮助文档, 如下bismark流程
