@@ -1,5 +1,6 @@
 # Basefly 设计思路
-> Basefly主要目的是用python定义一种简便但严格的方式描述分析流程，和WDL、CWL的目的类似，旨在方便流程的编写
+> Basefly主要目的是用python定义一种简便但严格的方式描述分析流程，和WDL、CWL的目的类似，旨在方便流程的编写。
+
 
 ## 定义Argument对象，由如下属性描述
 1. name: str = '?'
@@ -107,9 +108,9 @@
 
 ----
 # 如何运行流程
-### basefly流程自带一个runner，支持多个任务的并发运行和可视化 
+### basefly流程自带一个runner，支持多个任务的并发运行和可视化。缺点：流程中所有任务的命令一定都是在计算开始之前编排好的，这意味着每一步的输出文件路径和数量是要预先知道的，可以理解为流程是预先编译好的，而不是动态执行的。
 
-### basefly流程运行的帮助文档, 如下bismark流程
+### basefly自带runner的帮助文档可以参考如下bismark流程
 ```
 $ python bismark.py -h
 Warn: cannot import pygraphviz and state graph will not be drawn!
