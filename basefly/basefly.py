@@ -308,6 +308,10 @@ class Task:
                 lines += [' ' * 8 + f'path: {v.value.format(**value_dict)}']
         return [' '*2+x for x in lines]
 
+    def run_now(self, wkdir=None):
+        import subprocess
+        subprocess.check_call(self.cmd.format_cmd(), cwd=wkdir)
+
 
 @dataclass()
 class TopVar:
