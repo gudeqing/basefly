@@ -245,6 +245,10 @@ class Command:
             outfile = f'{self.meta.name}.wdl'
         ToWdlTask(self, outfile, wdl_version)
 
+    def run_now(self, wkdir=None):
+        import subprocess
+        subprocess.check_call(self.format_cmd(), cwd=wkdir)
+
 
 @dataclass()
 class Task:
@@ -307,10 +311,6 @@ class Task:
                 lines += [' ' * 6 + f'- name: {k}']
                 lines += [' ' * 8 + f'path: {v.value.format(**value_dict)}']
         return [' '*2+x for x in lines]
-
-    def run_now(self, wkdir=None):
-        import subprocess
-        subprocess.check_call(self.cmd.format_cmd(), cwd=wkdir)
 
 
 @dataclass()
