@@ -245,8 +245,19 @@ class Command:
             outfile = f'{self.meta.name}.wdl'
         ToWdlTask(self, outfile, wdl_version)
 
-    def run_now(self, wkdir=None):
+    def run_now(self, wkdir=os.getcwd(), docker=True, input_files: list = []):
         import subprocess
+        if self.runtime.image and docker:
+            with open(os.path.join(wkdir, 'cmd.sh'), 'w') as f:
+                f.write(self.format_cmd() + f' && chown -R {os.getuid()}:{os.getgid()} {wkdir}' + '\n')
+            # docker_cmd = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash '
+            docker_cmd = 'docker run --rm --privileged -i --entrypoint /bin/bash '
+            mount_vols = [wkdir] + input_files
+            for each in mount_vols:
+                docker_cmd += f'-v {each}:{each} '
+            docker_cmd += f'-w {wkdir} {self.runtime.image} cmd.sh'
+            subprocess.check_call(docker_cmd, cwd=wkdir)
+            return
         subprocess.check_call(self.format_cmd(), cwd=wkdir)
 
 
