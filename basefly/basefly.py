@@ -764,7 +764,7 @@ class Workflow:
         wf_args.add_argument('-show_cmd', metavar='cmd-query', help="提供一个cmd名称,输出该cmd的样例")
         wf_args.add_argument('--list_task', default=False, action="store_true", help="仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤")
         wf_args.add_argument('--monitor_resource', default=False, action='store_true', help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
-        wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=60, type=int, help="等待资源的时间上限, 默认每次等待时间为15秒, 等待时间超过这个时间且资源不足时判定任务失败")
+        wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=600, type=int, help="等待资源的时间上限, 默认每次等待时间为600秒, 等待时间超过这个时间且资源不足时判定任务失败")
         wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true', help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
         self.argparser = parser
         # for user defined arguments
