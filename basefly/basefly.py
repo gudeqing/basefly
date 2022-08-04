@@ -1,5 +1,5 @@
 import os
-import re
+import shutil
 import json
 import sys
 import argparse
@@ -128,7 +128,7 @@ class Output:
     # out_id: str = field(default_factory=uuid4)
     type: Literal['str', 'int', 'float', 'bool', 'outfile', 'outdir'] = 'outfile'
     # 设计report参数，用于指定该参数最终是否作为流程的outputs
-    report: bool = True
+    report: bool = False
     # 由command形成task之后，可以带入task_id
     task_id: str = None
     name: str = None
@@ -216,13 +216,24 @@ class Command:
                     elif type(each) == TopVar or type(each) == TmpVar:
                         arg_value[ind] = each.value
                 arg_value = [x for x in arg_value if x is not None]
+                if len(arg_value) == 0:
+                    continue
 
             # 对于可以接收多个值的参数
             if arg.array:
                 if not arg.multi_times:
                     arg_value = arg.delimiter.join([str(x) for x in arg_value if x is not None])
                 else:
-                    arg_value = [arg.delimiter.join([str(x) for x in v if x is not None]) for v in arg_value]
+                    # 这里可以处理多值且可重复使用的参数，形如："--i 1 3 -i 2 5", 因此做如下处理
+                    if all([type(v)==list or type(v)==tuple for v in arg_value]):
+                        arg_value = [arg.delimiter.join([str(x) for x in v if x is not None]) for v in arg_value]
+                    else:
+                        raise Exception('如果一个参数可以接受多个值，而且可以重复使用，必须传入嵌套列表作为值！')
+                if len(arg_value) == 0:
+                    continue
+
+            if not arg.array and arg.multi_times:
+                arg_value = [str(x) for x in arg_value]
 
             # 处理bool值参数
             if arg.type == "bool" or type(arg.value) == bool:
@@ -245,20 +256,58 @@ class Command:
             outfile = f'{self.meta.name}.wdl'
         ToWdlTask(self, outfile, wdl_version)
 
-    def run_now(self, wkdir=os.getcwd(), docker=True, input_files: list = []):
+    def run_now(self, wkdir, wf_tasks=None, docker=False):
         import subprocess
+        print(f'Running {self.meta.name} ...')
         if self.runtime.image and docker:
+            # get mount volumes
+            os.makedirs(wkdir, exist_ok=True)
+            mount_vols = {wkdir}
+            for k, v in self.args.items():
+                if type(v.value) in [list, tuple]:
+                    values = v.value
+                else:
+                    values = [v.value]
+                for value in values:
+                    if (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir'] and value.value is not None:
+                        if value.type == 'infile':
+                            file_dir = os.path.dirname(value.value)
+                            mount_vols.add(os.path.abspath(file_dir))
+                        elif value.type == 'indir':
+                            mount_vols.add(os.path.abspath(value.value))
+                    elif  (type(value) == str) and (v.type in ['infile', 'indir']):
+                        if v.type == 'infile':
+                            mount_vols.add(os.path.abspath(os.path.dirname(value)))
+                        elif v.type == 'indir':
+                            mount_vols.add(os.path.abspath(value))
+
             with open(os.path.join(wkdir, 'cmd.sh'), 'w') as f:
-                f.write(self.format_cmd() + f' && chown -R {os.getuid()}:{os.getgid()} {wkdir}' + '\n')
+                f.write('set -o pipefail\n')
+                f.write(self.format_cmd(wf_tasks) + '\n')
+                f.write(f'chown -R {os.getuid()}:{os.getgid()} {wkdir}' + '\n')
             # docker_cmd = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash '
             docker_cmd = 'docker run --rm --privileged -i --entrypoint /bin/bash '
-            mount_vols = [wkdir] + input_files
             for each in mount_vols:
                 docker_cmd += f'-v {each}:{each} '
             docker_cmd += f'-w {wkdir} {self.runtime.image} cmd.sh'
-            subprocess.check_call(docker_cmd, cwd=wkdir)
-            return
-        subprocess.check_call(self.format_cmd(), cwd=wkdir)
+            subprocess.check_call(docker_cmd, cwd=wkdir, shell=True)
+        else:
+            subprocess.check_call(self.format_cmd(wf_tasks), cwd=wkdir, shell=True)
+        # format output
+        value_dict = dict()
+        for k, v in self.args.items():
+            if type(v.value) == TopVar:
+                v.value = v.value.value
+            value_dict[k] = v.value or v.default
+        invalid_outs = []
+        for name, out in self.outputs.items():
+            out.value = out.value.replace('~', '').format(**value_dict)
+            out.value = os.path.join(wkdir, out.value)
+            if out.type in ['outfile', 'outdir'] and not os.path.exists(out.value):
+                invalid_outs.append(name)
+        for each in invalid_outs:
+            # print('drop invalid outputs of', self.meta.name, self.outputs[each].value)
+            self.outputs.pop(each)
 
 
 @dataclass()
@@ -266,6 +315,7 @@ class Task:
     cmd: Command
     name: str = None
     tag: str = None
+    parent_wkdir: str = ""
     task_id: str = field(default_factory=uuid4)
     depends: List[str] = field(default_factory=list)
 
@@ -286,6 +336,9 @@ class Task:
         for ind, each in enumerate(self.depends):
             if hasattr(each, 'task_id'):
                 self.depends[ind] = each.task_id
+        for ind, each in enumerate(self.depends.copy()):
+            if each is None:
+                self.depends.pop(ind)
             elif type(each) != UUID:
                 raise Exception(f'valid "depends" for task {self.name} should be UUID object or Task Object!')
 
@@ -370,6 +423,7 @@ class Workflow:
     args = None
     success = False
     add_argument = None
+    wkdir: str = None
 
     def __post_init__(self):
         for k, v in self.topvars.items():
@@ -380,10 +434,12 @@ class Workflow:
         for k, v in var_dict.items():
             # 将key作为var的名称
             v.name = k
+            if v.type in ['infile', 'indir'] and v.value:
+                v.value = os.path.abspath(v.value)
         self.topvars.update(var_dict)
 
-    def add_task(self, cmd: Command, depends: list = [], name: str = None, tag: str = None):
-        task = Task(cmd=cmd, depends=depends, name=name, tag=tag)
+    def add_task(self, cmd: Command, depends: list = [], parent_wkdir: str ='', name: str = None, tag: str = None):
+        task = Task(cmd=cmd, depends=depends.copy(), name=name, tag=tag, parent_wkdir=parent_wkdir)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
@@ -398,11 +454,11 @@ class Workflow:
                     f.write(wdl_str + '\n')
 
     def to_wdl_workflow(self, outfile=None):
-        # 该函数不保证能生产出预期的结果, 甚至可能出错，不再维护
+        print('目前不能保证能生产完全正确的WDL流程, 甚至可能出错，不再维护该功能. 建议使用to_wdl_task后自己编写workflow')
         ToWdlWorkflow(self).write_wdl(outfile)
 
-    def to_argo_worflow(self, outfile=None):
-        # 有待进一步完善
+    def to_argo_workflow(self, outfile=None):
+        print('目前生成argo workflow 不一定正确')
         outfile = outfile or f'{self.meta.name}.argo.yaml'
         lines = ['apiVersion: argoproj.io/v1alpha1']
         lines += ['kind: Workflow']
@@ -480,11 +536,13 @@ class Workflow:
         """
         生成类config格式的workflow(->wf.ini)并且允许直接本地执行
         """
+        self.finalize()
         import configparser
         wf = configparser.ConfigParser()
         wf.optionxform = str
         parameters = self.argparser.parse_args()
         outdir = os.path.abspath(parameters.outdir)
+        self.wkdir = outdir
 
         wf['mode'] = dict(
             outdir=outdir,
@@ -502,7 +560,7 @@ class Workflow:
             self.update_args(parameters.update_args)
 
         for task_id, task in self.tasks.items():
-            cmd_wkdir = os.path.join(outdir, task.name)
+            cmd_wkdir = os.path.join("${mode:outdir}", task.parent_wkdir, task.name)
             mount_vols = {cmd_wkdir}
 
             if (task.name in parameters.assume_success_steps) or task.cmd.meta.name in parameters.assume_success_steps:
@@ -530,11 +588,13 @@ class Workflow:
                     if type(value) == Output and value.type in ['outfile', 'outdir']:
                         if not value.value.startswith('${{mode:'):
                             try:
-                                value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].name, value.value)
+                                value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].parent_wkdir, self.tasks[value.task_id].name, value.value)
                             except Exception as e:
                                 print(e, value, task.name)
                                 print(f'you may skip this step {task.name} by --assume_success_step')
-                        mount_vols.add(os.path.join(outdir, self.tasks[value.task_id].name))
+                        # mount_vols.add(os.path.join(outdir, self.tasks[value.task_id].name))
+                        mount_vols.add(os.path.join("${mode:outdir}", self.tasks[value.task_id].parent_wkdir, self.tasks[value.task_id].name))
+
                     elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir'] and value.value is not None:
                         if value.type == 'infile':
                             file_dir = os.path.dirname(value.value)
@@ -584,6 +644,34 @@ class Workflow:
                             plot=parameters.plot, rerun_steps=parameters.rerun_steps)
                 self.success = wf.failed == 0
 
+            # 通过软连接汇总输出目录
+            for name, out in self.outputs.items():
+                if '${{' in out.value:
+                    src_dir = out.value.replace('${{mode:outdir}}', outdir)
+                else:
+                    if out.task_id in self.tasks:
+                        src_dir = os.path.join(outdir, self.tasks[out.task_id].name, out.value)
+                    else:
+                        continue
+                if os.path.exists(src_dir):
+                    print('Found expected output: ', src_dir)
+                    final_out_dir = os.path.join(outdir, 'Outputs', self.tasks[out.task_id].name)
+                    os.makedirs(final_out_dir, exist_ok=True)
+                    dst_path = os.path.join(final_out_dir, os.path.basename(src_dir))
+                    # 删除已经存在的结果
+                    if os.path.exists(dst_path):
+                        if os.path.isfile(dst_path):
+                            os.remove(dst_path)
+                        else:
+                            shutil.rmtree(dst_path)
+                    # 如果输出结果是文件，则创建硬链接，否则软连接
+                    if os.path.isfile(src_dir):
+                        os.link(src_dir, dst_path)
+                    else:
+                        os.symlink(src_dir, dst_path)
+                else:
+                    print('Failed to found expected output: ', src_dir)
+
     def dump_args(self, out='arguments.json'):
         cmd_names = set()
         arg_value_dict = dict()
@@ -595,7 +683,7 @@ class Workflow:
                     if arg.level == 'required' and (arg.default is None):
                         continue
                     if arg.type not in ['infile', 'indir', 'fix']:
-                        if type(arg.value) not in [TopVar, TmpVar]:
+                        if type(arg.value) not in [TopVar, TmpVar, Output]:
                             tmp_dict[arg_name] = arg.value or arg.default
                         else:
                             tmp_dict[arg_name] = arg.value.value
@@ -687,6 +775,26 @@ class Workflow:
         if self.argparser is None:
             self.init_argparser()
         self.args = self.argparser.parse_args()
+
+    def finalize(self):
+        for task_id, task in self.tasks.items():
+            # depends统一转为task_id
+            for ind, each in enumerate(task.depends):
+                if hasattr(each, 'task_id'):
+                    task.depends[ind] = each.task_id
+                elif type(each) != UUID:
+                    raise Exception(f'valid "depends" for task {task.name} should be UUID object or Task Object but not "{each}"')
+            # format output
+            value_dict = dict()
+            for k, v in task.cmd.args.items():
+                value_dict[k] = v.value or v.default
+            for _, out in task.outputs.items():
+                out.value = out.value.replace('~', '').format(**value_dict)
+
+            # 添加workflow的output
+            for _name, out in task.outputs.items():
+                if out.report:
+                    self.outputs[task.name+'.'+_name] = out
 
 
 class ToWdlTask(object):

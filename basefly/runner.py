@@ -79,7 +79,7 @@ def set_logger(name='workflow.log', logger_id='x'):
 
 
 class Command(object):
-    def __init__(self, cmd, name, timeout=3600*24*3, outdir=os.getcwd(), image=None, mount_vols=None,
+    def __init__(self, cmd, name, timeout=3600*24*7, outdir=os.getcwd(), image=None, mount_vols=None, wkdir=None,
                  monitor_resource=True, monitor_time_step=2, logger=None, **kwargs):
         self.name = name
         self.cmd = cmd
@@ -96,6 +96,7 @@ class Command(object):
         self.monitor = monitor_resource
         self.monitor_time_step = int(monitor_time_step)
         self.outdir = outdir
+        self.wkdir = wkdir
         self.times = 0
         if not logger:
             self.logger = set_logger(name=os.path.join(self.outdir, 'command.log'))
@@ -129,23 +130,31 @@ class Command(object):
                 pass
 
     def run(self):
-        cmd_wkdir = os.path.join(self.outdir, self.name)
+        if not self.wkdir:
+            cmd_wkdir = os.path.join(self.outdir, self.name)
+        else:
+            cmd_wkdir = self.wkdir
         if os.path.exists(cmd_wkdir):
             try:
-                print(f'Removing already existed workdir {cmd_wkdir}')
-                shutil.rmtree(cmd_wkdir)
+                print(f'Remove or Rename existed workdir {cmd_wkdir} to prevent potential error')
+                try:
+                    shutil.rmtree(cmd_wkdir)
+                except:
+                    os.rename(cmd_wkdir, cmd_wkdir+'_old')
             except Exception as e:
-                print(f'Failed to remove {cmd_wkdir}: {e}')
-        os.makedirs(cmd_wkdir)
+                print(f'Failed to remove/rename {cmd_wkdir}: {e}')
+        os.makedirs(cmd_wkdir, exist_ok=True)
         if self.image:
             with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
-                f.write(self.cmd + f' && chown -R {os.getuid()}:{os.getgid()} {cmd_wkdir}' + '\n')
+                f.write(self.cmd + '\n')
 
             # docker_cmd = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash '
             docker_cmd = 'docker run --rm --privileged -i --entrypoint /bin/bash '
             for each in self.mount_vols.split(';'):
                 docker_cmd += f'-v {each}:{each} '
             docker_cmd += f'-w {cmd_wkdir} {self.image} cmd.sh'
+            with open(os.path.join(cmd_wkdir, 'docker.cmd.sh'), 'w') as f:
+                f.write((docker_cmd+'\n'))
 
         start_time = time.time()
         self.logger.warning("Step: {}".format(self.name))
@@ -184,6 +193,14 @@ class Command(object):
             self.stdout, self.stderr = self.proc.communicate()
 
         self._write_log()
+
+        if self.image:
+            # 无论是否运行成功，修改结果文件权限
+            docker_cmd = 'docker run --rm --privileged -i '
+            docker_cmd += f'-v {cmd_wkdir}:{cmd_wkdir} {self.image} '
+            docker_cmd += f'chown -R {os.getuid()}:{os.getgid()} {cmd_wkdir}'
+            os.system(docker_cmd)
+
         end_time = time.time()
         self.used_time = round(end_time - start_time, 2)
 
@@ -277,6 +294,10 @@ class CommandNetwork(object):
             tmp_dict['check_resource_before_run'] = self.parser.getboolean('mode', 'check_resource_before_run')
         else:
             tmp_dict['check_resource_before_run'] = self.parser.getboolean(name, 'check_resource_before_run')
+        if 'wkdir' not in tmp_dict:
+            tmp_dict['wkdir'] = os.path.join(self.outdir, name)
+        else:
+            tmp_dict['wkdir'] = self.parser.get(name, 'wkdir')
         return tmp_dict
 
 
@@ -632,8 +653,10 @@ class RunCommands(CommandNetwork):
         _ = [x.join() for x in threads]
         percent = f'{self.success/self.task_number:.2%}'
         failed = self.task_number - self.success
-        self.logger.warning("Total time: {}s".format(time.time() - start_time))
+        # self.logger.warning("Total time for this time: {}s".format(time.time() - start_time))
+        total_used_time = sum(float(self.state[x]['used_time']) for x in self.state if str(self.state[x]['used_time']).replace('.', '').isnumeric())
         self.logger.warning(f'Finished {percent}: Success={self.success}, Failed={failed}, Total={self.task_number}')
+        self.logger.warning("Total Time: {:.2f} minutes".format(total_used_time/60))
         return self.success, len(self.state)
 
     def continue_run(self, rerun_steps=tuple(), assume_success_steps=tuple()):
