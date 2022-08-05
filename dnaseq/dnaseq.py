@@ -448,7 +448,8 @@ def pipeline():
     for sample, (r1s, r2s) in fastq_info.items():
         if sample in wf.args.exclude_samples or (sample not in sample_list):
             continue
-
+        if len(r1s) > 1:
+            print(f'Warn: We can use only one fastq file of {sample}, you should merge them first.')
         read1 = r1s[0]  # 假设每个样本只有对应一对fastq文件，不存在1对多的情况
         read2 = r2s[0]  # 假设每个样本只有对应一对fastq文件，不存在1对多的情况
 
