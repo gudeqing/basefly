@@ -64,7 +64,7 @@ def build_bwa_index():
     cmd.meta.desc = 'bwa index and create sequence dictionary and fasta fai file'
     cmd.meta.version = '0.7.17'
     cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1'
-    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.memory = 30 * 1024 ** 3
     cmd.args['copy_input_mode'] = Argument(prefix=f'cp -', default='L', range=['L', 'l', 's'], desc='indicate how to copy input fasta into work directory, "L": copy, "l": hard link, "s": softlink, do not use this if docker is used')
     cmd.args['ref_fasta'] = Argument(prefix='', type='infile', desc='reference fasta to index')
     cmd.args['_new_name'] = Argument(type='fix', value='ref_genome.fa && samtools faidx ref_genome.fa &&')
