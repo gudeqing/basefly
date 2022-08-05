@@ -897,6 +897,7 @@ def pipeline():
 
     # 变异分析
     germline_merge_vcf_tasks = []
+    already_exist = set()
     for tumor_sample, normal_sample in pair_list:
         if tumor_sample not in bam_dict and tumor_sample.lower() != 'none':
             print(f'Warning: skip tumor sample {tumor_sample} since it is not in target list: {list(bam_dict.keys())}')
@@ -1071,7 +1072,8 @@ def pipeline():
                 vep_task.outputs['out_vcf_idx'].report = True
 
         # germline variant calling
-        if normal_sample.lower() != 'none':
+        if normal_sample.lower() != 'none' and normal_sample not in already_exist:
+            already_exist.add(normal_sample)
             hap_tasks = []
             for ind, interval_file in enumerate(interval_files):
                 hap_task, args = wf.add_task(Haplotyper(f'{normal_sample}-{ind}'), tag=f'{normal_sample}-{ind}',
