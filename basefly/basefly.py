@@ -6,9 +6,11 @@ import argparse
 from functools import partial
 from uuid import uuid4, UUID
 from dataclasses import dataclass, field
-# from typing import Any, List, Dict, Literal
-from typing import Any, List, Dict
-from typing_extensions import Literal
+try:
+    from typing import Any, List, Dict, Literal
+except:
+    from typing import Any, List, Dict
+    from typing_extensions import Literal
 # shadow default dict
 # from munch import Munch as dict
 from .runner import run_wf
