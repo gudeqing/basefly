@@ -337,6 +337,22 @@ def Mutect2(prefix):
     return cmd
 
 
+def bcftools_norm():
+    cmd = Command()
+    cmd.meta.name = 'VcfLeftNorm'
+    cmd.meta.desc = " Left-align and normalize indels; check if REF alleles match the reference; split multiallelic sites into multiple rows; recover multiallelics from multiple rows"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
+    cmd.runtime.tool = "bcftools norm"
+    cmd.args['fasta-ref'] = Argument(prefix='-f ', type='infile', desc='reference fasta file')
+    cmd.args['multiallelics'] = Argument(prefix='-m ', level='optional', desc='Split multiallelics (-) or join biallelics (+), type: snps|indels|both|any [both]' )
+    cmd.args['out'] = Argument(prefix='-o ', desc='Write output to a file [standard output]')
+    cmd.args['output-type'] = Argument(prefix='--output-type ', default='v', desc="'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]")
+    cmd.args['threads'] = Argument(prefix='--threads ', default=2, desc="Use multithreading with <int> worker threads [2]")
+    cmd.args['vcf'] = Argument(type='infile', desc='input vcf file')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
 def GetPileupSummaries(prefix):
     cmd = Command()
     cmd.meta.name = 'GetPileupSummaries'
@@ -703,7 +719,7 @@ def pipeline():
     wf.add_argument('-germline_vcf', required=False, help='germline vcf, will be used for germline variant filtering and contamination analysis')
     wf.add_argument('-alleles', required=False, help='The set of alleles to force-call regardless of evidence')
     wf.add_argument('-contamination_vcf', required=False, help='germline vcf such as small_exac_common_3_b37.vcf, will be used for contamination analysis')
-    wf.add_argument('-bwaMemIndexImage', required=False, help='bwa-mem-index-mage for artifact alignment filtering')
+    wf.add_argument('-bwaMemIndexImage', required=False, help='bwa-mem-index-mage for artifact alignment filtering. can be created with tool BwaMemIndexImageCreator')
     wf.add_argument('-vep_cache_dir', required=False, help='VEP cache directory')
     wf.add_argument('-vep_plugin_dir', required=False, help='VEP plugin directory')
     wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval or vcf format.")
@@ -929,7 +945,13 @@ def pipeline():
             # merge vcf
             merge_vcf_task, args = wf.add_task(MergeVcfs(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
             args['inputs'].value = [x.outputs['out'] for x in mutect_tasks]
-            merge_vcf_task.outputs['out'].report = True
+
+            # normalize vcf
+            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample, depends=[merge_vcf_task])
+            args['vcf'].value = merge_vcf_task.outputs['out']
+            args['fasta-ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['out'].value = tumor_sample + '.somatic.raw.vcf'
+            norm_vcf_task.outputs['out'].report = True
 
             # merge stats
             merge_stat_task, args = wf.add_task(MergeMutectStats(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
@@ -952,11 +974,11 @@ def pipeline():
                 args['normal_pileups'].value = merge_normal_pileup_task.outputs['out']
 
             # filtering variant
-            depend_tasks = [merge_vcf_task, merge_stat_task, lrom_task]
+            depend_tasks = [norm_vcf_task, merge_stat_task, lrom_task]
             if wf.topvars['contamination_vcf'].value is not None:
                 depend_tasks.append(contaminate_task)
             filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample, depends=depend_tasks)
-            args['vcf'].value = merge_vcf_task.outputs['out']
+            args['vcf'].value = norm_vcf_task.outputs['out']
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
             if wf.topvars['contamination_vcf'].value is not None:
                 args['contamination-table'].value = contaminate_task.outputs['out']
@@ -966,6 +988,7 @@ def pipeline():
             filter_task.outputs['out'].report = True
 
             # filter alignment artifact
+            filter_align_task = None
             if wf.topvars['bwaMemIndexImage'].value is not None:
                 filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor_sample), tag=tumor_sample, depends=[filter_task])
                 args['vcf'].value = filter_task.outputs['out']
@@ -976,13 +999,14 @@ def pipeline():
 
             # VEP annotation
             if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-                depend_task = filter_align_task if wf.topvars['bwaMemIndexImage'].value is not None else filter_task
+                depend_task = filter_align_task or filter_task
                 vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample, depends=[depend_task])
                 args['input_file'].value = depend_task.outputs['out']
                 args['fasta'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
                 args['dir_cache'].value = top_vars['vep_cache_dir']
                 args['dir_plugins'].value = top_vars['vep_plugin_dir']
-                vep_task.outputs['out'].report = True
+                vep_task.outputs['out_vcf'].report = True
+                vep_task.outputs['out_vcf_idx'].report = True
 
         # tumor only analysis
         if normal_sample.lower() == 'none' and tumor_sample.lower() != 'none':
@@ -1007,18 +1031,27 @@ def pipeline():
             merge_vcf_task, args = wf.add_task(MergeVcfs(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
             args['inputs'].value = [x.outputs['out'] for x in mutect_tasks]
 
+            # normalize vcf
+            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample, depends=[merge_vcf_task])
+            args['vcf'].value = merge_vcf_task.outputs['out']
+            args['fasta-ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['out'].value = tumor_sample + '.somatic.raw.vcf'
+            norm_vcf_task.outputs['out'].report = True
+
             # merge stats
             merge_stat_task, args = wf.add_task(MergeMutectStats(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
             args['stats'].value = [x.outputs['stats'] for x in mutect_tasks]
 
             # filter
-            filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample, depends=[merge_vcf_task, merge_stat_task, lrom_task])
-            args['vcf'].value = merge_vcf_task.outputs['out']
+            filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample, depends=[norm_vcf_task, merge_stat_task, lrom_task])
+            args['vcf'].value = norm_vcf_task.outputs['out']
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
             args['ob-priors'].value = lrom_task.outputs['out']
             args['stats'].value = merge_stat_task.outputs['out']
             filter_task.outputs['out'].report = True
 
+            # filter alignment artifact
+            filter_align_task = None
             if wf.topvars['bwaMemIndexImage'].value is not None:
                 filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor_sample), tag=tumor_sample, depends=[filter_task])
                 args['vcf'].value = filter_task.outputs['out']
@@ -1028,13 +1061,14 @@ def pipeline():
                 filter_align_task.outputs['out'].report = True
 
             if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-                depend_task = filter_align_task if wf.topvars['bwaMemIndexImage'].value is not None else filter_task
+                depend_task = filter_align_task or filter_task
                 vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample, depends=[depend_task])
                 args['input_file'].value = depend_task.outputs['out']
                 args['fasta'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
                 args['dir_cache'].value = top_vars['vep_cache_dir']
                 args['dir_plugins'].value = top_vars['vep_plugin_dir']
-                vep_task.outputs['out'].report = True
+                vep_task.outputs['out_vcf'].report = True
+                vep_task.outputs['out_vcf_idx'].report = True
 
         # germline variant calling
         if normal_sample.lower() != 'none':
@@ -1128,7 +1162,24 @@ def pipeline():
 
     gather_final_vcf_task, args = wf.add_task(MergeVcfs('Joint.final'), tag='Final', depends=final_recal_tasks)
     args['inputs'].value = [x.outputs['out'] for x in final_recal_tasks]
-    gather_final_vcf_task.outputs['out'].report = True
+
+    # normalize vcf
+    norm_vcf_task, args = wf.add_task(bcftools_norm(), tag='Joint', depends=[gather_final_vcf_task])
+    args['vcf'].value = gather_final_vcf_task.outputs['out']
+    args['fasta-ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+    args['out'].value = 'Joint.LeftNormalized.vcf'
+    norm_vcf_task.outputs['out'].report = True
+
+    if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
+        depend_task = norm_vcf_task
+        vep_task, args = wf.add_task(vep('Joint'), tag='Joint', depends=[depend_task])
+        args['input_file'].value = depend_task.outputs['out']
+        args['fasta'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        args['dir_cache'].value = top_vars['vep_cache_dir']
+        args['dir_plugins'].value = top_vars['vep_plugin_dir']
+        vep_task.outputs['out_vcf'].report = True
+        vep_task.outputs['out_vcf_idx'].report = True
+
 
     wf.run()
 
