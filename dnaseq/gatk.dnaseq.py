@@ -1,7 +1,7 @@
 import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
-from basefly.basefly import Argument, Output, Command, Workflow, TopVar, Task
+from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
@@ -58,9 +58,9 @@ def BedToIntervalList():
     return cmd
 
 
-def build_index():
+def build_bwa_index():
     cmd = Command()
-    cmd.meta.name = 'buildIndex'
+    cmd.meta.name = 'buildBwaIndex'
     cmd.meta.desc = 'bwa index and create sequence dictionary and fasta fai file'
     cmd.meta.version = '0.7.17'
     cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1'
@@ -792,7 +792,9 @@ def pipeline():
     make_index = False
     if not os.path.exists(wf.topvars['ref'].value + '.0123'):
         make_index = True
-        index_task, args = wf.add_task(build_index(), name='buildIndex')
+        index_task, args = wf.add_task(build_bwa_index(), name='buildIndex')
+        if not wf.args.docker:
+            args['copy_input_mode'].value = 's'
         args['ref_fasta'].value = wf.topvars['ref']
 
     # 比对分析
@@ -841,7 +843,7 @@ def pipeline():
 
             # merge
             merge_bam_task, args = wf.add_task(MergeBamAlignment(f'{sample}-{ind}'), tag=f'{sample}-{ind}', depends=[fastq2sam_task, bwa_task])
-            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             args['ALIGNED_BAM'].value = bwa_task.outputs['out']
             args['UNMAPPED_BAM'].value = fastq2sam_task.outputs['out']
 
@@ -853,7 +855,7 @@ def pipeline():
         # sort and fix tag
         sort_task, args = wf.add_task(SortAndFixTags(sample), tag=sample, depends=[markdup_task])
         args['INPUT'].value = markdup_task.outputs['out']
-        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
 
         # Perform Base Quality Score Recalibration (BQSR) on the sorted BAM in parallel
         bqsr_tasks = []
@@ -861,7 +863,7 @@ def pipeline():
             bsqr_task, args = wf.add_task(BaseRecalibrator(f'{sample}-{ind}'), tag=f'{sample}-{ind}', depends=[sort_task], parent_wkdir='BaseRecalibrator')
             bqsr_tasks.append(bsqr_task)
             args['INPUT'].value = sort_task.outputs['out']
-            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             args['known-sites'].value = [top_vars['dbsnp'], top_vars['mills'], top_vars['hapmap']]
             args['intervals'].value = each
 
@@ -876,14 +878,14 @@ def pipeline():
             apply_task, args = wf.add_task(ApplyBQSR(f'{sample}-{ind}'), tag=f'{sample}-{ind}', depends=[merge_bsqr_task], parent_wkdir='ApplyBQSR')
             apply_tasks.append(apply_task)
             args['INPUT'].value = sort_task.outputs['out']
-            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             args['intervals'].value = each
             args['bqsr'].value = merge_bsqr_task.outputs['out']
 
         # Merge the recalibrated BAM files resulting from by-interval recalibration
         merge_bam_task, args = wf.add_task(GatherBamFiles(sample), tag=sample, depends=apply_tasks)
         args['INPUT'].value = [x.outputs['out'] for x in apply_tasks]
-        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
         bam_dict[sample] = merge_bam_task
         merge_bam_task.outputs['out'].report = True
 
@@ -914,7 +916,7 @@ def pipeline():
             for ind, interval_file in enumerate(interval_files):
                 mutect_task, args = wf.add_task(Mutect2(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}', depends=[bam_dict[normal_sample], bam_dict[tumor_sample], split_task], parent_wkdir='Mutect2')
                 mutect_tasks.append(mutect_task)
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['tumor_bam'].value = bam_dict[tumor_sample].outputs['out']
                 args['normal_bam'].value = bam_dict[normal_sample].outputs['out']
                 args['tumor_name'].value = tumor_sample
@@ -927,14 +929,14 @@ def pipeline():
                 # get pileup summary
                 tumor_pileup_task, args = wf.add_task(GetPileupSummaries(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}', depends=[bam_dict[tumor_sample], split_task], parent_wkdir='GetPileupSummaries')
                 tumor_pileup_tasks.append(tumor_pileup_task)
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['intervals'].value = [interval_file]
                 args['variants_for_contamination'].value = wf.topvars['contamination_vcf']
                 args['bam'].value = bam_dict[tumor_sample].outputs['out']
 
                 normal_pileup_task, args = wf.add_task(GetPileupSummaries(f'{normal_sample}-{ind}'), tag=f'{normal_sample}-{ind}', depends=[bam_dict[normal_sample], split_task], parent_wkdir='GetPileupSummaries')
                 normal_pileup_tasks.append(normal_pileup_task)
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['intervals'].value = [interval_file]
                 args['variants_for_contamination'].value = wf.topvars['contamination_vcf']
                 args['bam'].value = bam_dict[normal_sample].outputs['out']
@@ -950,7 +952,7 @@ def pipeline():
             # normalize vcf
             norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample, depends=[merge_vcf_task])
             args['vcf'].value = merge_vcf_task.outputs['out']
-            args['fasta-ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['fasta-ref'].value = wf.topvars['ref']
             args['out'].value = tumor_sample + '.somatic.raw.vcf'
             norm_vcf_task.outputs['out'].report = True
 
@@ -980,7 +982,7 @@ def pipeline():
                 depend_tasks.append(contaminate_task)
             filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample, depends=depend_tasks)
             args['vcf'].value = norm_vcf_task.outputs['out']
-            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             if wf.topvars['contamination_vcf'].value is not None:
                 args['contamination-table'].value = contaminate_task.outputs['out']
                 args['tumor-segmentation'].value = contaminate_task.outputs['tumor-segmentation']
@@ -993,7 +995,7 @@ def pipeline():
             if wf.topvars['bwaMemIndexImage'].value is not None:
                 filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor_sample), tag=tumor_sample, depends=[filter_task])
                 args['vcf'].value = filter_task.outputs['out']
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['bam'].value = bam_dict[tumor_sample].outputs['out']
                 args['bwa-mem-index-image'].value = wf.topvars['bwaMemIndexImage']
                 filter_align_task.outputs['out'].report = True
@@ -1003,7 +1005,7 @@ def pipeline():
                 depend_task = filter_align_task or filter_task
                 vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample, depends=[depend_task])
                 args['input_file'].value = depend_task.outputs['out']
-                args['fasta'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['fasta'].value = wf.topvars['ref']
                 args['dir_cache'].value = top_vars['vep_cache_dir']
                 args['dir_plugins'].value = top_vars['vep_plugin_dir']
                 vep_task.outputs['out_vcf'].report = True
@@ -1016,7 +1018,7 @@ def pipeline():
                 mutect_task, args = wf.add_task(Mutect2(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}')
                 mutect_tasks.append(mutect_task)
                 mutect_task.depends = [bam_dict[normal_sample].task_id, bam_dict[tumor_sample].task_id]
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['tumor_bam'].value = bam_dict[tumor_sample].outputs['out']
                 args['tumor_name'].value = tumor_sample
                 args['germline-resource'].value = wf.topvars['germline_vcf']
@@ -1035,7 +1037,7 @@ def pipeline():
             # normalize vcf
             norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample, depends=[merge_vcf_task])
             args['vcf'].value = merge_vcf_task.outputs['out']
-            args['fasta-ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['fasta-ref'].value = wf.topvars['ref']
             args['out'].value = tumor_sample + '.somatic.raw.vcf'
             norm_vcf_task.outputs['out'].report = True
 
@@ -1046,7 +1048,7 @@ def pipeline():
             # filter
             filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample, depends=[norm_vcf_task, merge_stat_task, lrom_task])
             args['vcf'].value = norm_vcf_task.outputs['out']
-            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             args['ob-priors'].value = lrom_task.outputs['out']
             args['stats'].value = merge_stat_task.outputs['out']
             filter_task.outputs['out'].report = True
@@ -1056,7 +1058,7 @@ def pipeline():
             if wf.topvars['bwaMemIndexImage'].value is not None:
                 filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor_sample), tag=tumor_sample, depends=[filter_task])
                 args['vcf'].value = filter_task.outputs['out']
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['bam'].value = bam_dict[tumor_sample].outputs['out']
                 args['bwa-mem-index-image'].value = wf.topvars['bwaMemIndexImage']
                 filter_align_task.outputs['out'].report = True
@@ -1065,7 +1067,7 @@ def pipeline():
                 depend_task = filter_align_task or filter_task
                 vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample, depends=[depend_task])
                 args['input_file'].value = depend_task.outputs['out']
-                args['fasta'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['fasta'].value = wf.topvars['ref']
                 args['dir_cache'].value = top_vars['vep_cache_dir']
                 args['dir_plugins'].value = top_vars['vep_plugin_dir']
                 vep_task.outputs['out_vcf'].report = True
@@ -1079,7 +1081,7 @@ def pipeline():
                 hap_task, args = wf.add_task(Haplotyper(f'{normal_sample}-{ind}'), tag=f'{normal_sample}-{ind}',
                                              parent_wkdir='Haplotyper', depends=[bam_dict[normal_sample].task_id, recal_dict[normal_sample].task_id])
                 hap_tasks.append(hap_task)
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['bam'].value = bam_dict[normal_sample].outputs['out']
                 args['intervals'].value = [interval_file]
 
@@ -1118,7 +1120,7 @@ def pipeline():
         args['interval'].value = interval_file
 
         genotype_task, args = wf.add_task(GenotypeGVCFs(ind), tag=f'{ind}', depends=[import_vcf_task], parent_wkdir='GenotypeGVCFs')
-        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
         args['dbsnp'].value = wf.topvars['dbsnp']
         args['gendb'].value = import_vcf_task.outputs['out']
         args['interval'].value = interval_file
@@ -1168,7 +1170,7 @@ def pipeline():
     # normalize vcf
     norm_vcf_task, args = wf.add_task(bcftools_norm(), tag='Joint', depends=[gather_final_vcf_task])
     args['vcf'].value = gather_final_vcf_task.outputs['out']
-    args['fasta-ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+    args['fasta-ref'].value = wf.topvars['ref']
     args['out'].value = 'Joint.LeftNormalized.vcf'
     norm_vcf_task.outputs['out'].report = True
 
@@ -1176,7 +1178,7 @@ def pipeline():
         depend_task = norm_vcf_task
         vep_task, args = wf.add_task(vep('Joint'), tag='Joint', depends=[depend_task])
         args['input_file'].value = depend_task.outputs['out']
-        args['fasta'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        args['fasta'].value = wf.topvars['ref']
         args['dir_cache'].value = top_vars['vep_cache_dir']
         args['dir_plugins'].value = top_vars['vep_plugin_dir']
         vep_task.outputs['out_vcf'].report = True
