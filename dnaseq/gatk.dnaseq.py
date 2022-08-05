@@ -771,7 +771,7 @@ def pipeline():
         creat_dict_task = creat_ref_dict()
         creat_dict_task.args['ref_fasta'].value = wf.topvars['ref'].value
         tmp_wkdir = os.path.join(wf.args.outdir, "PreparedInputs")
-        creat_dict_task.run_now(wkdir=tmp_wkdir, docker=True)
+        creat_dict_task.run_now(wkdir=tmp_wkdir, docker=wf.args.docker)
         wf.topvars['ref'].value = creat_dict_task.outputs['ref_genome'].value
         wf.topvars['ref_dict'].value = creat_dict_task.outputs['ref_dict'].value
 
@@ -785,7 +785,7 @@ def pipeline():
         bed2interval_task.args['bed'].value = input_interval
         bed2interval_task.args['ref_dict'].value = wf.topvars['ref_dict'].value
         bed2interval_task.args['out'].value = os.path.basename(input_interval) + '.interval_list'
-        bed2interval_task.run_now(wkdir=os.path.join(wf.args.outdir, "PreparedInputs"), docker=True)
+        bed2interval_task.run_now(wkdir=os.path.join(wf.args.outdir, "PreparedInputs"), docker=wf.args.docker)
         wf.topvars['intervals'].value = bed2interval_task.outputs['out'].value
 
     # 建bwa索引
@@ -1099,7 +1099,7 @@ def pipeline():
     args['intervals'].value = [wf.topvars['intervals']]
     args['mode'].value = "BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW"
     args['outdir'].value = 'SplitIntervals-ForJointCalling'
-    split_task.run_now(wkdir=wf.args.outdir, wf_tasks=wf.tasks, docker=True)
+    split_task.run_now(wkdir=wf.args.outdir, wf_tasks=wf.tasks, docker=wf.args.docker)
     interval_files = [x.value for x in split_task.outputs.values()]
     # print(interval_files)
 
