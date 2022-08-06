@@ -654,10 +654,10 @@ class RunCommands(CommandNetwork):
         _ = [x.join() for x in threads]
         percent = f'{self.success/self.task_number:.2%}'
         failed = self.task_number - self.success
-        # self.logger.warning("Total time for this time: {}s".format(time.time() - start_time))
+        self.logger.warning("Total time used for current running: {}s".format(time.time() - start_time))
         total_used_time = sum(float(self.state[x]['used_time']) for x in self.state if str(self.state[x]['used_time']).replace('.', '').isnumeric())
         self.logger.warning(f'Finished {percent}: Success={self.success}, Failed={failed}, Total={self.task_number}')
-        self.logger.warning("Total Time: {:.2f} minutes".format(total_used_time/60))
+        self.logger.warning("Total Time Used for Success Tasks: {:.2f} minutes".format(total_used_time/60))
         return self.success, len(self.state)
 
     def continue_run(self, rerun_steps=tuple(), assume_success_steps=tuple()):
