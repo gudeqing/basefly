@@ -443,7 +443,7 @@ class RunCommands(CommandNetwork):
         self.timeout = timeout
         if not logger:
             os.makedirs(self.outdir, exist_ok=True)
-            self.logger = set_logger(name=os.path.join(self.outdir, f'workflow.{time.time()}.log'))
+            self.logger = set_logger(name=os.path.join(self.outdir, f'wf.{time.time()}.log'))
         else:
             self.logger = logger
         # draw state graph
