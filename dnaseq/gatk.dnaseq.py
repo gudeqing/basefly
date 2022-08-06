@@ -65,7 +65,7 @@ def build_bwa_index():
     cmd.meta.version = '0.7.17'
     cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1'
     cmd.runtime.memory = 30 * 1024 ** 3
-    cmd.args['copy_input_mode'] = Argument(prefix=f'cp -', default='L', range=['L', 'l', 's'], desc='indicate how to copy input fasta into work directory, "L": copy, "l": hard link, "s": softlink, do not use this if docker is used')
+    cmd.args['copy_input_mode'] = Argument(prefix=f'cp -', default='s', range=['L', 'l', 's'], desc='indicate how to copy input fasta into work directory, "L": copy, "l": hard link, "s": softlink')
     cmd.args['ref_fasta'] = Argument(prefix='', type='infile', desc='reference fasta to index')
     cmd.args['_new_name'] = Argument(type='fix', value='ref_genome.fa && samtools faidx ref_genome.fa &&')
     cmd.args['_index_tool'] = Argument(type='fix', value='/opt/bwa-mem2-2.2.1_x64-linux/bwa-mem2 index')
@@ -194,7 +194,6 @@ def CreateSequenceGroupingTSV(ref_dict):
     # print('create the Sequencing Groupings used for BQSR and PrintReads Scatter.')
     with open(ref_dict, "r") as ref_dict_file:
         sequence_tuple_list = []
-        longest_sequence = 0
         for line in ref_dict_file:
             if line.startswith("@SQ"):
                 line_split = line.split("\t")
@@ -719,11 +718,11 @@ def pipeline():
     wf.add_argument('-germline_vcf', required=False, help='germline vcf, will be used for germline variant filtering and contamination analysis')
     wf.add_argument('-alleles', required=False, help='The set of alleles to force-call regardless of evidence')
     wf.add_argument('-contamination_vcf', required=False, help='germline vcf such as small_exac_common_3_b37.vcf, will be used for contamination analysis')
-    wf.add_argument('-bwaMemIndexImage', required=False, help='bwa-mem-index-mage for artifact alignment filtering. can be created with tool BwaMemIndexImageCreator')
+    wf.add_argument('-bwaMemIndexImage', required=False, help='bwa-mem-index-mage for artifact alignment filtering. you may created it with tool BwaMemIndexImageCreator with only fasta as input')
     wf.add_argument('-vep_cache_dir', required=False, help='VEP cache directory')
     wf.add_argument('-vep_plugin_dir', required=False, help='VEP plugin directory')
-    wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval or vcf format.")
-    wf.add_argument('-hisatgenotype_db', required=False, help='indicies dir of hisat-genotype for HLA typing')
+    wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval file.")
+    # wf.add_argument('-hisatgenotype_db', required=False, help='indicies directory of hisat-genotype for HLA typing. ')
     wf.parse_args()
 
     top_vars = dict(
@@ -1183,7 +1182,6 @@ def pipeline():
         args['dir_plugins'].value = top_vars['vep_plugin_dir']
         vep_task.outputs['out_vcf'].report = True
         vep_task.outputs['out_vcf_idx'].report = True
-
 
     wf.run()
 

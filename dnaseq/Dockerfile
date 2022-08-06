@@ -71,4 +71,4 @@ RUN apt update && apt install -y openjdk-11-jdk
 COPY gatk-4.2.6.1.zip /opt/
 RUN cd /opt && unzip gatk-4.2.6.1.zip && rm gatk-4.2.6.1.zip
 ENV PATH /opt/gatk-4.2.6.1/:$PATH
-RUN rm /usr/bin/python && ln -s /usr/bin/python3.8 /usr/bin/python
+# 上述最后产生的默认python版本居然是3.6.9，虽然python3.8安装了，但是包都是为python3.6.9安装的
