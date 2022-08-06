@@ -261,9 +261,9 @@ class Command:
     def run_now(self, wkdir, wf_tasks=None, docker=False):
         import subprocess
         print(f'Running {self.meta.name} ...')
+        os.makedirs(wkdir, exist_ok=True)
         if self.runtime.image and docker:
             # get mount volumes
-            os.makedirs(wkdir, exist_ok=True)
             mount_vols = {wkdir}
             for k, v in self.args.items():
                 if type(v.value) in [list, tuple]:
