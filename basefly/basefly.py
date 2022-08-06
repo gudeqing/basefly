@@ -294,7 +294,7 @@ class Command:
             docker_cmd += f'-w {wkdir} {self.runtime.image} cmd.sh'
             subprocess.check_call(docker_cmd, cwd=wkdir, shell=True)
         else:
-            subprocess.check_call(self.format_cmd(wf_tasks), cwd=wkdir, shell=True)
+            subprocess.check_call(self.format_cmd(wf_tasks), cwd=wkdir, shell=True, executable='/bin/bash')
         # format output
         value_dict = dict()
         for k, v in self.args.items():

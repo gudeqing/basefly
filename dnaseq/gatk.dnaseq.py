@@ -106,7 +106,7 @@ def uBam2FastqBwaMem(sample):
     cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
     cmd.runtime.memory = 5*1024**3
     cmd.runtime.cpu = 4
-    cmd.args['_fix0'] = Argument(type='fix', value='set -e; set -o pipefail; gatk SamToFastq')
+    cmd.args['_fix0'] = Argument(type='fix', value='set -o pipefail; gatk SamToFastq')
     cmd.args['ubam'] = Argument(prefix='-I ', type='infile', desc='input ubam file')
     cmd.args['paired'] = Argument(prefix='--INTERLEAVE ', default='true', range=['true', 'false'], desc='if input is paired fastq, set it be true, else set it be false')
     cmd.args['_fix1'] = Argument(type='fix', value='--FASTQ /dev/stdout -NON_PF true')

@@ -143,11 +143,12 @@ class Command(object):
                     os.rename(cmd_wkdir, cmd_wkdir+'_old')
             except Exception as e:
                 print(f'Failed to remove/rename {cmd_wkdir}: {e}')
-        os.makedirs(cmd_wkdir, exist_ok=True)
-        if self.image:
-            with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
-                f.write(self.cmd + '\n')
 
+        os.makedirs(cmd_wkdir, exist_ok=True)
+        with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
+            f.write(self.cmd + '\n')
+
+        if self.image:
             # docker_cmd = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash '
             docker_cmd = 'docker run --rm --privileged -i --entrypoint /bin/bash '
             for each in self.mount_vols.split(';'):
@@ -165,7 +166,7 @@ class Command(object):
             self.proc = psutil.Popen(docker_cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
         else:
             self.logger.info("> {}".format(self.cmd))
-            self.proc = psutil.Popen(self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
+            self.proc = psutil.Popen(self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir, executable='/bin/bash')
             # add ‘exec’ will cause cmd to inherit the shell process, instead of having the shell launch a child process
             # self.proc = psutil.Popen("exec " + self.cmd, shell=True, stderr=PIPE, stdout=PIPE, cwd=cmd_wkdir)
 
