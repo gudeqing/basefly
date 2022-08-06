@@ -657,7 +657,7 @@ class RunCommands(CommandNetwork):
         self.logger.warning("Total time used for current running: {}s".format(time.time() - start_time))
         total_used_time = sum(float(self.state[x]['used_time']) for x in self.state if str(self.state[x]['used_time']).replace('.', '').isnumeric())
         self.logger.warning(f'Finished {percent}: Success={self.success}, Failed={failed}, Total={self.task_number}')
-        self.logger.warning("Total Time Used for Success Tasks: {:.2f} minutes".format(total_used_time/60))
+        self.logger.warning("Total Time Used for Success Tasks Without Parallel Running: {:.2f} minutes".format(total_used_time/60))
         return self.success, len(self.state)
 
     def continue_run(self, rerun_steps=tuple(), assume_success_steps=tuple()):
