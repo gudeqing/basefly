@@ -690,20 +690,17 @@ def pipeline():
     流程包含的主要功能：
     * 使用fastp进行接头自动去除
     * 使用BWA进行比对分析
-    * 使用GATK检测small SNP/Indel, 支持tumor-only和tumor-normal配对模式
-    * 使用GATK
+    * 使用GATK检测small SNP/Indel, 同时支持tumor-only和tumor-normal配对模式
+    * 使用GATK检测germline突变，如果输入多个normal样本，则直接进行joint-calling
     * 基于VEP进行突变注释
     * 使用hisatGenotype进行HLA基因定型分析
     """
     wf.meta.version = "1.0"
     # 定义流程输入参数
     wf.init_argparser()
-    wf.add_argument('-fastq_info', nargs='+', required=True,
-                    help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
-    wf.add_argument('-r1_name', default='(.*).R1.fastq',
-                    help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
-    wf.add_argument('-r2_name', default='(.*).R2.fastq',
-                    help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
+    wf.add_argument('-fastq_info', nargs='+', required=True, help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
+    wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
+    wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.add_argument('-pair_info', required=True, help='tumor normal pair info, two-column txt file, first column is tumor sample name. sample not in pair info will be skipped')
     wf.add_argument('-ref', default='/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa', help='reference fasta file')
