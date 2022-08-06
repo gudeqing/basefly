@@ -1,7 +1,70 @@
-# Basefly 设计思路
+# 简介
 > Basefly主要目的是用python定义一种简便但严格的方式描述分析流程，和WDL、CWL的目的类似，旨在方便流程的编写。
 
+## Basefly流程开发示例:
+1. [mini_example](./tests/mini_example.py)
+2. [gene expression quantification: fastp+salmon](./tests/rnaseq_quant.py)
 
+## 流程运行
+### basefly流程自带一个runner，支持多个任务的并发运行和可视化。缺点：流程中所有任务的命令一定都是在计算开始之前编排好的，这意味着每一步的输出文件路径和数量是要预先知道的，可以理解为流程是预先编译好的，而不是动态执行的。
+
+### basefly自带runner的帮助文档可以参考如下bismark流程
+```
+$ python bismark.py -h
+Warn: cannot import pygraphviz and state graph will not be drawn!
+usage: bismark.py [-h] [--run] [--docker] [--plot] [-update_args update-args] [-threads max-workers] [-outdir workdir] [-skip step1 [task3 ...]] [--no_skip_depend]
+                  [-rerun_steps task3 [task_prefix ...]] [-assume_success_steps task3 [task_prefix ...]] [-retry max-retry] [--list_cmd] [-show_cmd cmd-query] [--list_task]
+                  [--monitor_resource] [-wait_resource_time wait-time] [--no_check_resource_before_run] -fastq_info FASTQ_INFO [FASTQ_INFO ...] [-r1_name R1_NAME] [-r2_name R2_NAME]
+                  [-exclude_samples EXCLUDE_SAMPLES [EXCLUDE_SAMPLES ...]] [-genome_folder GENOME_FOLDER] [--dedup]
+
+Bismark is a program to map bisulfite treated sequencing reads to a genome of interest and perform methylation calls in a single step. The output can be easily imported into a genome
+viewer, such as SeqMonk, and enables a researcher to analyse the methylation levels of their samples straight away. It's main features are: * Bisulfite mapping and methylation calling in
+one single step * Supports single-end and paired-end read alignments * Supports ungapped, gapped or spliced alignments * Alignment seed length, number of mismatches etc. are adjustable *
+Output discriminates between cytosine methylation in CpG, CHG and CHH context
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -fastq_info FASTQ_INFO [FASTQ_INFO ...]
+                        A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json] (default: None)
+  -r1_name R1_NAME      python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair
+                        brackets will be used as sample name. Example: '(.*).R1.fq.gz' (default: (.*).R1.fastq)
+  -r2_name R2_NAME      python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair
+                        brackets will be used as sample name. Example: '(.*).R2.fq.gz' (default: (.*).R2.fastq)
+  -exclude_samples EXCLUDE_SAMPLES [EXCLUDE_SAMPLES ...]
+                        samples to exclude from analysis (default: ())
+  -genome_folder GENOME_FOLDER
+                        The path to the folder containing the genome to be bisulfite converted. (default: None)
+  --dedup               This step is recommended for whole-genome bisulfite samples, but should not be used for reduced representation libraries such as RRBS, amplicon or target
+                        enrichment libraries. (default: False)
+
+Arguments for controlling running mode:
+  --run                 运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动续跑 (default: False)
+  --docker              default won't use docker even if docker image is provided. (default: False)
+  --plot                generate directed acyclic graph for whole workflow timely (default: False)
+  -update_args update-args
+                        输入参数配置文件, 其包含流程所有软件需要的参数，该配置文件设置的参数值将是流程中最后实际用的值 (default: None)
+  -threads max-workers  允许的最大并行的cmd数目, 默认5 (default: 5)
+  -outdir workdir       分析目录或结果目录 (default: /home/danny.gu/PycharmProjects/basefly/bismark/Result)
+  -skip step1 [task3 ...]
+                        指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选 (default: [])
+  --no_skip_depend      当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤 (default: False)
+  -rerun_steps task3 [task_prefix ...]
+                        指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可以是: 你重新设置了参数. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task (default: [])
+  -assume_success_steps task3 [task_prefix ...]
+                        假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task (default: [])
+  -retry max-retry      某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini (default: 1)
+  --list_cmd            仅仅显示当前流程包含的主步骤, 且已经排除指定跳过的步骤 (default: False)
+  -show_cmd cmd-query   提供一个cmd名称,输出该cmd的样例 (default: None)
+  --list_task           仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤 (default: False)
+  --monitor_resource    是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini (default: False)
+  -wait_resource_time wait-time
+                        等待资源的时间上限, 默认每次等待时间为15秒, 等待时间超过这个时间且资源不足时判定任务失败 (default: 60)
+  --no_check_resource_before_run
+                        指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini (default: False)
+
+```
+----
+# 设计思路如下
 ## 定义Argument对象，由如下属性描述
 1. name: str = '?'
     > 描述参数名称
@@ -21,15 +84,15 @@
 5. level: Literal['required', 'optional'] = 'required'
    > 描述参数是否为必需参数
 6. default: Any = None
-   > 描述参数的默认值
+   > 描述参数的默认值, 如果指定level="optional", 则默认值会被忽略
 7. range: Any = None
-   > 描述参数的取值范围
+   > 描述参数的取值范围，用列表表示，如range['a', 'b', 'c']
 8. array: bool = False
-   > 描述参数是否可以赋值多个值，如果是，给value赋值时应该使用列表
+   > 描述参数是否可以赋值多个值，如果True，给value赋值时应该使用列表， 进一步，如果此时还有array=True, 则赋值是嵌套列表
 9. delimiter: str = ' '
     > 当一个参数可以输入多个值（即array=True)，形成命令行时，这几个值的分隔符由此指定
 10. multi_times: bool = False
-    > 指示一个参数是否可以多次使用
+    > 指示一个参数是否可以重复多次使用，如果True，给value赋值时应该使用列表, 进一步，如果此时还有array=True, 则赋值是嵌套列表
 11. format: str = None
     > 指示输入文件的格式，用后缀表示，仅仅起提示作用
 12. order: int = 0
@@ -104,64 +167,5 @@
 ## 定义workflow对象，主要由Task组成的字典构成
 > workflow = {Meta, TopVar, dict(task_id=Task, task_id=Task, ...)}
 
-## Basefly流程开发示例见[example](./tests/example_pipeline.py)
-
 ----
-# 如何运行流程
-### basefly流程自带一个runner，支持多个任务的并发运行和可视化。缺点：流程中所有任务的命令一定都是在计算开始之前编排好的，这意味着每一步的输出文件路径和数量是要预先知道的，可以理解为流程是预先编译好的，而不是动态执行的。
 
-### basefly自带runner的帮助文档可以参考如下bismark流程
-```
-$ python bismark.py -h
-Warn: cannot import pygraphviz and state graph will not be drawn!
-usage: bismark.py [-h] [--run] [--docker] [--plot] [-update_args update-args] [-threads max-workers] [-outdir workdir] [-skip step1 [task3 ...]] [--no_skip_depend]
-                  [-rerun_steps task3 [task_prefix ...]] [-assume_success_steps task3 [task_prefix ...]] [-retry max-retry] [--list_cmd] [-show_cmd cmd-query] [--list_task]
-                  [--monitor_resource] [-wait_resource_time wait-time] [--no_check_resource_before_run] -fastq_info FASTQ_INFO [FASTQ_INFO ...] [-r1_name R1_NAME] [-r2_name R2_NAME]
-                  [-exclude_samples EXCLUDE_SAMPLES [EXCLUDE_SAMPLES ...]] [-genome_folder GENOME_FOLDER] [--dedup]
-
-Bismark is a program to map bisulfite treated sequencing reads to a genome of interest and perform methylation calls in a single step. The output can be easily imported into a genome
-viewer, such as SeqMonk, and enables a researcher to analyse the methylation levels of their samples straight away. It's main features are: * Bisulfite mapping and methylation calling in
-one single step * Supports single-end and paired-end read alignments * Supports ungapped, gapped or spliced alignments * Alignment seed length, number of mismatches etc. are adjustable *
-Output discriminates between cytosine methylation in CpG, CHG and CHH context
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -fastq_info FASTQ_INFO [FASTQ_INFO ...]
-                        A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json] (default: None)
-  -r1_name R1_NAME      python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair
-                        brackets will be used as sample name. Example: '(.*).R1.fq.gz' (default: (.*).R1.fastq)
-  -r2_name R2_NAME      python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair
-                        brackets will be used as sample name. Example: '(.*).R2.fq.gz' (default: (.*).R2.fastq)
-  -exclude_samples EXCLUDE_SAMPLES [EXCLUDE_SAMPLES ...]
-                        samples to exclude from analysis (default: ())
-  -genome_folder GENOME_FOLDER
-                        The path to the folder containing the genome to be bisulfite converted. (default: None)
-  --dedup               This step is recommended for whole-genome bisulfite samples, but should not be used for reduced representation libraries such as RRBS, amplicon or target
-                        enrichment libraries. (default: False)
-
-Arguments for controlling running mode:
-  --run                 运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动续跑 (default: False)
-  --docker              default won't use docker even if docker image is provided. (default: False)
-  --plot                generate directed acyclic graph for whole workflow timely (default: False)
-  -update_args update-args
-                        输入参数配置文件, 其包含流程所有软件需要的参数，该配置文件设置的参数值将是流程中最后实际用的值 (default: None)
-  -threads max-workers  允许的最大并行的cmd数目, 默认5 (default: 5)
-  -outdir workdir       分析目录或结果目录 (default: /home/danny.gu/PycharmProjects/basefly/bismark/Result)
-  -skip step1 [task3 ...]
-                        指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选 (default: [])
-  --no_skip_depend      当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤 (default: False)
-  -rerun_steps task3 [task_prefix ...]
-                        指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可以是: 你重新设置了参数. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task (default: [])
-  -assume_success_steps task3 [task_prefix ...]
-                        假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task (default: [])
-  -retry max-retry      某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini (default: 1)
-  --list_cmd            仅仅显示当前流程包含的主步骤, 且已经排除指定跳过的步骤 (default: False)
-  -show_cmd cmd-query   提供一个cmd名称,输出该cmd的样例 (default: None)
-  --list_task           仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤 (default: False)
-  --monitor_resource    是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini (default: False)
-  -wait_resource_time wait-time
-                        等待资源的时间上限, 默认每次等待时间为15秒, 等待时间超过这个时间且资源不足时判定任务失败 (default: 60)
-  --no_check_resource_before_run
-                        指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini (default: False)
-
-```

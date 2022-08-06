@@ -45,6 +45,7 @@ RUN cd /opt; wget https://github.com/DaehwanKimLab/hisat-genotype/archive/refs/h
 RUN cp -r /opt/hisat2-2.2.1/* /opt/hisat-genotype-master/hisat2/
 ENV PATH /opt/hisat2-2.2.1/:/opt/hisat-genotype-master/:/opt/hisat-genotype-master/hisat2/:$PATH
 ENV PYTHONPATH /opt/hisat-genotype-master/hisatgenotype_modules/:$PYTHONPATH
+
 # get fastp
 RUN wget http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp /usr/local/bin/
 # prepare indices for hisat-genotype
@@ -61,3 +62,13 @@ RUN wget http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp /usr/l
 #
 #    #HISATgenotpye Database
 #    git clone https://github.com/DaehwanKimLab/hisatgenotype_db.git
+# install bwa-mem2
+RUN curl -L https://github.com/bwa-mem2/bwa-mem2/releases/download/v2.2.1/bwa-mem2-2.2.1_x64-linux.tar.bz2 | tar jxf - -C /opt/
+# install java
+RUN apt update && apt install -y openjdk-11-jdk
+# install gatk
+#RUN cd /opt; wget https://github.com/broadinstitute/gatk/releases/download/4.2.6.1/gatk-4.2.6.1.zip && unzip gatk-4.2.6.1.zip && rm gatk-4.2.6.1.zip
+COPY gatk-4.2.6.1.zip /opt/
+RUN cd /opt && unzip gatk-4.2.6.1.zip && rm gatk-4.2.6.1.zip
+ENV PATH /opt/gatk-4.2.6.1/:$PATH
+RUN rm /usr/bin/python && ln -s /usr/bin/python3.8 /usr/bin/python
