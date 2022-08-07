@@ -738,7 +738,7 @@ def pipeline():
         vep_plugin_dir=TopVar(value=wf.args.vep_plugin_dir, type='indir'),
         intervals=TopVar(value=wf.args.intervals, type='infile'),
         alleles=TopVar(value=wf.args.alleles, type='infile'),
-        hisatgenotype_db=TopVar(value=wf.args.hisatgenotype_db, type='infile')
+        # hisatgenotype_db=TopVar(value=wf.args.hisatgenotype_db, type='infile')
     )
     wf.add_topvars(top_vars)
 
