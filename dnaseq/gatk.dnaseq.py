@@ -1128,7 +1128,7 @@ def pipeline():
         args['vcf'].value = hard_filter_task.outputs['out']
         scattered_tasks.append(make_site_only_task)
 
-    gather_vcf_task, args = wf.add_task(MergeVcfs('Joint.raw'), tag='Joint', depends=scattered_tasks)
+    gather_vcf_task, args = wf.add_task(MergeVcfs('Joint.SiteOnly'), tag='Joint', depends=scattered_tasks)
     args['inputs'].value = [x.outputs['out'] for x in scattered_tasks]
     gather_vcf_task.outputs['out'].report = True
 
