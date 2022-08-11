@@ -5,6 +5,13 @@ from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
+"""references:
+## https://github.com/gatk-workflows/gatk4-data-processing/tree/2.1.1
+## https://github.com/gatk-workflows/gatk4-germline-snps-indels
+## https://github.com/broadinstitute/warp/blob/develop/pipelines/broad/dna_seq/germline/joint_genotyping/JointGenotyping.wdl
+## https://github.com/broadinstitute/warp/blob/develop/tasks/broad/JointGenotypingTasks.wdl
+"""
+
 
 def fastp():
     cmd = Command()
