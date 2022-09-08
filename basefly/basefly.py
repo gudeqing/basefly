@@ -675,6 +675,15 @@ class Workflow:
                     print('Failed to found expected output: ', src_dir)
 
     def dump_args(self, out='arguments.json'):
+        """
+        该函数的目的是为了输出流程中每个步骤的参数json文件，方便客户后续修改参数
+        如果一个command被调用多次，则仅记录第一次被调用的参数，如下参数的赋值不会输出：
+        1. 没有默认值的必须参数
+        2. 输入参数
+        3. 固定参数
+        :param out:
+        :return:
+        """
         cmd_names = set()
         arg_value_dict = dict()
         for tid, task in self.tasks.items():
@@ -694,8 +703,8 @@ class Workflow:
         with open(out, 'w') as f:
             json.dump(arg_value_dict, f, indent=2)
 
-    def update_args(self, cfg_file):
-        with open(cfg_file) as f:
+    def update_args(self, arg_json_file):
+        with open(arg_json_file) as f:
             cfg = json.load(f)
         for tid, task in self.tasks.items():
             for arg_name, arg in task.cmd.args.items():
