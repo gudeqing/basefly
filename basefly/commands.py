@@ -33,29 +33,28 @@ name: 定义命令行的名称，会参与具体task的name的形成，建议组
 """
 
 
-def fastp(sample):
+def fastp():
     cmd = Command()
     cmd.meta.name = 'fastp'
-    # cmd.runtime.image = 'gudeqing/fastp:0.21.0'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.image = 'gudeqing/fastp:latest'
     cmd.runtime.tool = 'fastp'
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
-    cmd.args['read2'] = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
+    cmd.args['read2'] = Argument(prefix='-I ', type='infile', level='optional', desc='read2 fastq file')
     cmd.args['threads'] = Argument(prefix='-w ', default=7, desc='thread number')
     cmd.args['other_args'] = Argument(prefix='', default='', desc="other arguments you want to use, such as '-x val'")
-    cmd.args['out1'] = Argument(prefix='-o ', value=TmpVar(value=f'{sample}.clean.R1.fq.gz', name='~{sample}.clean.R1.fq.gz'), type='str', desc='clean read1 output fastq file')
-    cmd.args['out2'] = Argument(prefix='-O ', value=TmpVar(value=f'{sample}.clean.R2.fq.gz', name='~{sample}.clean.R2.fq.gz'), type='str', desc='clean read2 output fastq file')
-    cmd.args['html'] = Argument(prefix='-h ', value=TmpVar(value=f'{sample}.fastp.html', name='~{sample}.fastp.html'), type='str', desc='html report file')
-    cmd.args['json'] = Argument(prefix='-j ', value=TmpVar(value=f'{sample}.fastp.json', name='~{sample}.fastp.json') , type='str', desc='html report file')
-    # 下面的outputs设置起初是为了能够生成wdl设置,
-    cmd.outputs['out1'] = Output(value="{out1}", type='outfile')  # 这里使用”{}“引用其他Argument对象作为输入
+    cmd.args['out1'] = Argument(prefix='-o ', type='str', desc='clean read1 output fastq file')
+    cmd.args['out2'] = Argument(prefix='-O ', level='optional', type='str', desc='clean read2 output fastq file')
+    cmd.args['html'] = Argument(prefix='-h ', type='str', desc='html report file')
+    cmd.args['json'] = Argument(prefix='-j ', type='str', desc='json report file')
+    # 定义输出
+    cmd.outputs['out1'] = Output(value="{out1}")  # 这里使用”{}“引用其他Argument对象作为输入
     cmd.outputs['out2'] = Output(value="{out2}")
     cmd.outputs['html'] = Output(value="{html}")
     cmd.outputs['json'] = Output(value="{json}")
     return cmd
 
 
-def bwa_mem(sample, platform):
+def sentieon_bwa_mem(sample, platform):
     cmd = Command()
     cmd.meta.name = 'bwa_mem'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -75,7 +74,7 @@ def bwa_mem(sample, platform):
     return cmd
 
 
-def get_metrics(sample):
+def sentieon_get_metrics(sample):
     cmd = Command()
     cmd.meta.name = 'get_metrics'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -99,7 +98,7 @@ def get_metrics(sample):
     return cmd
 
 
-def plot_metrics(sample, method='GCBias'):
+def sentieon_plot_metrics(sample, method='GCBias'):
     cmd = Command()
     cmd.meta.name = f'plot{method}'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -111,7 +110,7 @@ def plot_metrics(sample, method='GCBias'):
     return cmd
 
 
-def locus_collector(sample):
+def sentieon_locus_collector(sample):
     cmd = Command()
     cmd.meta.name = 'LocusCollector'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -123,7 +122,7 @@ def locus_collector(sample):
     return cmd
 
 
-def dedup(sample):
+def sentieon_dedup(sample):
     cmd = Command()
     cmd.meta.name = 'DeDup'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -139,7 +138,7 @@ def dedup(sample):
     return cmd
 
 
-def coverage_metrics(sample):
+def sentieon_coverage_metrics(sample):
     cmd = Command()
     cmd.meta.name = 'CoverageMetrics'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -153,7 +152,7 @@ def coverage_metrics(sample):
     return cmd
 
 
-def realign(sample):
+def sentieon_realign(sample):
     cmd = Command()
     cmd.meta.name = 'realign'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -168,7 +167,7 @@ def realign(sample):
     return cmd
 
 
-def recalibration(sample):
+def sentieon_recalibration(sample):
     cmd = Command()
     cmd.meta.name = 'recalibration'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -184,7 +183,7 @@ def recalibration(sample):
     return cmd
 
 
-def TNhaplotyper2(tumor_sample):
+def sentieon_TNhaplotyper2(tumor_sample):
     cmd = Command()
     cmd.meta.name = 'TNhaplotyper2'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -218,7 +217,7 @@ def TNhaplotyper2(tumor_sample):
     return cmd
 
 
-def TNfilter(tumor_sample):
+def sentieon_TNfilter(tumor_sample):
     cmd = Command()
     cmd.meta.name = 'TNfilter'
     cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
@@ -236,7 +235,7 @@ def TNfilter(tumor_sample):
     return cmd
 
 
-def Haplotyper(sample):
+def sentieon_Haplotyper(sample):
     cmd = Command()
     cmd.meta.name = 'Haplotyper'
     cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02'
@@ -257,7 +256,7 @@ def Haplotyper(sample):
     return cmd
 
 
-def GVCFtyper(normal_sample):
+def sentieon_GVCFtyper(normal_sample):
     cmd = Command()
     cmd.meta.name = 'GVCFtyper'
     cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02'
