@@ -391,6 +391,7 @@ def hisat_genotype():
     cmd = Command()
     cmd.meta.name = 'HisatGenotype'
     cmd.meta.desc = " HLA-typing using hisat"
+    cmd.meta.source = 'https://github.com/DaehwanKimLab/hisat-genotype'
     cmd.runtime.image = ''
     cmd.runtime.tool = 'hisatgenotype'
     cmd.runtime.cpu = 6
@@ -731,7 +732,7 @@ def arcas_hla(threads=4):
     return cmd
 
 
-def quant_merge():
+def salmon_quant_merge():
     cmd = Command()
     cmd.meta.name = 'quantMerge'
     cmd.meta.desc = 'Merge multiple quantification results into a single file'
@@ -1231,6 +1232,76 @@ def comet():
     cmd.args['index'] = Argument(prefix='-i', type='bool', default=False, desc='specify the first/start scan to search, overriding entry in parameters file')
     cmd.args['input_files'] = Argument(prefix='', type='infile', desc='input files')
     # 由于结果生成在输入数据的目录,没有办法更改, 所以这里没有输出文件
+    return cmd
+
+
+def mixcr_shotgun():
+    cmd = Command()
+    cmd.meta.name = 'mixcr'
+    cmd.meta.desc = 'MiXCR is a universal software for fast and accurate analysis of raw T- or B- cell receptor repertoire sequencing data.'
+    cmd.meta.source = "https://github.com/milaboratory/mixcr"
+    cmd.runtime.image = '?'
+    cmd.runtime.memory = "5*1024**3"
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'mixcr analyze shotgun'
+    cmd.args['species'] = Argument(prefix='--species ', default='hsa', desc="Possible values: hsa (or HomoSapiens), mmu (or MusMusculus), rat, spalax, alpaca, lamaGlama, mulatta (Macaca Mulatta), fascicularis (Macaca Fascicularis) or any species from IMGT ® library")
+    cmd.args['material'] = Argument(prefix='--starting-material ', default='rna', desc='Starting material. Possible values: rna, dna')
+    cmd.args['receptor'] = Argument(prefix='--receptor-type ', level='optional', default='tcr', desc='')
+    cmd.args['contig-assembly'] = Argument(prefix='contig-assembly', type='bool', default=True)
+    cmd.args['threads'] = Argument(prefix='-t ', default=4, desc='threads number')
+    cmd.args['only-productive'] = Argument(prefix='--only-productive', type='bool', default=True, desc='Filter out-of-frame sequences and clonotypes with stop-codons in clonal sequence export')
+    cmd.args['impute-germline-on-export'] = Argument(prefix='--impute-germline-on-export', type='bool', default=True, desc='Impute germline on export')
+    cmd.args['report'] = Argument(prefix='--report ', desc='')
+    cmd.args['read1'] = Argument(prefix='', type='infile', desc='input read1 file')
+    cmd.args['read2'] = Argument(prefix='', type='infile', level='optional')
+    cmd.args['out_prefix'] = Argument(prefix='', desc='output prefix')
+    cmd.outputs['report'] = Output(value='{report}')
+    cmd.outputs['TRAD'] = Output(value='{out_prefix}.clonotypes.TRAD.tsv')
+    cmd.outputs['TRB'] = Output(value='{out_prefix}.clonotypes.TRB.tsv')
+    cmd.outputs['IGH'] = Output(value='{out_prefix}.clonotypes.IGH.tsv')
+    cmd.outputs['IGK'] = Output(value='{out_prefix}.clonotypes.IGk.tsv')
+    cmd.outputs['IGL'] = Output(value='{out_prefix}.clonotypes.IGL.tsv')
+    return cmd
+
+
+def quantiseq():
+    cmd = Command()
+    cmd.meta.name = 'quantiseq'
+    cmd.meta.desc = 'quanTIseq is a computational pipeline for the quantification of the Tumor Immune contexture from human RNA-seq data'
+    cmd.meta.source = "https://github.com/icbi-lab/quanTIseq"
+    cmd.runtime.image = '?'
+    cmd.runtime.memory = "3*1024**3"
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'Rscript /opt/quantiseq/deconvolution/quanTIseq_decon.R'
+    cmd.args['expr'] = Argument(prefix='', type='infile', desc='gene expression matrix')
+    cmd.args['_outdir'] = Argument(prefix='', default='.', desc='output directory')
+    cmd.args['_fix'] = Argument(prefix='', default='TRUE')
+    cmd.args['arrays'] = Argument(prefix='', default='FALSE', desc='specifies whether expression data are from microarrays (instead of RNA-seq)')
+    cmd.args['signature'] = Argument(prefix='', default='TIL10', desc='signature matrix file')
+    cmd.args['is_tumor'] = Argument(prefix='', default='TRUE', desc='specifies whether expression data are from tumor samples. If TRUE, signature genes with high expression in tumor samples are removed')
+    cmd.args['scale'] = Argument(prefix='', default='TRUE', desc='specifies whether cell fractions must be scaled to account for cell-type-specific mRNA content')
+    cmd.args['method'] = Argument(prefix='', default='lsei', desc='deconvolution method to be used: "hampel", "huber", or "bisquare" for robust regression with Huber, Hampel, or Tukey bisquare estimators, respectively, or "lsei" for constrained least squares regression. The fraction of uncharacterized cells ("other") is computed only by the "lsei" method, which estimates cell fractions referred to the total cells in the sample under investigation.')
+    cmd.args['prefix'] = Argument(prefix='', desc='prefix of the output files')
+    cmd.args['totalcells'] = Argument(prefix='', default='FALSE', desc='path to a tab-separated text file containing the total cell densities estimated from images of tumor tissue-slides. The file must have no header and contain, on; the first column, the sample IDs, and on the second column, and the number of total; cells per mm2 estimated from tumor images, e.g. from images of haematoxylin and eosin (H&E)-stained tissue slides.')
+    cmd.args['rmgenes'] = Argument(prefix='', default='unassigned', desc='specifies which genes must be removed from the signature matrix before running deconvolution.')
+    cmd.outputs['out'] = Output(value='{prefix}_cell_fractions.txt')
+    return cmd
+
+
+def pMTnet():
+    cmd = Command()
+    cmd.meta.name = 'pMTnet'
+    cmd.meta.desc = "Deep learning neural network prediction tcr binding specificity to peptide and HLA based on peptide sequences. Please refer to our paper for more details: 'Deep learning-based prediction of T cell receptor-antigen binding specificity.'(https://www.nature.com/articles/s42256-021-00383-2)"
+    cmd.meta.source = "https://github.com/tianshilu/pMTnet"
+    cmd.runtime.image = ''
+    cmd.runtime.memory = "3*1024**3"
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'python /opt/pMTnet/pMTnet.py'
+    cmd.args['input'] = Argument(prefix='-input ', type='infile', desc=' input csv file with 3 columns named as "CDR3,Antigen,HLA": TCR-beta CDR3 sequence, peptide sequence, and HLA allele.')
+    cmd.args['library'] = Argument(prefix='-library', type='indir', default='/opt/pMTnet/library', desc=' diretory to the downloaded library with trained models, hla sequences, background TCR sequences, and Atchley Factors table.')
+    cmd.args['outdir'] = Argument(prefix='-output ', default='.', desc='diretory you want to save the output')
+    cmd.args['outlog'] = Argument(prefix='-output_log', default='output.log', desc='log')
+    cmd.outputs['out'] = Output(value='{outdir}/prediction.csv')
     return cmd
 
 
