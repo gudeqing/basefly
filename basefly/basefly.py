@@ -247,7 +247,10 @@ class Command:
             else:
                 if arg_value is not None:
                     if not arg.multi_times:
-                        cmd += ' ' + arg.prefix + str(arg_value)
+                        if '{}' not in arg.prefix:
+                            cmd += ' ' + arg.prefix + str(arg_value)
+                        else:
+                            cmd += ' ' + arg.prefix.format(arg_value)
                     else:
                         cmd += ' ' + arg.prefix + (' ' + arg.prefix).join(arg_value)
         return cmd
@@ -277,7 +280,7 @@ class Command:
                             mount_vols.add(os.path.abspath(file_dir))
                         elif value.type == 'indir':
                             mount_vols.add(os.path.abspath(value.value))
-                    elif  (type(value) == str) and (v.type in ['infile', 'indir']):
+                    elif (type(value) == str) and (v.type in ['infile', 'indir']):
                         if v.type == 'infile':
                             mount_vols.add(os.path.abspath(os.path.dirname(value)))
                         elif v.type == 'indir':
@@ -444,6 +447,11 @@ class Workflow:
         task = Task(cmd=cmd, depends=depends.copy(), name=name, tag=tag, parent_wkdir=parent_wkdir)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
+
+    def get_task_by_name(self, matcher):
+        for task_id, task in self.tasks.items():
+            if task.name.startswith(matcher):
+                return task
 
     def to_wdl_tasks(self, outfile=None):
         # 输出每一个Command的WDL版本
