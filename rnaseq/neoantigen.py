@@ -317,7 +317,7 @@ def pipeline():
                 args['param_file'].value = wf.args.comet_params
                 args['database'].value = filterMHC1_task.outputs['out_faa']
                 args['input_files'].value = convert2mgf_task.outputs['out_files']
-                # 不做MHC2类的，输出的结果会覆盖params文件，没有想到好的解决方案，除非对输入param文件进行修改，即修改输出文件的前缀
+                # 不做MHC2类的预测
 
             # mhcflurry prediction for MHC-1
             mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor_sample, depends=[filterMHC1_task])
@@ -390,20 +390,19 @@ def pipeline():
         args['tmap'].value = tumor_assemble_task.outputs['tmap']
         args['gtf'].value = tumor_gffcompare_task.outputs['annotated_gtf']
         if convert2mgf_task is not None:
-            args['comet_results'].value = convert2mgf_task.outputs['comet_outs']
+            args['comet_results'].value = ms_search_task.outputs['out']
         args['out'].value = tumor_sample + '.annotated.mhcflurry.csv'
 
         # annotate result of netMHCpanII
         if netmhcpanii_task is not None:
-            annotNetMHCPan, args = wf.add_task(annotate_netMHCPan_result(), tag=tumor_sample,
-                                               depends=[netmhcpanii_task, find_novel_peptide_task, tumor_assemble_task, tumor_gffcompare_task])
+            annotNetMHCPan, args = wf.add_task(annotate_netMHCPan_result(), tag=tumor_sample, depends=[netmhcpanii_task, find_novel_peptide_task, tumor_assemble_task, tumor_gffcompare_task])
             args['net_file'].value = netmhcpanii_task.outputs['out']
             args['pep2id_file'].value = find_novel_peptide_task.outputs['mhc2_txt']
             args['tmap'].value = tumor_assemble_task.outputs['tmap']
             args['gtf'].value = tumor_gffcompare_task.outputs['annotated_gtf']
-            if convert2mgf_task is not None:
-                # 因为没有对二类的peptide进行comet搜索，下面的注释没有意义，
-                args['comet_results'].value = convert2mgf_task.outputs['comet_outs']
+            # if convert2mgf_task is not None:
+            #     # 因为没有对二类的peptide进行comet搜索，下面的注释没有意义，
+            #     args['comet_results'].value = convert2mgf_task.outputs['comet_outs']
             args['out'].value = tumor_sample + '.annotated.netMHCPanII.txt'
 
     wf.run()

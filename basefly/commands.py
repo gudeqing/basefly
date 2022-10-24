@@ -683,7 +683,7 @@ def star_fusion():
     return cmd
 
 
-def collect_metrics(sample):
+def CollectRnaSeqMetrics(sample):
     """
     picard to collect rnaseq metrics
     """
@@ -729,6 +729,7 @@ def arcas_hla(threads=4):
     cmd.args['_3'] = Argument(value=f'--min_count 75 -t {threads} -o ./ *.1.fq.gz *.2.fq.gz &&', type='fix')
     cmd.args['_4'] = Argument(value='arcasHLA merge', type='fix')
     cmd.outputs['hla_genotype'] = Output(value='*.genotype.json')
+    cmd.outputs['hla_genotype_tsv'] = Output(value='genotypes.tsv')
     return cmd
 
 
@@ -1181,7 +1182,8 @@ def netMHCIIPan():
     cmd.args['BA'] = Argument(prefix='-BA', type='bool', default=False, desc='Include BA predictions, default is EL only')
     cmd.args['context'] = Argument(prefix='-context', type='bool', default=False, desc='Predict with context encoding')
     cmd.args['tdir'] = Argument(prefix='-tdir ', default='.', desc='Temporary directory')
-    cmd.args['alleles'] = Argument(prefix='-a ', array=True, delimiter=',', desc='HLA allele')
+    cmd.args['alleles'] = Argument(prefix='-a ', array=True, level='optional', delimiter=',', desc='HLA allele list')
+    cmd.args['alleles_file'] = Argument(prefix='-a $(cat {})', type='infile', level='optional', desc='A file which only contains one line such as "HLA-A,HLA-B,HLA-C"')
     cmd.args['inptype'] = Argument(prefix='-inptype ', range=['0', '1'], default='0', desc='Input type [0] FASTA [1] Peptide')
     cmd.args['rankS'] = Argument(prefix='-rankS ', default=1.0, desc='Threshold for strong binders (%Rank)')
     cmd.args['rankW'] = Argument(prefix='-rankW ', default=5.0, desc='Threshold for weak binders (%Rank)')
@@ -1211,7 +1213,6 @@ def raw2mgf_with_rawtools():
     cmd.args['m'] = Argument(prefix='-m', type='bool', default=True, desc='Writes a standard MGF file')
     cmd.args['outdir'] = Argument(prefix='-o ', default='.', desc='The directory in which to write output. Can be a relative or absolute path to the directory')
     cmd.outputs['out_files'] = Output(value='*.mgf')
-    cmd.outputs['comet_outs'] = Output(value='*.raw.txt')
     return cmd
 
 
@@ -1222,23 +1223,24 @@ def comet():
     cmd.meta.version = '2021.02.0'
     cmd.meta.desc = "Comet is an open source tandem mass spectrometry (MS/MS) sequence database search tool released under the Apache 2.0 license."
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
-    cmd.runtime.tool = '/opt/comet/comet.linux.exe'
+    cmd.runtime.tool = ''
     cmd.runtime.cpu = 4
     cmd.runtime.memory = 5 * 1024 ** 3
-    cmd.args['param_file'] = Argument(prefix='-P', desc='parameters file')
+    cmd.args['input_files'] = Argument(prefix='ln -s {} .', type='infile', desc='input files, 要求是mgf格式的，为了让结果输出到当前目录，先将输入文件软链接到当前目录')
+    cmd.args['param_file'] = Argument(prefix='&& /opt/comet/comet.linux.exe -P', desc='parameters file')
     cmd.args['database'] = Argument(prefix='-D', desc='a sequence database, overriding entry in parameters file')
     cmd.args['F'] = Argument(prefix='-F', level='optional', type='int', desc='specify the First/start scan to search, overriding entry in parameters file')
     cmd.args['L'] = Argument(prefix='-L', level='optional', type='int', desc='specify the Last/end scan to search, overriding entry in parameters file')
     cmd.args['index'] = Argument(prefix='-i', type='bool', default=False, desc='specify the first/start scan to search, overriding entry in parameters file')
-    cmd.args['input_files'] = Argument(prefix='', type='infile', desc='input files')
-    # 由于结果生成在输入数据的目录,没有办法更改, 所以这里没有输出文件
+    cmd.args['_input_files'] = Argument(prefix='', type='fix', value='*.mgf', desc='linked input files for comet')
+    cmd.outputs['out'] = Output(value='*.raw.txt')
     return cmd
 
 
 def mixcr_shotgun():
     cmd = Command()
     cmd.meta.name = 'mixcr'
-    cmd.meta.desc = 'MiXCR is a universal software for fast and accurate analysis of raw T- or B- cell receptor repertoire sequencing data.'
+    cmd.meta.desc = 'MiXCR is a universal software for fast and accurate analysis of raw T- or B- cell receptor repertoire sequencing data. https://docs.milaboratories.com/mixcr/reference/mixcr-analyze/#generic-non-targeted-shotgun-data-rna-seq'
     cmd.meta.source = "https://github.com/milaboratory/mixcr"
     cmd.runtime.image = '?'
     cmd.runtime.memory = "5*1024**3"
@@ -1272,8 +1274,9 @@ def quantiseq():
     cmd.runtime.image = '?'
     cmd.runtime.memory = "3*1024**3"
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'Rscript /opt/quantiseq/deconvolution/quanTIseq_decon.R'
-    cmd.args['expr'] = Argument(prefix='', type='infile', desc='gene expression matrix')
+    # 我们期望用salmon的输出作为输入，因此signature的基因名称必须都转化成相应的基因ID才能正常工作
+    cmd.args['expr'] = Argument(prefix='cut -f1,4 {} > input_expr.txt &&', type='infile', desc='input gene expression file')
+    cmd.args['_expr'] = Argument(prefix='Rscript /opt/quantiseq/deconvolution/quanTIseq_decon.R ', type='fix', value='input_expr.txt', desc='gene expression matrix')
     cmd.args['_outdir'] = Argument(prefix='', default='.', desc='output directory')
     cmd.args['_fix'] = Argument(prefix='', default='TRUE')
     cmd.args['arrays'] = Argument(prefix='', default='FALSE', desc='specifies whether expression data are from microarrays (instead of RNA-seq)')
@@ -1297,11 +1300,42 @@ def pMTnet():
     cmd.runtime.memory = "3*1024**3"
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python /opt/pMTnet/pMTnet.py'
-    cmd.args['input'] = Argument(prefix='-input ', type='infile', desc=' input csv file with 3 columns named as "CDR3,Antigen,HLA": TCR-beta CDR3 sequence, peptide sequence, and HLA allele.')
+    cmd.args['input'] = Argument(prefix='-input ', type='infile', desc='input csv file with 3 columns named as "CDR3,Antigen,HLA": TCR-beta CDR3 sequence, peptide sequence, and HLA allele.')
     cmd.args['library'] = Argument(prefix='-library', type='indir', default='/opt/pMTnet/library', desc=' diretory to the downloaded library with trained models, hla sequences, background TCR sequences, and Atchley Factors table.')
     cmd.args['outdir'] = Argument(prefix='-output ', default='.', desc='diretory you want to save the output')
     cmd.args['outlog'] = Argument(prefix='-output_log', default='output.log', desc='log')
     cmd.outputs['out'] = Output(value='{outdir}/prediction.csv')
+    return cmd
+
+
+def GTF2RefFlat():
+    cmd = Command()
+    cmd.meta.name = 'GTF2RefFlat'
+    cmd.meta.desc = 'use gtfToGenePred to convert gtf to ref_flat for CollectRnaSeqMetrics'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.memory = 2 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.args['gtf'] = Argument(prefix="""awk '{ if ($0 ~ "transcript_id") print $0; else print $0" transcript_id \"?\";"; } '""", type='infile', desc='GTF file')
+    cmd.args['_f'] = Argument(prefix='', type='fix', value='> tidy.gtf')
+    cmd.args['_f2'] = Argument(prefix='', type='fix', value='&& gtfToGenePred -genePredExt tidy.gtf gtf.ref_flat.txt -ignoreGroupsWithoutExons')
+    cmd.args['_f3'] = Argument(prefix='', type='fix', value="""&& cat gtf.ref_flat.txt | awk '{print $12"\t"$0}' | cut -d$'\t' -f1-11 > tmp.txt""")
+    cmd.args['_f4'] = Argument(prefix='', type='fix', value="&& mv tmp.txt gtf.ref_flat.txt")
+    cmd.outputs['out'] = Output(value='gtf.ref_flat.txt')
+    return cmd
+
+
+def GTF2rRNAInterval():
+    cmd = Command()
+    cmd.meta.name = 'GTF2rRNAInterval'
+    cmd.meta.desc = 'use gff2bed and picard to extract ribosome RNA bed interval from GTF for picard CollectRnaSeqMetrics'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.runtime.memory = 2 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.args['gtf'] = Argument(prefix='grep "rRNA" ', type='infile', desc='GTF file')
+    cmd.args['_f'] = Argument(prefix='', type='fix', value='> ref_ribosome.gtf && gff2bed < ref_ribosome.gtf > ref_ribosome.bed')
+    cmd.args['genome_dict'] = Argument(prefix='java -jar /usr/picard/picard.jar BedToIntervalList -I ref_ribosome.bed -O ref_ribosome.bed.interval_list -SD ', type='infile', desc='reference genome dict file')
+    cmd.outputs['out_interval_list'] = Output(value='ref_ribosome.bed.interval_list')
+    cmd.outputs['out_bed'] = Output(value='ref_ribosome.bed')
     return cmd
 
 

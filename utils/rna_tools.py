@@ -1,5 +1,8 @@
+import json
 import os
 import csv
+import xml.sax
+
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from functools import reduce
@@ -11,7 +14,7 @@ from utils.gtfparser import GTF
 import statistics
 
 """
-这里包含的工具是用于rnaseq分析的
+这里包含的函数是在写rnaseq流程的过程中产生的
 """
 
 
@@ -260,20 +263,54 @@ def segment_peptides(pep_dict:dict, length=(8, 11)):
     return result
 
 
-def find_potential_intron_peptides(tumor_gtf, ref_gtf, tumor_transdecoder_pep, normal_transdecoder_pep, out_prefix,
+def get_2digits_hla_genotype(table, sample=None, alleles=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2')):
+    """input table is output of arcasHLA or merge_hisat_genotype, 即行名为样本名称, 而单元格值为HLA定型结果"""
+    df = pd.read_table(table, index_col=0, header=0)
+    targets = list()
+    if sample is None:
+        sample = df.index[0]
+
+    for each in df.loc[sample]:
+        if '|' in each:
+            # 假设table是merge_hisat_genotype的结果, 如"A*02:07|A*11:02"
+            a, b = each.split('|')[:2]
+        else:
+            # 假设table中的单元格值是形如"A*02:07"
+            a, b = each, ''
+        if a.startswith(alleles):
+            allele_2_digit = ':'.join(a.split(':')[:2])
+            if allele_2_digit not in targets:
+                if allele_2_digit.startswith(('A*', 'B*', 'C*', 'E*', 'F*', 'G*')):
+                    allele_2_digit = 'HLA-' + allele_2_digit
+                targets.append(allele_2_digit)
+        if b.startswith(alleles):
+            allele_2_digit = ':'.join(b.split(':')[:2])
+            if allele_2_digit not in targets:
+                if allele_2_digit.startswith(('A*', 'B*', 'C*', 'E*', 'F*', 'G*')):
+                    allele_2_digit = 'HLA-' + allele_2_digit
+                targets.append(allele_2_digit)
+    return sorted(set(targets))
+
+
+def find_potential_intron_peptides(tumor_gtf, ref_gtf, tumor_transdecoder_pep, normal_transdecoder_pep=None, out_prefix='sample',
                                    mhc1_pep_len=(8, 11), mhc2_pep_len=(12, 18), ignore_novel_transcript=True,
-                                   alleles:tuple=('HLA-A', 'HLA-B')):
+                                   alleles:tuple=('A', 'B', 'C'), alleles_file=None, sample_id=None):
     """
     :param tumor_gtf: 使用gffcompare注释过的gtf，是过滤后的gtf
     :param ref_gtf: 参考基因组的gtf
     :param tumor_transdecoder_pep: 基于tumor_gtf，使用transdecoder预测的pep文件
-    :param normal_transdecoder_pep: 基于normal_gtf，使用transdecoder预测的pep文件
-    :param out_prefix:
-    :param pep_len: 肽段长度范围，闭区间
-    :param ignore_novel_transcript: 是否忽略全新转录本
-    :param alleles: HLA基因型，用于制作MHCflurry的输入
+    :param normal_transdecoder_pep: 基于normal_gtf，使用transdecoder预测的pep文件, 可以为None
+    :param out_prefix: 输出文件前缀名
+    :param pep_len: 要切割的肽段长度范围，闭区间
+    :param ignore_novel_transcript: 是否忽略全新转录本，默认忽略调全新转录本可能产生的肽段
+    :param alleles: HLA定型后的具体值列表，用于制作MHCflurry【只能预测MHC-I类】的输入；如果提供了alleles_file则可忽略
+    :param alleles_file: 记录HLA定型结果的文件，比如arcasHLA的输出tsv文件或者merge_hisat_genotype的结果文件
     :return:
     """
+    if alleles_file:
+        # 获取alleles信息用于形成mhcflurry的输入
+        alleles = get_2digits_hla_genotype(alleles_file, sample=sample_id, alleles=('A', 'B', 'C'))
+
     # 获得肿瘤组织的结果
     retained_intron_interval_dict = get_retained_intron_interval(tumor_gtf, ref_gtf)
     t_intron_pep, t_novel_pep = get_retained_intron_peptide(tumor_transdecoder_pep, out_prefix=out_prefix+'.tumor',
@@ -286,9 +323,12 @@ def find_potential_intron_peptides(tumor_gtf, ref_gtf, tumor_transdecoder_pep, n
     # n_intron_pep, n_novel_pep = get_retained_intron_peptide(normal_transdecoder_pep, out_prefix=out_prefix+'.normal',
     #                                                         intron_interval_dict=retained_intron_interval_dict)
     # 对于正常组织，将所有新转录本对应的完整的蛋白质都进行切割
-    n_intron_pep = n_novel_pep = {k:v['pep'] for k, v in parse_transdecoder_pep(normal_transdecoder_pep).items()}
+    if normal_transdecoder_pep:
+        n_intron_pep = n_novel_pep = {k: v['pep'] for k, v in parse_transdecoder_pep(normal_transdecoder_pep).items()}
+    else:
+        n_intron_pep = n_novel_pep = dict()
 
-    # 获得肿瘤特异性的
+        # 获得肿瘤特异性的
     if not ignore_novel_transcript:
         t_intron_pep.update(t_novel_pep)
         n_intron_pep.update(n_novel_pep)
@@ -408,7 +448,13 @@ def check_and_convert_alleles_for_MixMHC2Pred(alleles:tuple):
     return result
 
 
-def check_and_convert_alleles_for_netMHCIIpan4(alleles:tuple, support_list=None):
+def check_and_convert_alleles_for_netMHCIIpan4(alleles:tuple=None, alleles_file=None, sample_id=None, support_list=None):
+    if alleles_file:
+        # 获取alleles信息用于形成mhcflurry的输入
+        alleles = get_2digits_hla_genotype(alleles_file, sample=sample_id,
+                                           alleles=('DRA', 'DRB1', 'DRB3', 'DRB4', 'DRB5', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'))
+
+    # 获取netMHCIIflurry所支持的输入
     support_list = support_list or os.path.join(os.path.dirname(__file__), 'netMHCIIpan-4.1.supported.MHC.genes.txt')
     ref_dict = dict()
     with open(support_list) as fr:
@@ -435,10 +481,12 @@ def check_and_convert_alleles_for_netMHCIIpan4(alleles:tuple, support_list=None)
 
     if not result:
         print('this sample has the following genes', alleles)
-        print('No valid HLA combination availale for netMHCIIpan4')
+        print('No valid HLA combination available for netMHCIIpan4')
     else:
         print('input alleles are', alleles)
         print('output alleles are', result)
+    with open('valid_netMHCIIpan4_input_alleles.list', 'w') as f:
+        f.write(','.join(result)+'\n')
     return result
 
 
@@ -565,6 +613,21 @@ def annotate_netMHCpan_result(net_file, pep2id_file, tmap, gtf, out, comet_resul
         data['mean_ions_total'] = [statistics.mean(ions_dict[x]) if x in ions_dict else 0 for x in data['source_id']]
 
     data.to_csv(out, index=False, sep='\t')
+
+
+def prepare_pMTnet_input(mixcr_trb, antigen_seq, hla_file, out='pMTnet.input.txt', alleles:tuple=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2')):
+    from itertools import product
+    trb = pd.read_table(mixcr_trb, header=0)
+    trb_aa = set(trb['AA.seq.CDR3'])
+    with open(antigen_seq) as f:
+        antigen_seq = set(x.strip() for x in f if not x.startswith('>'))
+    hla_lst = get_2digits_hla_genotype(hla_file, alleles=alleles)
+    hla_lst = [x[4:] if x.startswith('HLA-') else x for x in hla_lst]
+    with open(out, 'w') as f:
+        f.write(f'CDR3\tAntigen\tHLA\n')
+        for trb, peptide, hla in product(trb_aa, antigen_seq, hla_lst):
+            f.write(f'{trb}\t{peptide}\t{hla}\n')
+    return out
 
 
 if __name__ == '__main__':
