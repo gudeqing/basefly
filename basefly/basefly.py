@@ -341,11 +341,7 @@ class Task:
         for ind, each in enumerate(self.depends):
             if hasattr(each, 'task_id'):
                 self.depends[ind] = each.task_id
-        for ind, each in enumerate(self.depends.copy()):
-            if each is None:
-                self.depends.pop(ind)
-            elif type(each) != UUID:
-                raise Exception(f'valid "depends" for task {self.name} should be UUID object or Task Object!')
+        self.depends = [x for x in self.depends if x is not None]
 
     def argo_template(self, wf_tasks):
         # 仅输入文件需要作处理，其他参数如数字或字符串已经在command中硬编码好了
@@ -452,6 +448,7 @@ class Workflow:
         for task_id, task in self.tasks.items():
             if task.name.startswith(matcher):
                 return task
+        raise Exception(f'cannot found task {matcher}')
 
     def to_wdl_tasks(self, outfile=None):
         # 输出每一个Command的WDL版本
