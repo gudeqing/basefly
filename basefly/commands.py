@@ -1044,7 +1044,7 @@ def mhcflurry_predict():
     cmd.args['out'] = Argument(prefix='--out ', desc='output csv')
     cmd.args['no-throw'] = Argument(prefix='--no-throw', type='bool', default=False, desc='Return NaNs for unsupported alleles or peptides instead of raising')
     cmd.args['always-include-best-allele'] = Argument(prefix='--always-include-best-allele', type='bool', default=False, desc='Always include the best_allele column even when it is identical to the allele column (i.e. all queries are monoallelic)')
-    cmd.args['models'] = Argument(prefix='--models ', type='indir', desc='Directory containing models. Either a binding affinity predictor or a presentation predictor can be used.')
+    cmd.args['models'] = Argument(prefix='--models ', type='indir', level='optional', desc='Directory containing models. Either a binding affinity predictor or a presentation predictor can be used.')
     cmd.args['affinity-only'] = Argument(prefix='--affinity-only', type='bool', default=False, desc='Affinity prediction only (no antigen processing or presentation)')
     cmd.args['no-flanking'] = Argument(prefix='--no-flanking', type='bool', default=False, desc='Do not use flanking sequence information even when available')
     cmd.outputs['out'] = Output(value='{out}')

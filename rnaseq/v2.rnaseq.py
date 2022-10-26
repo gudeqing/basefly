@@ -11,23 +11,55 @@ from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
 """
-本次优化的目标：
-1. 尽量减少输入
-2. 增加更多的分析内容：免疫细胞比例分析(yes)，TCR分析(yes)，新抗原分析(加油）
+to do list:
 3. 引入输出数据库的概念，目前考虑使用mongodb
 4. 定义输出结果的标准元数据
-最终有的功能：
-输入bulk RNA-seq数据, 可以接收配对的数据
-0. 和参考基因组比对
-1. 表达定量
-2. HLA定型,如果有配对的正常样本，将用正常样本的定型结果作为后续处理的输入
-3. 融合鉴定
-4. TCR分析
-5. 转录本组装
-6. 内含子保留相关新抗原预测:
-    包括和TCR及MHC的结合能力预测, 要允许没有配对的正常测序样本，也要允许有配对样本
 
-重新设计输入，也就是meta字段
+本流程功能
+输入：
+    bulk RNA-seq数据, 可以接收正常对照数据
+过程：
+    0. 使用fastp进行街头信息去除，使用star进行比对
+    1. 使用salmon基于比对结果进行基因和转录本的表达定量
+    2. 使用arcasHLA软件进行HLA定型,如果有配对的正常样本，将用正常样本的定型结果作为后续处理的输入
+    3. 使用STAR-Fusion进行融合基因鉴定
+    4. 使用Mixcr进行TCR分析，可获得CDR3序列
+    5. 使用quantiseq基于基因定量结果进行免疫细胞浸润分析
+    6. 内含子保留相关新抗原预测:
+        1. 使用stringtie进行有参组装得到组装结果gtf文件
+        2. 使用gffcompare比较组装结果gtf和参考基因组的gtf, 得到每条转录本的class_code信息, 使用--strict-match参数
+        3. 根据class_code进行部分过滤
+            a. 排除如下情况对应的转录本
+                class_code = 'c' 其对应的是完全包含于参考转录本外显子区域的新转录本(因为我们关心的是内含子保留相关的新抗原, 所以考虑排除）
+                class_code = 's' 其对应的转录本极有可能是比对错误导致的组装结果
+                class_code = 'p' 其对应的可能是聚合酶跑过头了的产物，但和参考转录本没有任何交集
+                class_code = 'r' 其对应的是有50%碱基在重复区域的转录本, 这要求gffcompare时提供soft masked reference.fa
+                class_code = 'u' 全新转录本，来自基因间区（因为我们关心的是内含子保留相关的新抗原, 所以考虑排除）
+            b. 如果class_code = '=', 则排除【相当于排除参考转录本，保留新转录本】，这要求gffcomapre时，使用--strict-match参数
+            即match code '=' is only assigned when all exon boundaries match; code '~' is assigned for intron chain match or single-exon
+        4. 根据gtf使用gffread提取肿瘤组织的新转录本序列
+        5. 对新转录本编码能力进行预测:
+            b. 预测编码与否：https://rnamining.integrativebioinformatics.me/about（该软件不能给出具体的编码预测，仅预测是否编码）
+            c. 对于具有编码潜能的transcript，进一步使用transdecoder(https://github.com/TransDecoder/TransDecoder)进行pipetide预测
+        6. 对于肿瘤样本，提取出内含子对应（gffcompare会尽量给组装出来的转录本一个最近似的参考转录本，这里的内含子是相对参考转录本而言，即没有落在参考转录本外显子区域）
+            编码的肽段，且前后各延申7个碱基，这样可以得到肿瘤组织的新肽段集合Tumor_IR_Peptide(进行一定长度如[8-11]的切割，保留前后5个氨基酸的flank)
+        7. 如果有正常对照数据，对正常组织也采用3，4，5的处理，最终得到正常组织对应的新转录本的所有肽段集合Normal_New_Peptide
+        8. 得到初步新抗原预测的肽段集合: pre_new_peptide = Tumor_IR_New_Peptide - Normal_New_Peptide
+        9. 最终的新抗原肽段集合：将pre_new_peptide和参考蛋白组进行比对（使用blastp-short)，过滤掉identity=100的peptide后得到最终的final_new_peptide用于后续新抗原预测
+        10. 使用mhcflurry-predict进行MHC-I类新抗原预测
+        11. 使用netMHCPanII进行MHC-II类新抗原预测
+        13. 对预测结果进行注释，如添加表达量和基因等信息
+        14. 使用pMTnet进行TCR和新抗原和HLA的互作预测，该步骤和10，11并行，作为两种新抗原的预测证据
+    7. 如果有赛默飞的质谱数据【从MHC-肽段复合物进行免疫亲和捕获着手，然后提取其中的抗原肽并采用反向高效液相色谱-质谱技术（LC-MS/MS）对其进行分析，从而能鉴定各种细胞上的抗原肽）】，则以预测的新抗原肽段作为参考库，直接进行验证。
+
+输出：
+    基因和转录本的表达量
+    融合基因
+    HLA定型
+    免疫浸润比例
+    TCR clone鉴定（后续可以考虑用vdjtools做克隆多样性分析）
+    新转录本（我们有对新转录本的可编码性进行预测，所以其实可以提取出长链非编码RNA的预测结果）
+    内含子来源新抗原及质谱验证率
 """
 
 
@@ -184,10 +216,9 @@ def pipeline():
     wf.add_argument('-strandness', default='none', help='strandness of the rna-seq library, value could be one of ["none", "rf", "fr"]')
     wf.add_argument('-ctat_genome_lib_build_dir', required=True, help='star-fusion database dir: ctat_genome_lib_build_dir from https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz; In addition, you need to CreateSequenceDictionary for ref_genome.fa')
     wf.add_argument('-hla_db', required=True, help='arcasHLA database, please refer to https://github.com/RabadanLab/arcasHLA')
-    wf.add_argument('-mhcflurry_models', required=True, help='Directory containing models of mhcflurry, https://github.com/openvax/mhcflurry')
     wf.add_argument('-mhc1_genes', default=('A', 'B', 'C'), nargs='+', help='HLA alleles gene list, such as A,B,C')
     wf.add_argument('-mhc2_genes', default=('DRA', 'DRB1', 'DRB3', 'DRB4', 'DRB5', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'), nargs='+', help='HLA alleles gene list, such as DRA(B),DQA(B),DPA(B), 这里并不意味着预测软件能处理这里能提供的所有HLA基因，因此后续结果统计时，应该以实际能用的基因为主')
-    wf.add_argument('-genome_pep', required=False, help='reference proteome fasta file, you may download this file from https://www.gencodegenes.org/')
+    wf.add_argument('-genome_pep', required=False, help='reference proteome fasta file, you may download this file from https://www.gencodegenes.org/. default will use pep file in ctat_genome_lib_build_dir, but you are recommended to use the latest pep from GENCODE to reduce false prediction of neoantigen')
     wf.add_argument('-ms_data', required=False, help='raw thermo MS data information, with two columns, first column is sample id, and the second column is raw data directory')
     wf.add_argument('-comet_params', required=False, help='parameter file for comet, please refer to https://comet-ms.sourceforge.net/parameters/parameters_202101/')
     wf.parse_args()
@@ -195,7 +226,6 @@ def pipeline():
     # add top_vars
     wf.add_topvars(dict(
         fusionIndex=TopVar(value=wf.args.ctat_genome_lib_build_dir, type='indir'),
-        mhcflurry_models=TopVar(value=wf.args.mhcflurry_models, type='indir'),
     ))
     if wf.args.hla_db:
         wf.topvars['hla_database'] = TopVar(value=wf.args.hla_db, type='indir')
@@ -227,8 +257,7 @@ def pipeline():
     pair_dict = dict(pair_list)
 
     # 构建连特异性表示词汇字典
-    picard_strandness = {'none': 'NONE', 'rf': 'SECOND_READ_TRANSCRIPTION_STRAND',
-                         'fr': 'FIRST_READ_TRANSCRIPTION_STRAND'}
+    picard_strandness = {'none': 'NONE', 'rf': 'SECOND_READ_TRANSCRIPTION_STRAND', 'fr': 'FIRST_READ_TRANSCRIPTION_STRAND'}
 
     # 检查ctat_genome_lib_build_dir，方便后面的输入
     expected_files = ['ref_genome.fa.star.idx', 'ref_genome.fa', 'ref_genome.dict', 'ref_annot.cdna.fa', 'ref_annot.gtf']
@@ -241,6 +270,7 @@ def pipeline():
     ref_genome_dict = os.path.join(wf.args.ctat_genome_lib_build_dir, 'ref_genome.dict')
     transcripts = os.path.join(wf.args.ctat_genome_lib_build_dir, 'ref_annot.cdna.fa')
     ref_genome_gtf = os.path.join(wf.args.ctat_genome_lib_build_dir, 'ref_annot.gtf')
+    ref_genome_pep = os.path.join(wf.args.ctat_genome_lib_build_dir, 'ref_annot.pep')
 
     # GTF 转化 为refFlat
     gtf_ref_flat_task, args = wf.add_task(GTF2RefFlat())
@@ -252,11 +282,10 @@ def pipeline():
     args['genome_dict'].value = os.path.abspath(ref_genome_dict)
 
     # 建参考基因组的蛋白库
-    if wf.args.genome_pep:
-        makedb_task, args = wf.add_task(makeblastdb(), tag='refProteome')
-        args['input_file'].value = wf.topvars['genome_pep']
-        args['dbtype'].value = 'prot'
-        args['out'].value = 'refProteome'
+    makedb_task, args = wf.add_task(makeblastdb(), tag='refProteome')
+    args['input_file'].value = wf.topvars['genome_pep'] if 'genome_pep' in wf.topvars else os.path.abspath(ref_genome_pep)
+    args['dbtype'].value = 'prot'
+    args['out'].value = 'refProteome'
 
     # 解析质谱数据路径信息
     ms_data = dict()
@@ -422,49 +451,45 @@ def pipeline():
         args['out_prefix'].value = tumor
         args['alleles_file'].value = hla_task.outputs['hla_genotype_tsv']
 
-        # 和参考蛋白组进行比对后过滤
-        filterMHC1_task = None
-        filterMHC2_task = None
-        if wf.args.genome_pep:
-            # 先和最新的参考蛋白组（假设里面不应该包含肿瘤新抗原肽段）比对，再过滤，最后预测
-            mhc1_blastp_task, args = wf.add_task(blastp(), tag=tumor + 'MHC1', depends=[makedb_task, find_novel_peptide_task])
-            args['query'].value = find_novel_peptide_task.outputs['mhc1_faa']
-            args['task'].value = 'blastp-short'
-            args['db'].value = makedb_task.outputs['out']
-            args['max_target_seqs'].value = 1
-            args['num_threads'].value = 4
-            args['ungapped'].value = True
-            args['comp_based_stats'].value = '0'
-            args['outfmt'].value = 6
-            args['evalue'].value = 1000
-            args['max_hsps'].value = 1
-            args['qcov_hsp_perc'].value = 100
-            args['out'].value = tumor + '.mhc1.blastp.txt'
+        # 先和最新的参考蛋白组（假设里面不应该包含肿瘤新抗原肽段）比对，再过滤，最后预测
+        mhc1_blastp_task, args = wf.add_task(blastp(), tag=tumor + 'MHC1', depends=[makedb_task, find_novel_peptide_task])
+        args['query'].value = find_novel_peptide_task.outputs['mhc1_faa']
+        args['task'].value = 'blastp-short'
+        args['db'].value = makedb_task.outputs['out']
+        args['max_target_seqs'].value = 1
+        args['num_threads'].value = 4
+        args['ungapped'].value = True
+        args['comp_based_stats'].value = '0'
+        args['outfmt'].value = 6
+        args['evalue'].value = 1000
+        args['max_hsps'].value = 1
+        args['qcov_hsp_perc'].value = 100
+        args['out'].value = tumor + '.mhc1.blastp.txt'
 
-            mhc2_blastp_task, args = wf.add_task(blastp(), tag=tumor + 'MHC2', depends=[makedb_task, find_novel_peptide_task])
-            args['query'].value = find_novel_peptide_task.outputs['mhc2_faa']
-            args['task'].value = 'blastp-short'
-            args['db'].value = makedb_task.outputs['out']
-            args['max_target_seqs'].value = 1
-            args['num_threads'].value = 4
-            args['ungapped'].value = True
-            args['comp_based_stats'].value = '0'
-            args['outfmt'].value = 6
-            args['evalue'].value = 1000
-            args['max_hsps'].value = 1
-            args['qcov_hsp_perc'].value = 100
-            args['out'].value = tumor + '.mhc2.blastp.txt'
+        mhc2_blastp_task, args = wf.add_task(blastp(), tag=tumor + 'MHC2', depends=[makedb_task, find_novel_peptide_task])
+        args['query'].value = find_novel_peptide_task.outputs['mhc2_faa']
+        args['task'].value = 'blastp-short'
+        args['db'].value = makedb_task.outputs['out']
+        args['max_target_seqs'].value = 1
+        args['num_threads'].value = 4
+        args['ungapped'].value = True
+        args['comp_based_stats'].value = '0'
+        args['outfmt'].value = 6
+        args['evalue'].value = 1000
+        args['max_hsps'].value = 1
+        args['qcov_hsp_perc'].value = 100
+        args['out'].value = tumor + '.mhc2.blastp.txt'
 
-            # 根据比对结果过滤
-            filterMHC1_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor + 'MHC1', depends=[mhc1_blastp_task, find_novel_peptide_task])
-            args['blast_result'].value = mhc1_blastp_task.outputs['out']
-            args['raw_files'].value = [find_novel_peptide_task.outputs['mhc1_csv'], find_novel_peptide_task.outputs['mhc1_faa']]
-            args['out_prefix'].value = tumor + '.filtered.mhc1'
+        # 根据比对结果过滤
+        filterMHC1_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor + 'MHC1', depends=[mhc1_blastp_task, find_novel_peptide_task])
+        args['blast_result'].value = mhc1_blastp_task.outputs['out']
+        args['raw_files'].value = [find_novel_peptide_task.outputs['mhc1_csv'], find_novel_peptide_task.outputs['mhc1_faa']]
+        args['out_prefix'].value = tumor + '.filtered.mhc1'
 
-            filterMHC2_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor + 'MHC2', depends=[mhc2_blastp_task, find_novel_peptide_task])
-            args['blast_result'].value = mhc2_blastp_task.outputs['out']
-            args['raw_files'].value = [find_novel_peptide_task.outputs['mhc2_txt'], find_novel_peptide_task.outputs['mhc2_faa']]
-            args['out_prefix'].value = tumor + '.filtered.mhc2'
+        filterMHC2_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor + 'MHC2', depends=[mhc2_blastp_task, find_novel_peptide_task])
+        args['blast_result'].value = mhc2_blastp_task.outputs['out']
+        args['raw_files'].value = [find_novel_peptide_task.outputs['mhc2_txt'], find_novel_peptide_task.outputs['mhc2_faa']]
+        args['out_prefix'].value = tumor + '.filtered.mhc2'
 
         # ------------------run comet------------------
         ms_search_task = None
@@ -497,28 +522,17 @@ def pipeline():
 
         # --------------run mhcflurry and netMHCIIpan4--------------
         # mhcflurry prediction for MHC-1
-        mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor, depends=[])
-        if wf.args.genome_pep:
-            mhcflurry_task.depends.append(filterMHC1_task)
-            args['input_csv'].value = filterMHC1_task.outputs['out_csv']
-        else:
-            mhcflurry_task.depends.append(find_novel_peptide_task)
-            args['input_csv'].value = find_novel_peptide_task.outputs['mhc1_csv']
+        mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor, depends=[filterMHC1_task])
+        args['input_csv'].value = filterMHC1_task.outputs['out_csv']
         args['out'].value = tumor + '.mhcflurry_prediction.csv'
-        args['models'].value = wf.topvars['mhcflurry_models']
 
         # check_and_convert_alleles_for_netMHCIIpan4
         convert_task, args = wf.add_task(check_and_convert_alleles_for_netMHCIIpan4(), tag=tumor, depends=[hla_task])
         args['alleles_file'].value = hla_task.outputs['hla_genotype_tsv']
 
         # netMHCIIpan4 for MHC-2 prediction
-        netmhcpanii_task, args = wf.add_task(netMHCIIPan(), tag=tumor, depends=[convert_task])
-        if wf.args.genome_pep:
-            netmhcpanii_task.depends.append(filterMHC2_task)
-            args['infile'].value = filterMHC2_task.outputs['out_txt']
-        else:
-            netmhcpanii_task.depends.append(find_novel_peptide_task)
-            args['infile'].value = find_novel_peptide_task.outputs['mhc2_txt']
+        netmhcpanii_task, args = wf.add_task(netMHCIIPan(), tag=tumor, depends=[convert_task, filterMHC2_task])
+        args['infile'].value = filterMHC2_task.outputs['out_txt']
         args['alleles_file'].value = convert_task.outputs['out']
         args['inptype'].value = '1'
         args['xls'].value = True
@@ -529,25 +543,15 @@ def pipeline():
         # -------------------run pMTnet------------------
         # prepare_pMTnet_input for MHC1
         mixcr_task = wf.get_task_by_name('mixcr-'+(tumor or normal))
-        mhc1_pMTnet_input_task, args = wf.add_task(prepare_pMTnet_input(), tag=tumor + '-MHC1', depends=[mixcr_task, hla_task])
+        mhc1_pMTnet_input_task, args = wf.add_task(prepare_pMTnet_input(), tag=tumor + '-MHC1', depends=[mixcr_task, hla_task, filterMHC1_task])
         args['mixcr_trb'].value = mixcr_task.outputs['TRB']
-        if wf.args.genome_pep:
-            mhc1_pMTnet_input_task.depends.append(filterMHC1_task)
-            args['antigen_seq'].value = filterMHC1_task.outputs['out_faa']
-        else:
-            mhc1_pMTnet_input_task.depends.append(find_novel_peptide_task)
-            args['antigen_seq'].value = find_novel_peptide_task.outputs['mhc1_faa']
+        args['antigen_seq'].value = filterMHC1_task.outputs['out_faa']
         args['hla_file'].value = hla_task.outputs['hla_genotype_tsv']
 
         # prepare_pMTnet_input for MHC2
-        mhc2_pMTnet_input_task, args = wf.add_task(prepare_pMTnet_input(), tag=tumor + '-MHC2', depends=[mixcr_task, hla_task])
+        mhc2_pMTnet_input_task, args = wf.add_task(prepare_pMTnet_input(), tag=tumor + '-MHC2', depends=[mixcr_task, hla_task, filterMHC2_task])
         args['mixcr_trb'].value = mixcr_task.outputs['TRB']
-        if wf.args.genome_pep:
-            mhc2_pMTnet_input_task.depends.append(filterMHC2_task)
-            args['antigen_seq'].value = filterMHC2_task.outputs['out_faa']
-        else:
-            mhc2_pMTnet_input_task.depends.append(find_novel_peptide_task)
-            args['antigen_seq'].value = find_novel_peptide_task.outputs['mhc2_faa']
+        args['antigen_seq'].value = filterMHC2_task.outputs['out_faa']
         args['hla_file'].value = hla_task.outputs['hla_genotype_tsv']
 
         # run pMTnet for MHC1
