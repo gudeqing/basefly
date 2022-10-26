@@ -720,8 +720,8 @@ def arcas_hla(threads=4):
     cmd.runtime.memory = 5*1024**3
     cmd.runtime.cpu = 2
     # 软链接数据库
-    cmd.args['database'] = Argument(prefix='rm -r /home/arcasHLA-master/dat && ln -s ', type='indir', level='optional', desc='database of arcas_software')
-    cmd.args['link'] = Argument(prefix='/home/arcasHLA-master/dat &', type='bool', default=False)
+    cmd.args['database'] = Argument(prefix='rm -r /opt/arcasHLA-master/dat && ln -s ', type='indir', level='optional', desc='database of arcas_software')
+    cmd.args['link'] = Argument(prefix='/opt/arcasHLA-master/dat &&', type='bool', default=False)
     # run software
     cmd.args['_1'] = Argument(value=f'arcasHLA extract --temp ./ --unmapped -t {threads} -o .', type='fix')
     cmd.args['bam'] = Argument(value='', type='infile', desc='input bam file')
@@ -1146,7 +1146,6 @@ def blastp():
     cmd.meta.version = '2.12.0+'
     cmd.meta.desc = 'BLAST finds regions of similarity between biological sequences. The program compares nucleotide or protein sequences to sequence databases and calculates the statistical significance.'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
-    cmd.runtime.tool_dir = '/opt/ncbi-blast-2.12.0+/bin'
     cmd.runtime.tool = 'blastp'
     cmd.runtime.cpu = 4
     cmd.runtime.memory = 5 * 1024 ** 3
