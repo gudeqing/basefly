@@ -1182,7 +1182,7 @@ def netMHCIIPan():
     cmd.args['context'] = Argument(prefix='-context', type='bool', default=False, desc='Predict with context encoding')
     cmd.args['tdir'] = Argument(prefix='-tdir ', default='.', desc='Temporary directory')
     cmd.args['alleles'] = Argument(prefix='-a ', array=True, level='optional', delimiter=',', desc='HLA allele list')
-    cmd.args['alleles_file'] = Argument(prefix='-a $(cat {})', type='infile', level='optional', desc='A file which only contains one line such as "HLA-A,HLA-B,HLA-C"')
+    cmd.args['alleles_file'] = Argument(prefix='-a $$(cat {})', type='infile', level='optional', desc='A file which only contains one line such as "HLA-A,HLA-B,HLA-C"')
     cmd.args['inptype'] = Argument(prefix='-inptype ', range=['0', '1'], default='0', desc='Input type [0] FASTA [1] Peptide')
     cmd.args['rankS'] = Argument(prefix='-rankS ', default=1.0, desc='Threshold for strong binders (%Rank)')
     cmd.args['rankW'] = Argument(prefix='-rankW ', default=5.0, desc='Threshold for weak binders (%Rank)')
@@ -1242,7 +1242,7 @@ def mixcr_shotgun():
     cmd.meta.desc = 'MiXCR is a universal software for fast and accurate analysis of raw T- or B- cell receptor repertoire sequencing data. https://docs.milaboratories.com/mixcr/reference/mixcr-analyze/#generic-non-targeted-shotgun-data-rna-seq'
     cmd.meta.source = "https://github.com/milaboratory/mixcr"
     cmd.runtime.image = '?'
-    cmd.runtime.memory = "5*1024**3"
+    cmd.runtime.memory = 5*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'mixcr analyze shotgun'
     cmd.args['species'] = Argument(prefix='--species ', default='hsa', desc="Possible values: hsa (or HomoSapiens), mmu (or MusMusculus), rat, spalax, alpaca, lamaGlama, mulatta (Macaca Mulatta), fascicularis (Macaca Fascicularis) or any species from IMGT ® library")
@@ -1262,6 +1262,28 @@ def mixcr_shotgun():
     cmd.outputs['IGH'] = Output(value='{out_prefix}.clonotypes.IGH.tsv')
     cmd.outputs['IGK'] = Output(value='{out_prefix}.clonotypes.IGk.tsv')
     cmd.outputs['IGL'] = Output(value='{out_prefix}.clonotypes.IGL.tsv')
+    return cmd
+
+
+def mixcr_rnaseq():
+    cmd = Command()
+    cmd.meta.name = 'mixcrRNAseq'
+    cmd.meta.desc = 'MiXCR is a universal software for fast and accurate analysis of raw T- or B- cell receptor repertoire sequencing data. https://docs.milaboratories.com/mixcr/reference/mixcr-analyze/#generic-non-targeted-shotgun-data-rna-seq'
+    cmd.meta.source = "https://github.com/milaboratory/mixcr"
+    cmd.runtime.image = '?'
+    cmd.runtime.memory = 5*1024**3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'mixcr analyze rnaseq-tcr-cdr3'
+    cmd.args['species'] = Argument(prefix='--species ', default='hsa', desc="Possible values: hsa (or HomoSapiens), mmu (or MusMusculus), rat, spalax, alpaca, lamaGlama, mulatta (Macaca Mulatta), fascicularis (Macaca Fascicularis) or any species from IMGT ® library")
+    cmd.args['read1'] = Argument(prefix='', type='infile', desc='input read1 file')
+    cmd.args['read2'] = Argument(prefix='', type='infile', level='optional', desc='input read2 file')
+    cmd.args['out_prefix'] = Argument(prefix='', desc='output prefix')
+    cmd.outputs['TRAD'] = Output(value='{out_prefix}.clonotypes.TRAD.tsv')
+    cmd.outputs['TRA'] = Output(value='{out_prefix}.clonotypes.TRA.tsv')
+    cmd.outputs['TRB'] = Output(value='{out_prefix}.clonotypes.TRB.tsv')
+    cmd.outputs['TRG'] = Output(value='{out_prefix}.clonotypes.TRG.tsv')
+    cmd.outputs['TRD'] = Output(value='{out_prefix}.clonotypes.TRD.tsv')
+    cmd.outputs['clns'] = Output(value='{out_prefix}.clns')
     return cmd
 
 
@@ -1314,10 +1336,10 @@ def GTF2RefFlat():
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.memory = 2 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.args['gtf'] = Argument(prefix="""awk '{ if ($0 ~ "transcript_id") print $0; else print $0" transcript_id \"?\";"; } '""", type='infile', desc='GTF file')
+    cmd.args['gtf'] = Argument(prefix="""awk '{ if ($$0 ~ "transcript_id") print $$0; else print $$0" transcript_id \\"?\\";"; }' """, type='infile', desc='GTF file')
     cmd.args['_f'] = Argument(prefix='', type='fix', value='> tidy.gtf')
     cmd.args['_f2'] = Argument(prefix='', type='fix', value='&& gtfToGenePred -genePredExt tidy.gtf gtf.ref_flat.txt -ignoreGroupsWithoutExons')
-    cmd.args['_f3'] = Argument(prefix='', type='fix', value="""&& cat gtf.ref_flat.txt | awk '{print $12"\t"$0}' | cut -d$'\t' -f1-11 > tmp.txt""")
+    cmd.args['_f3'] = Argument(prefix='', type='fix', value="""&& cat gtf.ref_flat.txt | awk '{print $$12"\t"$$0}' | cut -d$$'\t' -f1-11 > tmp.txt""")
     cmd.args['_f4'] = Argument(prefix='', type='fix', value="&& mv tmp.txt gtf.ref_flat.txt")
     cmd.outputs['out'] = Output(value='gtf.ref_flat.txt')
     return cmd
