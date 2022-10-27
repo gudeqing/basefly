@@ -715,13 +715,13 @@ def arcas_hla(threads=4):
     """
     cmd = Command()
     cmd.meta.name = 'arcasHLA'
-    cmd.meta.version = '0.2.5'
+    cmd.meta.version = '0.3.0'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.memory = 5*1024**3
     cmd.runtime.cpu = 2
     # 软链接数据库
-    cmd.args['database'] = Argument(prefix='rm -r /opt/arcasHLA-master/dat && ln -s ', type='indir', level='optional', desc='database of arcas_software')
-    cmd.args['link'] = Argument(prefix='/opt/arcasHLA-master/dat &&', type='bool', default=False)
+    cmd.args['database'] = Argument(prefix='rm -r /opt/arcasHLA-0.3.0/dat && ln -s ', type='indir', level='optional', desc='database of arcas_software')
+    cmd.args['link'] = Argument(prefix='/opt/arcasHLA-0.3.0/dat &&', type='bool', default=False)
     # run software
     cmd.args['_1'] = Argument(value=f'arcasHLA extract --temp ./ --unmapped -t {threads} -o .', type='fix')
     cmd.args['bam'] = Argument(value='', type='infile', desc='input bam file')
