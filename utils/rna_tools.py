@@ -271,6 +271,8 @@ def get_2digits_hla_genotype(table, sample=None, alleles=('A', 'B', 'C', 'DRA', 
         sample = df.index[0]
 
     for each in df.loc[sample]:
+        if type(each) != str:
+            continue
         if '|' in each:
             # 假设table是merge_hisat_genotype的结果, 如"A*02:07|A*11:02"
             a, b = each.split('|')[:2]
@@ -615,19 +617,31 @@ def annotate_netMHCpan_result(net_file, pep2id_file, tmap, gtf, out, comet_resul
     data.to_csv(out, index=False, sep='\t')
 
 
-def prepare_pMTnet_input(mixcr_trb, antigen_seq, hla_file, out='pMTnet.input.txt', alleles:tuple=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2')):
+def prepare_pMTnet_input(mixcr_trb, antigen_seq, hla_file, sample_id=None, out='pMTnet.input.txt', alleles:tuple=('A', 'B', 'C', 'DRA', 'DRB1', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2')):
     from itertools import product
     trb = pd.read_table(mixcr_trb, header=0)
     trb_aa = set(trb['AA.seq.CDR3'])
     with open(antigen_seq) as f:
         antigen_seq = set(x.strip() for x in f if not x.startswith('>'))
-    hla_lst = get_2digits_hla_genotype(hla_file, alleles=alleles)
+    hla_lst = get_2digits_hla_genotype(hla_file, alleles=alleles, sample=sample_id)
     hla_lst = [x[4:] if x.startswith('HLA-') else x for x in hla_lst]
     with open(out, 'w') as f:
         f.write(f'CDR3\tAntigen\tHLA\n')
         for trb, peptide, hla in product(trb_aa, antigen_seq, hla_lst):
             f.write(f'{trb}\t{peptide}\t{hla}\n')
     return out
+
+
+def prepare_quantiseq_input(expr, id2name, sample_name):
+    exp = pd.read_table(expr, header=0, index_col=0)
+    id2name = dict(x.split()[::-1] for x in open(id2name))
+    target = exp.loc[list(id2name.keys())]
+    target.index = [id2name[x] for x in target.index]
+    target.index.name = 'ID'
+    target = target[:, ['TPM']]
+    target.columns = [sample_name]
+    target.to_csv(f'{sample_name}.quantiseq.input_expr.txt', sep='\t', index=True, header=True)
+    return target
 
 
 if __name__ == '__main__':

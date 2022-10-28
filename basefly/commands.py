@@ -1294,9 +1294,7 @@ def quantiseq():
     cmd.runtime.image = '?'
     cmd.runtime.memory = 3*1024**3
     cmd.runtime.cpu = 2
-    # 我们期望用salmon的输出作为输入，因此signature的基因名称必须都转化成相应的基因ID才能正常工作
-    cmd.args['expr'] = Argument(prefix='cut -f1,4 {} > input_expr.txt &&', type='infile', desc='input gene expression file')
-    cmd.args['_expr'] = Argument(prefix='Rscript /opt/quantiseq/deconvolution/quanTIseq_decon.R ', type='fix', value='input_expr.txt', desc='gene expression matrix')
+    cmd.args['expr'] = Argument(prefix='Rscript /opt/quantiseq/deconvolution/quanTIseq_decon.R ', type='infile', desc='gene expression matrix')
     cmd.args['_outdir'] = Argument(prefix='', default='.', desc='output directory')
     cmd.args['_fix'] = Argument(prefix='', default='TRUE')
     cmd.args['arrays'] = Argument(prefix='', default='FALSE', desc='specifies whether expression data are from microarrays (instead of RNA-seq)')
