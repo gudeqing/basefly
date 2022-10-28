@@ -1127,7 +1127,6 @@ def makeblastdb():
     cmd.meta.version = '2.12.0+'
     cmd.meta.desc = 'BLAST finds regions of similarity between biological sequences. The program compares nucleotide or protein sequences to sequence databases and calculates the statistical significance.'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
-    cmd.runtime.tool_dir = '/opt/ncbi-blast-2.12.0+/bin'
     cmd.runtime.tool = 'makeblastdb'
     cmd.runtime.cpu = 3
     cmd.runtime.memory = 5 * 1024 ** 3
