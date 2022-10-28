@@ -377,7 +377,7 @@ class StateGraph(object):
             self.graph.add_node(
                 node,
                 # 谷歌浏览器可以正常显示tooltip
-                tooltip=cmd_info['cmd'].replace(' ', '\n'),
+                tooltip=cmd_info['cmd'].replace(' ', '\n').replace('\\', ''),
                 shape="box",
                 style="rounded, filled",
                 fillcolor=color,

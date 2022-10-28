@@ -1336,10 +1336,10 @@ def GTF2RefFlat():
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
     cmd.runtime.memory = 2 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.args['gtf'] = Argument(prefix="""awk '{ if ($$0 ~ "transcript_id") print $$0; else print $$0" transcript_id \\"?\\";"; }' """, type='infile', desc='GTF file')
+    cmd.args['gtf'] = Argument(prefix="""awk '{ if ($$0 ~ "transcript_id") print $$0; else print $$0" transcript_id \\"X\\";"; }' """, type='infile', desc='GTF file')
     cmd.args['_f'] = Argument(prefix='', type='fix', value='> tidy.gtf')
     cmd.args['_f2'] = Argument(prefix='', type='fix', value='&& gtfToGenePred -genePredExt tidy.gtf gtf.ref_flat.txt -ignoreGroupsWithoutExons')
-    cmd.args['_f3'] = Argument(prefix='', type='fix', value="""&& cat gtf.ref_flat.txt | awk '{print $$12"\t"$$0}' | cut -d$$'\t' -f1-11 > tmp.txt""")
+    cmd.args['_f3'] = Argument(prefix='', type='fix', value="""&& cat gtf.ref_flat.txt | awk '{print $$12"\\t"$$0}' | cut -f1-11 > tmp.txt""")
     cmd.args['_f4'] = Argument(prefix='', type='fix', value="&& mv tmp.txt gtf.ref_flat.txt")
     cmd.outputs['out'] = Output(value='gtf.ref_flat.txt')
     return cmd
