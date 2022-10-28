@@ -1353,7 +1353,7 @@ def GTF2rRNAInterval():
     cmd.runtime.cpu = 2
     cmd.args['gtf'] = Argument(prefix='grep "rRNA" ', type='infile', desc='GTF file')
     cmd.args['_f'] = Argument(prefix='', type='fix', value='> ref_ribosome.gtf && gff2bed < ref_ribosome.gtf > ref_ribosome.bed')
-    cmd.args['genome_dict'] = Argument(prefix='java -jar /usr/picard/picard.jar BedToIntervalList -I ref_ribosome.bed -O ref_ribosome.bed.interval_list -SD ', type='infile', desc='reference genome dict file')
+    cmd.args['genome_dict'] = Argument(prefix='&& java -jar /usr/local/src/picard.jar BedToIntervalList I=ref_ribosome.bed O=ref_ribosome.bed.interval_list SD=', type='infile', desc='reference genome dict file')
     cmd.outputs['out_interval_list'] = Output(value='ref_ribosome.bed.interval_list')
     cmd.outputs['out_bed'] = Output(value='ref_ribosome.bed')
     return cmd
