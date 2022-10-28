@@ -24,10 +24,10 @@ def get_fastq_info(fastq_info:tuple, pair_info=None, out='fastq.info.json',
     fastq_files = []
     for each in fastq_info:
         if os.path.isdir(each):
-            fastq_dirs.append(each)
+            fastq_dirs.append(os.path.abspath(each))
         elif os.path.isfile(each):
             if each.endswith(('.fq', 'fq.gz', 'fastq', 'fastq.gz')):
-                fastq_files.append(each)
+                fastq_files.append(os.path.abspath(each))
             elif each.endswith('.json'):
                 with open(each) as f:
                     result_dict.update(json.load(f))
