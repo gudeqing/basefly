@@ -369,7 +369,7 @@ def pipeline():
         args['geneMap'].value = os.path.abspath(ref_genome_gtf)
 
         # prepare for quantiseq
-        pre_quantiseq_task, args = wf.add_task(pre_quantiseq_task(), tag=sample, depends=[salmon_task])
+        pre_quantiseq_task, args = wf.add_task(prepare_quantiseq_input(), tag=sample, depends=[salmon_task])
         args['expr'].value = salmon_task.outputs['gene_exp']
         args['sample_name'].value = sample
 
