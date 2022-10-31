@@ -634,11 +634,17 @@ def prepare_pMTnet_input(mixcr_trb, antigen_seq, hla_file, sample_id=None, out='
 
 def prepare_quantiseq_input(expr, id2name, sample_name):
     exp = pd.read_table(expr, header=0, index_col=0)
-    id2name = dict(x.split()[::-1] for x in open(id2name))
-    target = exp.loc[list(id2name.keys())]
+    id2name = dict(x.strip().split()[:2] for x in open(id2name))
+    # 去掉版本号
+    exp.index = [x.rsplit('.')[0] for x in exp.index]
+    id2name = {k.rsplit('.')[0]: v for k, v in id2name.items()}
+    # matched
+    matched = set(id2name.keys()) & set(exp.index)
+    print(f'found {len(matched)}/{len(id2name)} target signature genes')
+    target = exp.loc[matched]
     target.index = [id2name[x] for x in target.index]
     target.index.name = 'ID'
-    target = target[:, ['TPM']]
+    target = target.loc[:, ['TPM']]
     target.columns = [sample_name]
     target.to_csv(f'{sample_name}.quantiseq.input_expr.txt', sep='\t', index=True, header=True)
     return target
