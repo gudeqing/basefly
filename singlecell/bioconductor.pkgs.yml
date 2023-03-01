@@ -1,0 +1,15 @@
+name: base
+channels:
+  - bioconda
+dependencies:
+  - bioconductor-AUCell
+  - bioconductor-RcisTarget
+  - bioconductor-deseq2
+  - bioconductor-limma
+  - bioconductor-edgeR
+  - bioconductor-airway
+  - bioconductor-maftools
+  - bioconductor-genefilter
+  - bioconductor-multtest
+  - bioconductor-ComplexHeatmap
+  - bioconductor-clusterProfiler

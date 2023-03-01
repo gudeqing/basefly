@@ -61,7 +61,7 @@ to do list:
     内含子来源新抗原及质谱验证率
 
 Mongo数据库:
-    1. hg38基因信息表: 记录基因ID，基因名称，编码与否等功能
+    1. hg19/hg38基因信息表: 记录基因ID，基因名称，编码与否等功能
     2. 样本信息表:
         sample_id, r1, r2, patient_id, tissue_type, disease_type, primary_site, metastasis_site, ....
     3. 基因表达量表count/tpm

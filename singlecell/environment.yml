@@ -1,8 +1,8 @@
-name: rstudio-3.6.3
+name: base
 channels:
   - conda-forge
-  - bioconda
   - r
+  - bioconda
 dependencies:
   - r-essentials
   - r-devtools
@@ -22,25 +22,24 @@ dependencies:
   - r-ggpubr
   - r-survminer
   - r-gifski
-  - r-ggstatsplot
   - r-ClassDiscovery
   - r-glmnet
   - r-pheatmap
   - r-ggfortify
   - r-lars
   - r-randomForest
-  - r-wgcna
-  - bioconductor-deseq2
-  - bioconductor-limma
-  - bioconductor-edgeR
-  - bioconductor-airway
-  - bioconductor-maftools
-  - bioconductor-genefilter
-  - bioconductor-multtest
   - r-clusterCrit
-  - r-parallelDist
+  - r-parallelDist=0.2.6
   - r-sampling
   - r-dbscan
-  - r-Seurat
+  - r-rjson
+  - r-circlize
+  - r-GetoptLong
+  - r-clue
+  - r-GlobalOptions
   - r-ape
+  - r-wgcna
+  - r-Seurat
   - r-tsne
+  - r-R2HTML
+  - r-rbokeh

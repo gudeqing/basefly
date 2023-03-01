@@ -1,0 +1,6 @@
+BiocManager::install(c("GENIE3", "ZOO", "mixtools", "NMF", "DT", "Rtsne"), ask=F, updater=F)
+BiocManager::install("EnsDb.Hsapiens.v86")
+BiocManager::install("BSgenome.Hsapiens.UCSC.hg38")
+devtools::install_github('renjun0324/KKLClustering')
+devtools::install_github('aertslab/SCopeLoomR')
+devtools::install_github('aertslab/SCENIC')

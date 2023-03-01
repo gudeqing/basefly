@@ -36,13 +36,40 @@ RUN wget https://static.rust-lang.org/rustup/rustup-init.sh && sh rustup-init.sh
 
 # 安装mamba和R
 RUN conda install -y -c conda-forge mamba r-base=4.2.0
-RUN cona install -y -c r rstudio=1.1.456
+
+# 安装rstudio-server
+RUN apt-get update && apt-get install -y gdebi-core
+RUN wget https://download2.rstudio.org/server/bionic/amd64/rstudio-server-2022.07.1-554-amd64.deb && gdebi -n rstudio-server-2022.07.1-554-amd64.deb
 
 # 设置rstudio网页地址名称
 ENV VNC_APP_NAME="RStudio-XDP-Sandbox"
 
+# conda source
+RUN conda config --add channels https://mirrors.aliyun.com/anaconda/pkgs/main/ && \
+  conda config --add channels https://mirrors.aliyun.com/anaconda/cloud/conda-forge/ && \
+  conda config --add channels https://mirrors.aliyun.com/anaconda/cloud/bioconda/
 
+# 使用mamba批量安装包
+COPY environment.yml /opt/environment.yml
+RUN mamba env update --quiet --file /opt/environment.yml
 
+COPY bioconductor.pkgs.yml /opt/bioconductor.pkgs.yml
+RUN mamba env update --quiet --file /opt/bioconductor.pkgs.yml && conda clean -a
 
+# 使用rscript安装包
+COPY pkgs.r /opt/pkgs.r
+RUN source /opt/miniconda/bin/activate && Rscript /opt/pkgs.r
 
+# install arrow
+RUN source /opt/miniconda/bin/activate && Rscript -e "Sys.setenv(ARROW_S3='ON');Sys.setenv(NOT_CRAN='true');install.packages('arrow', repos='https://arrow-r-nightly.s3.amazonaws.com')"
+
+# 引入一方平台的代理，方便安装新的包
+RUN chmod +w /opt/miniconda/lib/R/library/base/R/Rprofile && \
+ echo 'local({r <- getOption("repos"); r["CRAN"] <- "http://cloud.r-project.org"; options(repos=r); options(BioC_mirror="http://bioconductor.org"); })' >> /opt/miniconda/lib/R/library/base/R/Rprofile && \
+ echo 'RSTUDIO_DISABLE_SECURE_DOWNLOAD_WARNING=1' >> /opt/miniconda/lib/R/etc/Renviron && \
+ echo 'https_proxy="http://mirrors.xdp.com:80"' >> /opt/miniconda/lib/R/etc/Renviron && \
+ echo 'http_proxy="http://mirrors.xdp.com:80"' >> /opt/miniconda/lib/R/etc/Renviron
+
+# 更改新的包的安装位置,便于复用,一定程度避免重复安装包
+RUN mkdir -p /enigma/local_storage/newpkgs && echo '.libPaths(c("/enigma/local_storage/newpkgs", .libPaths()))' >> /opt/miniconda/lib/R/etc/Rprofile.site
 
