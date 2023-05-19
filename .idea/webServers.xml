@@ -2,10 +2,10 @@
 <project version="4">
   <component name="WebServers">
     <option name="servers">
-      <webServer id="42c2eb03-8832-49f7-88ae-8fd019ddcbe5" name="bbt250 (project level)">
-        <fileTransfer rootFolder="/home/danny.gu" accessType="SFTP" host="172.18.0.250" port="22" sshConfigId="7a285db2-73fe-4c72-833f-95ed4563f609" sshConfig="danny.gu@172.18.0.250:22 password">
+      <webServer id="42c2eb03-8832-49f7-88ae-8fd019ddcbe5" name="basefly">
+        <fileTransfer rootFolder="/home/deqgu" accessType="SFTP" host="36.137.111.175" port="6222" sshConfigId="39c6e06c-2ecb-45f7-bda5-5f901d112fb3" sshConfig="Genars-A-cloud-prod-me">
           <advancedOptions>
-            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
           </advancedOptions>
         </fileTransfer>
       </webServer>

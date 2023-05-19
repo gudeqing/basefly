@@ -1,22 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" autoUpload="Always" serverName="bbt250" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" autoUpload="Always" remoteFilesAllowedToDisappearOnAutoupload="false" showNewOnSourceInSync="false">
     <serverData>
-      <paths name="bbt250">
+      <paths name="basefly">
         <serverdata>
           <mappings>
-            <mapping deploy="/PycharmProjects/basefly" local="$PROJECT_DIR$" web="/" />
-          </mappings>
-          <excludedPaths>
-            <excludedPath local="true" path="$PROJECT_DIR$/.idea" />
-            <excludedPath local="true" path="$PROJECT_DIR$/venv" />
-          </excludedPaths>
-        </serverdata>
-      </paths>
-      <paths name="bbt250 (project level)">
-        <serverdata>
-          <mappings>
-            <mapping deploy="/PycharmProjects/basefly" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/pyprojects/basefly" local="$PROJECT_DIR$" web="/" />
           </mappings>
           <excludedPaths>
             <excludedPath local="true" path="$PROJECT_DIR$/.idea" />
