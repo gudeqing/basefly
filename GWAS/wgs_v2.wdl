@@ -342,7 +342,7 @@ task map_reads {
         String outdir
         Int cpus = 4
         Int mem_mb = 10000
-        Int threads = 10
+        Int threads = 12
         String genome_fa = "/data/reference_genome/hg38/hg38.fa"
         String ref_dict = "/data/reference_genome/hg38/hg38.dict"
         String ref_fai = "/data/reference_genome/hg38/hg38.fa.fai"
