@@ -8,19 +8,26 @@ version 1.0
 # 流程报错  /data/genarsa_project/wdl/logs/yjcromwell.log
 # * 对大部分流程最开始的输入文件如fasta、fastq等，都改用String声明，从而避免复制，这得益于singularity运行时提供了挂载目录的功能
 # 参考snakemake版本流程/mnt/nas_101/hongxhe/Pipeline/GenarsA_Test/wgs_v1/
+# String singularity = "/data/singularity_images_wgsgvcf/bbmap_38.93--he522d1c_0"
+# String singularity = "/data/singularity_images_wgsgvcf/bwa_samtools_bcftools_v1.simg"
+# String singularity = "/data/singularity_images_wgsgvcf/ensembl-vep:104.3--pl5262h4a94de4_0"
+# String singularity = "/data/singularity_images_wgsgvcf/gatk4:4.2.2.0--hdfd78af_1"
+# String singularity = "/data/singularity_images_wgsgvcf/qualimap:2.2.2d--hdfd78af_2"
+# String singularity = "/data/singularity_images_wgsgvcf/sambamba:0.8.1--h41abebc_0"
+# String singularity = "/data/singularity_images_wgsgvcf/samtools:1.13--h8c37831_0"
 
 workflow wgs_wf {
     input{
         # 结果输出目录
-        String outdir = "/mnt/nas_101/genarsa/Pipeline_Test/gdq_0517/"
+        String outdir = "/mnt/nas_101/genarsa/Pipeline_Test/gdq_0517"
         # queue是特殊字符串，用于提交任务所需，可由IT提供
         String queue = "zryh"
         # 样本信息：样本名称,同一个样本不同测序批次的编号,测序平台类型,read1路径，read2路径
-        File inputsamplefile = "/mnt/nas_101/genarsa/Pipeline_Test/20230510/tsv/units_WDL.tsv"
+        File inputsamplefile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/units_WDL.tsv"
         # 样本名称信息列表文件
-        File inputsamplenamefile = "/mnt/nas_101/genarsa/Pipeline_Test/20230510/tsv/samples_WDL.tsv"
+        File inputsamplenamefile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/samples_WDL.tsv"
         # contig信息，用于并行分区call突变
-        File contigfile = "/mnt/nas_101/genarsa/Pipeline_Test/20230510/tsv/contig.tsv"
+        File contigfile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/contig.tsv"
         # interval 目录及数量
         String interval_dir = "/data/reference_genome/hg38/interval-files-folder"
         Int interval_number = 2
@@ -56,6 +63,15 @@ workflow wgs_wf {
     }
 
     scatter (inputsample in inputsamples) {
+        call fastqc {
+            input:
+                read1=inputsample[3],
+                read2=inputsample[4],
+                outdir=outdir,
+                queue=queue
+
+        }
+
         call bbduk {
             input:
                 sample=inputsample[0],
@@ -90,6 +106,15 @@ workflow wgs_wf {
                 unit=inputsample[1],
                 sort_bam=map_reads.bam,
                 outdir=outdir,
+                queue=queue
+        }
+
+        call samtools_stats {
+            input:
+                input_bam = mark_duplicates.bam,
+                sample_name = inputsample[0],
+                sample_unit = inputsample[1],
+                outdir = outdir,
                 queue=queue
         }
     }
@@ -244,6 +269,18 @@ workflow wgs_wf {
             vep_cache_dir = vep_cache_dir,
             vep_plugin_dir = vep_plugin_dir
     }
+
+    call multiqc {
+        input:
+            input_dirs = [fastqc.result_dir[0],
+                         bbduk.result_dir[0],
+                         samtools_stats.result_dir[0],
+                         qualimap.result_dir[0],
+                         mark_duplicates.result_dir[0]
+                         ],
+            queue = queue,
+            outdir = outdir
+    }
 }
 
 
@@ -289,6 +326,7 @@ task bbduk {
         File R1 = "~{outdir}/result/trimmed/~{sample}-~{unit}.1.fastq.gz"
         File R2 = "~{outdir}/result/trimmed/~{sample}-~{unit}.2.fastq.gz"
         File stats = "~{outdir}/result/trimmed/~{sample}-~{unit}.stats.txt"
+        String result_dir = "~{outdir}/result/trimmed/"
     }
 
 }
@@ -330,8 +368,14 @@ task map_reads {
             -M -Y \
             -R '@RG\tID:~{sample}.L1-B1\tSM:~{sample}\tLB:L1-B1\tPL:ILLUMINA' \
             -t ~{threads} \
-            ~{genome_fa} ~{Fastq1} ~{Fastq2}| \
-            samtools sort --threads ~{threads} -OBAM - -o ~{outdir}/result/mapped/~{sample}-~{unit}.sorted.bam
+            ~{genome_fa} ~{Fastq1} ~{Fastq2} > ~{outdir}/result/mapped/~{sample}-~{unit}.unsorted.bam
+
+         singularity exec -B /mnt,/data ~{singularity} samtools sort \
+            --threads ~{threads} -OBAM \
+         ~{outdir}/result/mapped/~{sample}-~{unit}.unsorted.bam \
+         -o ~{outdir}/result/mapped/~{sample}-~{unit}.sorted.bam
+
+         rm ~{outdir}/result/mapped/~{sample}-~{unit}.unsorted.bam
 
      >>>
 
@@ -372,6 +416,7 @@ task mark_duplicates{
         File bam = "~{outdir}/result/dedup/~{sample}-~{unit}.bam"
         File bambi = "~{outdir}/result/dedup/~{sample}-~{unit}.bam.bai"
         File logtxt = "~{outdir}/result/dedup/~{sample}-~{unit}.log.txt"
+        String result_dir = "~{outdir}/result/dedup"
     }
 
 }
@@ -399,6 +444,9 @@ task merge_bam{
         dedup_bambi=`/data/genarsa_project/bioinfo_miniconda3/envs/snakemake_python3.9.0/bin/python  ~{select_array_script} ~{sep="," dedup_bam_array} ~{sep="," dedup_bambi_array} ~{sample} bambai` && \
         n_bam=`echo ${dedup_bam}|awk '{print NF}'` && \
         if (( $n_bam == 1 ));then \
+            if [ -f "~{outdir}/result/dedup/~{sample}.merged.bam" ];then
+                rm ~{outdir}/result/dedup/~{sample}.merged.bam ~{outdir}/result/dedup/~{sample}.merged.bam.bai
+            fi
             ln -s ${dedup_bam} ~{outdir}/result/dedup/~{sample}.merged.bam && ln -s ${dedup_bambi} ~{outdir}/result/dedup/~{sample}.merged.bam.bai;\
         else \
             singularity exec -B /mnt,/data ~{singularity} samtools merge -f -o ~{outdir}/result/dedup/~{sample}.merged.bam --threads ~{threads} --write-index ${dedup_bam}; \
@@ -442,6 +490,7 @@ task qualimap{
 
     output{
         File genome_result = "~{outdir}/result/qc/qualimap/~{sample}-~{unit}/genome_results.txt"
+        String result_dir = "~{outdir}/result/qc/qualimap/~{sample}-~{unit}"
 
     }
 
@@ -845,7 +894,7 @@ task annotate_variants {
         Boolean cache = true
         Boolean offline = true
         Boolean merged = true # 参考现有流程设置
-        Boolean variant_class = true
+        Boolean variant_class = false # 参考现有流程设置
         String sift = "b"
         String polyphen = "b"
         String nearest = "transcript"
@@ -985,4 +1034,118 @@ task annotate_variants {
     }
 
 }
+
+
+task fastqc {
+    input {
+        String read1
+        String read2
+        Int cpus = 6
+        Int mem_mb = 10000
+        String queue
+        String outdir
+        String? other_args = ""
+        String result_dir = "~{outdir}/result/qc/fastqc"
+        String singularity = "/data/singularity_images_wgsgvcf/fastqc:0.11.9--hdfd78af_1"
+    }
+
+    runtime {
+        cpus: cpus
+        queue: queue
+        memory: mem_mb
+    }
+
+    command <<<
+        set -e
+        mkdir -p ~{result_dir}
+        singularity exec -B /mnt,/data ~{singularity} fastqc \
+        --quiet \
+        ~{other_args} \
+        -t ~{cpus} \
+        --outdir ~{result_dir} \
+        ~{read1} \
+        ~{read2}
+    >>>
+
+    output {
+        String result_dir = "~{result_dir}"
+    }
+}
+
+
+task samtools_stats {
+    input {
+        File input_bam
+        Int cpus = 1
+        Int mem_mb = 10000
+        String queue
+        String outdir
+        String sample_name
+        String sample_unit
+        String output_filename = "~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
+        String singularity = "/data/singularity_images_wgsgvcf/samtools:1.13--h8c37831_0"
+        String? other_args = ""
+    }
+
+    runtime {
+        cpus: cpus
+        queue: queue
+        memory: mem_mb
+    }
+
+    command <<<
+        set -e
+        mkdir -p ~{outdir}/result/qc/samtools_stats/
+        singularity exec -B /mnt,/data ~{singularity} \
+        samtools stats ~{other_args} ~{input_bam} > ~{output_filename}
+    >>>
+
+    output {
+        File bam_stats_file = "~{output_filename}"
+        String result_dir = "~{outdir}/result/qc/samtools_stats/"
+    }
+}
+
+
+task multiqc {
+    input {
+        String outdir
+#        Array[String] input_dirs = ["~{outdir}/result/qc/samtools_stats",
+#                                   "~{outdir}/result/qc/fastqc",
+#                                   "~{outdir}/result/dedup",
+#                                   "~{outdir}/result/trimmed",
+#                                   "~{outdir}/result/qc/qualimap"]
+#        String fastqc_result_dir
+#        String samtools_stats_dir
+#        String trimmed_result_dir
+#        String qualimap_result_dir
+#        String dedup_result_dir
+        Array[String] input_dirs
+        Int cpus = 1
+        Int mem_mb = 10000
+        String queue
+        String singularity = "/data/singularity_images_wgsgvcf/multiqc:1.11--pyhdfd78af_0"
+        String? other_args = ""
+    }
+
+    runtime {
+        cpus: cpus
+        queue: queue
+        memory: mem_mb
+    }
+
+    command <<<
+        set -e
+        singularity exec -B /mnt,/data ~{singularity} \
+        multiqc --force ~{other_args} \
+        -o ~{outdir}/result/qc/ \
+        -n multiqc \
+        ~{sep=" " input_dirs}
+    >>>
+
+    output {
+        File report_html = "~{outdir}/result/qc/multiqc.html"
+    }
+}
+
 
