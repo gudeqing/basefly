@@ -490,7 +490,7 @@ task qualimap{
 
     output{
         File genome_result = "~{outdir}/result/qc/qualimap/~{sample}-~{unit}/genome_results.txt"
-        String result_dir = "~{outdir}/result/qc/qualimap/~{sample}-~{unit}"
+        String result_dir = "~{outdir}/result/qc/qualimap/"
 
     }
 
