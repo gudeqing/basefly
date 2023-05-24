@@ -101,7 +101,6 @@ workflow wgs_wf {
     }
 
     scatter (inputsamplename in inputsamplenames) {
-
         call merge_bam {
             input:
                 dedup_bam_array=mark_duplicates.bam,
@@ -154,14 +153,16 @@ workflow wgs_wf {
         call combine_calls {
             input:
                 gvcfs = merge_variants_sample_contig.gvcf,
+                tbis = merge_variants_sample_contig.tbi,
                 interval_list_file = interval,
                 outdir = outdir,
-                queue = queue,
+                queue = queue
         }
 
         call genotype_variants {
             input:
                 gvcf = combine_calls.gvcf,
+                gvcftbi = combine_calls.gvcftbi,
                 interval_list_file = interval,
                 outdir = outdir,
                 queue = queue,
@@ -181,6 +182,7 @@ workflow wgs_wf {
                 input:
                     queue = queue,
                     input_vcf = merge_variants_interval.output_vcf,
+                    input_vcf_index = merge_variants_interval.output_vcf_index,
                     outdir = outdir,
                     vartype = vartype,
                     contig = contig[0],
@@ -190,6 +192,7 @@ workflow wgs_wf {
                 input:
                     queue = queue,
                     input_vcf = select_calls.output_vcf,
+                    input_vcf_index = select_calls.output_vcf_index,
                     vartype = vartype,
                     contig = contig[0],
                     outdir = outdir,
@@ -217,6 +220,7 @@ workflow wgs_wf {
         input:
             queue = queue,
             input_file = merge_calls.output_vcf,
+            input_file_idx = merge_calls.output_vcf_index,
             outdir = outdir
     }
 
@@ -541,11 +545,11 @@ task get_interval_list {
     }
 
     command <<<
-        ls ~{interval_dir}/*-scattered.interval_list > ~{outdir}/result/called/interval_list.txt
+        ls ~{interval_dir}/*-scattered.interval_list
     >>>
 
     output {
-        Array[String] interval_list = read_lines("~{outdir}/result/called/interval_list.txt")
+        Array[String] interval_list = read_lines(stdout())
     }
 }
 
@@ -553,7 +557,7 @@ task get_interval_list {
 task combine_calls{
     input {
         Array[File] gvcfs
-#        Array[File] tbis
+        Array[File] tbis
         File interval_list_file
         String interval_idx = sub(basename(interval_list_file), "-scattered.interval_list", "")
         String outdir
@@ -591,7 +595,7 @@ task combine_calls{
 task genotype_variants{
     input {
         File gvcf
-        # File gvcftbi
+        File gvcftbi
         File interval_list_file
         String interval_idx = sub(basename(interval_list_file), "-scattered.interval_list", "")
         String outdir
@@ -665,7 +669,7 @@ task merge_variants_interval {
 task select_calls {
     input {
         File input_vcf
-#        File input_vcf_index
+        File input_vcf_index
         String vartype
         String contig
         String outdir
@@ -708,7 +712,7 @@ task select_calls {
 task hard_filter_calls {
     input {
         File input_vcf
-#        File input_vcf_index
+        File input_vcf_index
         String vartype = "SNP"
         String contig
         # hard-filter: https://gatkforums.broadinstitute.org/gatk/discussion/2806/howto-apply-hard-filters-to-a-call-set
@@ -822,9 +826,8 @@ task merge_calls {
 task annotate_variants {
     input {
         File input_file
-#        File? input_file_idx
+        File? input_file_idx
         String genome_fa = "/data/reference_genome/hg38/hg38.fa"
-#        Array[String] fasta_idx
         String outdir
         String output_file = "~{outdir}/result/annotated/all.vcf.gz"
         String stats_file = "~{outdir}/result/annotated/all.stats.html"
@@ -1064,11 +1067,6 @@ task multiqc {
         Array[String] trimmed_result_dir
         Array[String] qualimap_result_dir
         Array[String] dedup_result_dir
-#        Array[String] input_dirs = [fastqc_result_dir[0],
-#                                   samtools_stats_dir[0],
-#                                   trimmed_result_dir[0],
-#                                   qualimap_result_dir[0],
-#                                   dedup_result_dir[0]]
         Int cpus = 1
         Int mem_mb = 10000
         String queue
