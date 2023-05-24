@@ -16,6 +16,10 @@ version 1.0
 # String singularity = "/data/singularity_images_wgsgvcf/sambamba:0.8.1--h41abebc_0"
 # String singularity = "/data/singularity_images_wgsgvcf/samtools:1.13--h8c37831_0"
 
+# 注意： call的流程中尽量不要使用默认函数来处理变量，尽量把变量处理的部分放入到task中
+# 注意： 对于task的input中尽量不要加工变量，可以改为在command中加工，这样录入数据库的时候可以少定义一些输入参数
+
+
 workflow wgs_wf {
     input{
         # 结果输出目录
@@ -629,7 +633,7 @@ task genotype_variants{
 
     output{
         File vcf = "~{outdir}/result/genotyped/all.~{interval_idx}.vcf.gz"
-#        File vcf_tbi = "~{outdir}/result/genotyped/all.~{interval_idx}.vcf.gz.tbi"
+        File vcf_tbi = "~{outdir}/result/genotyped/all.~{interval_idx}.vcf.gz.tbi"
     }
 }
 
@@ -638,7 +642,7 @@ task merge_variants_interval {
     input {
         Array[File] input_vcfs
         String outdir
-        String output_filename = "~{outdir}/result/genotyped/all.vcf.gz"
+#        String output_filename = "~{outdir}/result/genotyped/all.vcf.gz"
         Int cpus = 4
         Int mem_mb = 10000
         String queue
@@ -656,12 +660,12 @@ task merge_variants_interval {
         singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' \
         MergeVcfs \
         --INPUT ~{sep=' --INPUT ' input_vcfs} \
-        --OUTPUT ~{output_filename}
+        --OUTPUT ~{outdir}/result/genotyped/all.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{output_filename}"
-        File output_vcf_index = "~{output_filename}.tbi"
+        File output_vcf = "~{outdir}/result/genotyped/all.vcf.gz"
+        File output_vcf_index = "~{outdir}/result/genotyped/all.vcf.gz.tbi"
   }
 }
 
@@ -673,7 +677,7 @@ task select_calls {
         String vartype
         String contig
         String outdir
-        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz"
+#        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz"
         String genome_fa = "/data/reference_genome/hg38/hg38.fa"
 #        String ref_dict = "/data/reference_genome/hg38/hg38.dict"
 #        String ref_fai = "/data/reference_genome/hg38/hg38.fa.fai"
@@ -698,12 +702,12 @@ task select_calls {
         -R ~{genome_fa} \
         -V ~{input_vcf} \
         -L ~{contig} \
-        -O ~{output_filename}
+        -O ~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{output_filename}"
-        File output_vcf_index = "~{output_filename}.tbi"
+        File output_vcf = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz"
+        File output_vcf_index = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz.tbi"
   }
 
 }
@@ -718,9 +722,10 @@ task hard_filter_calls {
         # hard-filter: https://gatkforums.broadinstitute.org/gatk/discussion/2806/howto-apply-hard-filters-to-a-call-set
         String indel_hard_filter = '--filter-name "snv-hard-filter" --filter-expression "QD < 2.0 || FS > 200.0 || ReadPosRankSum < -20.0"'
         String snv_hard_filter = '--filter-name "indel-hard-filter" --filter-expression "QD < 2.0 || FS > 60.0 || MQ < 40.0 || MQRankSum < -12.5 || ReadPosRankSum < -8.0"'
+        # 下面的参数加工命令没有办法加入到command中，因为会报错
         String filter_str = if vartype == "SNP" then snv_hard_filter else indel_hard_filter
         String outdir
-        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz"
+#        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz"
         String genome_fa = "/data/reference_genome/hg38/hg38.fa"
 #        String ref_dict = "/data/reference_genome/hg38/hg38.dict"
 #        String ref_fai = "/data/reference_genome/hg38/hg38.fa.fai"
@@ -743,12 +748,12 @@ task hard_filter_calls {
         ~{filter_str} \
         -R ~{genome_fa} \
         -V ~{input_vcf} \
-        -O ~{output_filename}
+        -O ~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{output_filename}"
-        File output_vcf_index = "~{output_filename}.tbi"
+        File output_vcf = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz"
+        File output_vcf_index = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz.tbi"
   }
 
 }
@@ -760,7 +765,7 @@ task sort_vcf {
         String vartype
         String contig
         String outdir
-        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz"
+#        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz"
         Int cpus = 4
         Int mem_mb = 10000
         String queue
@@ -779,12 +784,12 @@ task sort_vcf {
         SortVcf \
         --MAX_RECORDS_IN_RAM 20000 \
         -I ~{input_vcf} \
-        -O ~{output_filename}
+        -O ~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{output_filename}"
-        File output_vcf_index = "~{output_filename}.tbi"
+        File output_vcf = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz"
+        File output_vcf_index = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz.tbi"
   }
 
 }
@@ -794,7 +799,7 @@ task merge_calls {
     input {
         Array[Array[File]] input_vcfs
         String outdir
-        String output_filename = "~{outdir}/result/filtered/all.vcf.gz"
+#        String output_filename = "~{outdir}/result/filtered/all.vcf.gz"
         Int cpus = 4
         Int mem_mb = 10000
         String queue
@@ -812,12 +817,12 @@ task merge_calls {
         singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' \
         MergeVcfs \
         --INPUT ~{sep=' --INPUT ' flatten(input_vcfs)} \
-        -O ~{output_filename}
+        -O ~{outdir}/result/filtered/all.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{output_filename}"
-        File output_vcf_index = "~{output_filename}.tbi"
+        File output_vcf = "~{outdir}/result/filtered/all.vcf.gz"
+        File output_vcf_index = "~{outdir}/result/filtered/all.vcf.gz.tbi"
   }
 
 }
@@ -997,7 +1002,7 @@ task fastqc {
         String queue
         String outdir
         String? other_args = ""
-        String result_path = "~{outdir}/result/qc/fastqc"
+#        String result_path = "~{outdir}/result/qc/fastqc"
         String singularity = "/data/singularity_images_wgsgvcf/fastqc:0.11.9--hdfd78af_1"
     }
 
@@ -1009,18 +1014,18 @@ task fastqc {
 
     command <<<
         set -e
-        mkdir -p ~{result_path}
+        mkdir -p ~{outdir}/result/qc/fastqc
         singularity exec -B /mnt,/data ~{singularity} fastqc \
         --quiet \
         ~{other_args} \
         -t ~{cpus} \
-        --outdir ~{result_path} \
+        --outdir ~{outdir}/result/qc/fastqc \
         ~{read1} \
         ~{read2}
     >>>
 
     output {
-        String result_dir = "~{result_path}"
+        String result_dir = "~{outdir}/result/qc/fastqc"
     }
 }
 
@@ -1034,7 +1039,7 @@ task samtools_stats {
         String outdir
         String sample_name
         String sample_unit
-        String output_filename = "~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
+#        String output_filename = "~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
         String singularity = "/data/singularity_images_wgsgvcf/samtools:1.13--h8c37831_0"
         String? other_args = ""
     }
@@ -1049,11 +1054,11 @@ task samtools_stats {
         set -e
         mkdir -p ~{outdir}/result/qc/samtools_stats/
         singularity exec -B /mnt,/data ~{singularity} \
-        samtools stats ~{other_args} ~{input_bam} > ~{output_filename}
+        samtools stats ~{other_args} ~{input_bam} > ~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt
     >>>
 
     output {
-        File bam_stats_file = "~{output_filename}"
+        File bam_stats_file = "~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
         String result_dir = "~{outdir}/result/qc/samtools_stats/"
     }
 }
