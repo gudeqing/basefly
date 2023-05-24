@@ -272,12 +272,12 @@ workflow wgs_wf {
 
     call multiqc {
         input:
-            input_dirs = [fastqc.result_dir[0],
-                         bbduk.result_dir[0],
-                         samtools_stats.result_dir[0],
-                         qualimap.result_dir[0],
-                         mark_duplicates.result_dir[0]
-                         ],
+            raw_input_dirs = [fastqc.result_dir,
+                             bbduk.result_dir,
+                             samtools_stats.result_dir,
+                             qualimap.result_dir,
+                             mark_duplicates.result_dir
+                            ],
             queue = queue,
             outdir = outdir
     }
@@ -334,8 +334,8 @@ task bbduk {
 
 task map_reads {
      input{
-        String Fastq1
-        String Fastq2
+        File Fastq1
+        File Fastq2
         String sample
         String unit
         String queue
@@ -1045,7 +1045,7 @@ task fastqc {
         String queue
         String outdir
         String? other_args = ""
-        String result_dir = "~{outdir}/result/qc/fastqc"
+        String result_path = "~{outdir}/result/qc/fastqc"
         String singularity = "/data/singularity_images_wgsgvcf/fastqc:0.11.9--hdfd78af_1"
     }
 
@@ -1057,18 +1057,18 @@ task fastqc {
 
     command <<<
         set -e
-        mkdir -p ~{result_dir}
+        mkdir -p ~{result_path}
         singularity exec -B /mnt,/data ~{singularity} fastqc \
         --quiet \
         ~{other_args} \
         -t ~{cpus} \
-        --outdir ~{result_dir} \
+        --outdir ~{result_path} \
         ~{read1} \
         ~{read2}
     >>>
 
     output {
-        String result_dir = "~{result_dir}"
+        String result_dir = "~{result_path}"
     }
 }
 
@@ -1120,7 +1120,8 @@ task multiqc {
 #        String trimmed_result_dir
 #        String qualimap_result_dir
 #        String dedup_result_dir
-        Array[String] input_dirs
+        Array[Array[String]] raw_input_dirs
+        Array[String] input_dirs = [raw_input_dirs[0][0], raw_input_dirs[1][0], raw_input_dirs[2][0], raw_input_dirs[3][0], raw_input_dirs[4][0]]
         Int cpus = 1
         Int mem_mb = 10000
         String queue
