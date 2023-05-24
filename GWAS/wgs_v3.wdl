@@ -28,10 +28,9 @@ workflow wgs_wf {
         File inputsamplenamefile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/samples_WDL.tsv"
         # contig信息，用于并行分区call突变
         File contigfile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/contig.tsv"
-        # interval 目录
-        String interval_dir = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/intervals"
+
         # 参考基因组
-        String ref_fa = "/data/reference_genome/hg38/hg38.fa"
+#        String ref_fa = "/data/reference_genome/hg38/hg38.fa"
 #        String ref_dict = "/data/reference_genome/hg38/hg38.dict"
 #        String ref_fai = "/data/reference_genome/hg38/hg38.fa.fai"
 #        String ref_bwt = "/data/reference_genome/hg38/hg38.fa.bwt"
@@ -41,7 +40,7 @@ workflow wgs_wf {
 #        String ref_sa = "/data/reference_genome/hg38/hg38.fa.sa"
 
         # 匹配目标bam和bai文件的脚本路径
-        File select_array_script = "/mnt/nas_101/genarsa/Pipeline_Test/20230510/script/select_array.py"
+#        File select_array_script = "/mnt/nas_101/genarsa/Pipeline_Test/20230510/script/select_array.py"
 
         # 突变类型 Possible values: {NO_VARIATION, SNP, MNP, INDEL,SYMBOLIC, MIXED}
         Array[String] variant_types =  ["SNP", "INDEL"]
@@ -80,7 +79,6 @@ workflow wgs_wf {
                 Fastq2=bbduk.R2,
                 outdir=outdir,
                 queue=queue,
-                genome_fa = ref_fa
         }
 
         call mark_duplicates {
@@ -110,7 +108,6 @@ workflow wgs_wf {
                 dedup_bambi_array=mark_duplicates.bambi,
                 sample=inputsamplename[0],
                 outdir=outdir,
-                select_array_script=select_array_script,
                 queue=queue
         }
    }
@@ -122,7 +119,6 @@ workflow wgs_wf {
                sample=inputsample[0],
                unit=inputsample[1],
                outdir=outdir,
-               select_array_script=select_array_script,
                queue=queue
        }
     }
@@ -134,10 +130,8 @@ workflow wgs_wf {
                     merge_bam_array=merge_bam.bam,
                     sample=inputsamplename[0],
                     outdir=outdir,
-                    select_array_script=select_array_script,
                     contig=contig[0],
                     queue=queue,
-                    genome_fa = ref_fa
             }
        }
 
@@ -152,7 +146,6 @@ workflow wgs_wf {
 
     call get_interval_list {
         input:
-            interval_dir = interval_dir,
             outdir = outdir,
             queue = queue
     }
@@ -164,7 +157,6 @@ workflow wgs_wf {
                 interval_list_file = interval,
                 outdir = outdir,
                 queue = queue,
-                genome_fa = ref_fa
         }
 
         call genotype_variants {
@@ -173,7 +165,6 @@ workflow wgs_wf {
                 interval_list_file = interval,
                 outdir = outdir,
                 queue = queue,
-                genome_fa = ref_fa
         }
    }
 
@@ -193,7 +184,6 @@ workflow wgs_wf {
                     outdir = outdir,
                     vartype = vartype,
                     contig = contig[0],
-                    genome_fa = ref_fa
             }
 
             call hard_filter_calls {
@@ -203,7 +193,6 @@ workflow wgs_wf {
                     vartype = vartype,
                     contig = contig[0],
                     outdir = outdir,
-                    genome_fa = ref_fa
             }
 
             call sort_vcf {
@@ -228,8 +217,7 @@ workflow wgs_wf {
         input:
             queue = queue,
             input_file = merge_calls.output_vcf,
-            outdir = outdir,
-            fasta = ref_fa,
+            outdir = outdir
     }
 
     call multiqc {
@@ -428,7 +416,7 @@ task qualimap{
         String queue
         Int cpus = 4
         Int mem_mb = 16000
-        File select_array_script
+        File select_array_script = "/mnt/nas_101/genarsa/Pipeline_Test/20230510/script/select_array.py"
         Int threads = 4
         String mem = "15000M"
         String singularity = "/data/singularity_images_wgsgvcf/qualimap:2.2.2d--hdfd78af_2"
@@ -465,7 +453,7 @@ task call_variants{
            String queue
            Int mem_mb = 10000
            Int cpus = 4
-           File select_array_script
+           File select_array_script = "/mnt/nas_101/genarsa/Pipeline_Test/20230510/script/select_array.py"
            String genome_fa = "/data/reference_genome/hg38/hg38.fa"
 #           String ref_dict = "/data/reference_genome/hg38/hg38.dict"
 #           String ref_fai = "/data/reference_genome/hg38/hg38.fa.fai"
@@ -542,7 +530,8 @@ task merge_variants_sample_contig{
 
 task get_interval_list {
     input {
-        String interval_dir = "/data/reference_genome/hg38/interval-files-folder"
+#        String interval_dir = "/data/reference_genome/hg38/interval-files-folder"
+        String interval_dir = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/intervals"
         String queue
         String outdir
     }
@@ -556,7 +545,7 @@ task get_interval_list {
     >>>
 
     output {
-        Array[File] interval_list = glob("~{interval_dir}/*-scattered.interval_list")
+        Array[String] interval_list = read_lines("~{outdir}/result/called/interval_list.txt")
     }
 }
 
@@ -575,7 +564,6 @@ task combine_calls{
         # String ref_dict = "/data/reference_genome/hg38/hg38.dict"
         # String ref_fai = "/data/reference_genome/hg38/hg38.fa.fai"
         String java_opts = "-Xmx10g"
-        String interval_dir = "/data/reference_genome/hg38/interval-files-folder"
         String singularity = "/data/singularity_images_wgsgvcf/gatk4:4.2.2.0--hdfd78af_1"
     }
 
@@ -835,7 +823,7 @@ task annotate_variants {
     input {
         File input_file
 #        File? input_file_idx
-        String fasta
+        String genome_fa = "/data/reference_genome/hg38/hg38.fa"
 #        Array[String] fasta_idx
         String outdir
         String output_file = "~{outdir}/result/annotated/all.vcf.gz"
@@ -891,7 +879,7 @@ task annotate_variants {
 
         singularity exec -B /mnt,/data ~{singularity} vep \
         ~{"-i " + input_file} \
-        ~{"--fasta " + fasta} \
+        ~{"--fasta " + genome_fa} \
         ~{"-o " + output_file} \
         ~{"--" + output_format} \
         ~{"--compress_output " + compress_output} \
@@ -954,7 +942,7 @@ task annotate_variants {
 
     parameter_meta {
         input_file: {prefix: "-i ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "input file"}
-        fasta: {prefix: "--fasta ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache)."}
+        genome_fa: {prefix: "--fasta ", type: "infile", level: "required", default: "None", range: "None", array: "False", desc: "Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache)."}
         output_file: {prefix: "-o ", type: "str", level: "required", default: "tumor.vep.vcf.gz", range: "None", array: "False", desc: "output file"}
         output_format: {prefix: "--", type: "str", level: "required", default: "vcf", range: "{'vcf', 'json', 'tab'}", array: "False", desc: "If we choose to write output in VCF format. Consequences are added in the INFO field of the VCF file, using the key 'CSQ'. Data fields are encoded separated by '|'; the order of fields is written in the VCF header. Output fields in the 'CSQ' INFO field can be selected by using --fields."}
         compress_output: {prefix: "--compress_output ", type: "str", level: "required", default: "bgzip", range: "None", array: "False", desc: "Writes output compressed using either gzip or bgzip"}
@@ -1006,7 +994,7 @@ task fastqc {
         String queue
         String outdir
         String? other_args = ""
-        String result_dir = "~{outdir}/result/qc/fastqc"
+        String result_path = "~{outdir}/result/qc/fastqc"
         String singularity = "/data/singularity_images_wgsgvcf/fastqc:0.11.9--hdfd78af_1"
     }
 
@@ -1018,18 +1006,18 @@ task fastqc {
 
     command <<<
         set -e
-        mkdir -p ~{result_dir}
+        mkdir -p ~{result_path}
         singularity exec -B /mnt,/data ~{singularity} fastqc \
         --quiet \
         ~{other_args} \
         -t ~{cpus} \
-        --outdir ~{result_dir} \
+        --outdir ~{result_path} \
         ~{read1} \
         ~{read2}
     >>>
 
     output {
-        String result_dir = "~{outdir}/result/qc/fastqc"
+        String result_dir = "~{result_path}"
     }
 }
 
