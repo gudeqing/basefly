@@ -932,7 +932,7 @@ task annotate_variants {
     output {
         File out_vcf = "~{output_file}"
         File? out_vcf_idx = "~{output_file}.tbi"
-        File stats_file = "~{stats_file}"
+        File stats_html = "~{stats_file}"
     }
 
     runtime {
