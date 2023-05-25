@@ -255,7 +255,7 @@ workflow wgs_wf {
         call gwas.gwas_wf {
             input:
                 inputsamplefile = prepare_gwas_input.gwas_input_file ,
-                outdir = outdir,
+                outdir = outdir + '/result',
                 queue=queue
         }
     }
