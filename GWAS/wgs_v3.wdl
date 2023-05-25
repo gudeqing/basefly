@@ -553,7 +553,7 @@ task get_interval_list {
     >>>
 
     output {
-        Array[String] interval_list = read_lines(stdout())
+        Array[File] interval_list = read_lines(stdout())
     }
 }
 
