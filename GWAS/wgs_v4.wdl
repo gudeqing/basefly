@@ -35,7 +35,7 @@ workflow wgs_wf {
         # contig信息，用于并行分区call突变
         File contigfile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/contig.tsv"
 
-        # 本批次分析的名称，用于GWAS分析
+        # 是否进行GWAS分析
         Boolean do_gwas = true
 
         # 参考基因组
@@ -248,7 +248,7 @@ workflow wgs_wf {
         call prepare_gwas_input {
             input:
                 gvcf = merge_calls.output_vcf,
-                outdir = outdir,
+                outdir = outdir + 'result',
                 queue = queue
         }
 
