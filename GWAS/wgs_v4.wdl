@@ -248,14 +248,14 @@ workflow wgs_wf {
         call prepare_gwas_input {
             input:
                 gvcf = merge_calls.output_vcf,
-                outdir = outdir + 'result',
+                outdir = outdir,
                 queue = queue
         }
 
         call gwas.gwas_wf {
             input:
-                inputsamplefile = prepare_gwas_input.gwas_input_file ,
-                outdir = outdir + '/result',
+                inputsamplefile = prepare_gwas_input.gwas_input_file,
+                outdir = outdir,
                 queue=queue
         }
     }
@@ -290,21 +290,21 @@ task bbduk {
             singularity exec -B /mnt,/data ~{singularity} bbduk.sh \
             -Xmx~{xmx} \
             in1=~{Fastq1} in2=~{Fastq2} \
-            out1=~{outdir}/result/trimmed/~{sample}-~{unit}.1.fastq.gz \
-            out2=~{outdir}/result/trimmed/~{sample}-~{unit}.2.fastq.gz \
+            out1=~{outdir}/trimmed/~{sample}-~{unit}.1.fastq.gz \
+            out2=~{outdir}/trimmed/~{sample}-~{unit}.2.fastq.gz \
             threads=~{threads} \
             ref=~{adapters} \
             k=25 mink=8 ktrim=r \
             ordered=true \
-            qtrim=rl hdist=1 stats=~{outdir}/result/trimmed/~{sample}-~{unit}.stats.txt
+            qtrim=rl hdist=1 stats=~{outdir}/trimmed/~{sample}-~{unit}.stats.txt
 
     >>>
 
     output{
-        File R1 = "~{outdir}/result/trimmed/~{sample}-~{unit}.1.fastq.gz"
-        File R2 = "~{outdir}/result/trimmed/~{sample}-~{unit}.2.fastq.gz"
-        File stats = "~{outdir}/result/trimmed/~{sample}-~{unit}.stats.txt"
-        String result_dir = "~{outdir}/result/trimmed/"
+        File R1 = "~{outdir}/trimmed/~{sample}-~{unit}.1.fastq.gz"
+        File R2 = "~{outdir}/trimmed/~{sample}-~{unit}.2.fastq.gz"
+        File stats = "~{outdir}/trimmed/~{sample}-~{unit}.stats.txt"
+        String result_dir = "~{outdir}/trimmed/"
     }
 
 }
@@ -341,24 +341,24 @@ task map_reads {
 
 
      command<<<
-        mkdir -p ~{outdir}/result/mapped && \
+        mkdir -p ~{outdir}/mapped && \
         singularity exec -B /mnt,/data ~{singularity} bwa mem \
             -M -Y \
             -R '@RG\tID:~{sample}.L1-B1\tSM:~{sample}\tLB:L1-B1\tPL:ILLUMINA' \
             -t ~{threads} \
-            ~{genome_fa} ~{Fastq1} ~{Fastq2} > ~{outdir}/result/mapped/~{sample}-~{unit}.unsorted.bam
+            ~{genome_fa} ~{Fastq1} ~{Fastq2} > ~{outdir}/mapped/~{sample}-~{unit}.unsorted.bam
 
          singularity exec -B /mnt,/data ~{singularity} samtools sort \
             --threads ~{threads} -OBAM \
-         ~{outdir}/result/mapped/~{sample}-~{unit}.unsorted.bam \
-         -o ~{outdir}/result/mapped/~{sample}-~{unit}.sorted.bam
+         ~{outdir}/mapped/~{sample}-~{unit}.unsorted.bam \
+         -o ~{outdir}/mapped/~{sample}-~{unit}.sorted.bam
 
-         rm ~{outdir}/result/mapped/~{sample}-~{unit}.unsorted.bam
+         rm ~{outdir}/mapped/~{sample}-~{unit}.unsorted.bam
 
      >>>
 
      output{
-        File bam = "~{outdir}/result/mapped/~{sample}-~{unit}.sorted.bam"
+        File bam = "~{outdir}/mapped/~{sample}-~{unit}.sorted.bam"
      }
 }
 
@@ -383,16 +383,16 @@ task mark_duplicates{
     }
 
     command<<<
-        mkdir -p ~{outdir}/result/dedup && touch ~{outdir}/result/dedup/~{sample}-~{unit}.log.txt \
+        mkdir -p ~{outdir}/dedup && touch ~{outdir}/dedup/~{sample}-~{unit}.log.txt \
         && singularity exec -B /mnt,/data ~{singularity} sambamba \
-        markdup -t ~{threads} ~{sort_bam} ~{outdir}/result/dedup/~{sample}-~{unit}.bam 2>&1 | awk 'NR>2' > ~{outdir}/result/dedup/~{sample}-~{unit}.log.txt
+        markdup -t ~{threads} ~{sort_bam} ~{outdir}/dedup/~{sample}-~{unit}.bam 2>&1 | awk 'NR>2' > ~{outdir}/dedup/~{sample}-~{unit}.log.txt
     >>>
 
     output{
-        File bam = "~{outdir}/result/dedup/~{sample}-~{unit}.bam"
-        File bambi = "~{outdir}/result/dedup/~{sample}-~{unit}.bam.bai"
-        File logtxt = "~{outdir}/result/dedup/~{sample}-~{unit}.log.txt"
-        String result_dir = "~{outdir}/result/dedup"
+        File bam = "~{outdir}/dedup/~{sample}-~{unit}.bam"
+        File bambi = "~{outdir}/dedup/~{sample}-~{unit}.bam.bai"
+        File logtxt = "~{outdir}/dedup/~{sample}-~{unit}.log.txt"
+        String result_dir = "~{outdir}/dedup"
     }
 
 }
@@ -420,18 +420,18 @@ task merge_bam{
         dedup_bambi=`/data/genarsa_project/bioinfo_miniconda3/envs/snakemake_python3.9.0/bin/python  ~{select_array_script} ~{sep="," dedup_bam_array} ~{sep="," dedup_bambi_array} ~{sample} bambai` && \
         n_bam=`echo ${dedup_bam}|awk '{print NF}'` && \
         if (( $n_bam == 1 ));then \
-            if [ -f "~{outdir}/result/dedup/~{sample}.merged.bam" ];then
-                rm ~{outdir}/result/dedup/~{sample}.merged.bam ~{outdir}/result/dedup/~{sample}.merged.bam.bai
+            if [ -f "~{outdir}/dedup/~{sample}.merged.bam" ];then
+                rm ~{outdir}/dedup/~{sample}.merged.bam ~{outdir}/dedup/~{sample}.merged.bam.bai
             fi
-            ln -s ${dedup_bam} ~{outdir}/result/dedup/~{sample}.merged.bam && ln -s ${dedup_bambi} ~{outdir}/result/dedup/~{sample}.merged.bam.bai;\
+            ln -s ${dedup_bam} ~{outdir}/dedup/~{sample}.merged.bam && ln -s ${dedup_bambi} ~{outdir}/dedup/~{sample}.merged.bam.bai;\
         else \
-            singularity exec -B /mnt,/data ~{singularity} samtools merge -f -o ~{outdir}/result/dedup/~{sample}.merged.bam --threads ~{threads} --write-index ${dedup_bam}; \
+            singularity exec -B /mnt,/data ~{singularity} samtools merge -f -o ~{outdir}/dedup/~{sample}.merged.bam --threads ~{threads} --write-index ${dedup_bam}; \
         fi
 
     >>>
 
     output{
-        File bam = "~{outdir}/result/dedup/~{sample}.merged.bam"
+        File bam = "~{outdir}/dedup/~{sample}.merged.bam"
     }
 }
 
@@ -460,13 +460,13 @@ task qualimap{
     command <<<
 
      merge_bam=`/data/genarsa_project/bioinfo_miniconda3/envs/snakemake_python3.9.0/bin/python ~{select_array_script} ~{sep="," merge_bam_array} - ~{sample} bam` && \
-     unset DISPLAY; singularity exec -B /mnt,/data ~{singularity} qualimap --java-mem-size=~{mem} bamqc -outformat HTML -outdir ~{outdir}/result/qc/qualimap/~{sample}-~{unit} -bam ${merge_bam} -nt ~{threads}
+     unset DISPLAY; singularity exec -B /mnt,/data ~{singularity} qualimap --java-mem-size=~{mem} bamqc -outformat HTML -outdir ~{outdir}/qc/qualimap/~{sample}-~{unit} -bam ${merge_bam} -nt ~{threads}
 
     >>>
 
     output{
-        File genome_result = "~{outdir}/result/qc/qualimap/~{sample}-~{unit}/genome_results.txt"
-        String result_dir = "~{outdir}/result/qc/qualimap/"
+        File genome_result = "~{outdir}/qc/qualimap/~{sample}-~{unit}/genome_results.txt"
+        String result_dir = "~{outdir}/qc/qualimap/"
 
     }
 
@@ -498,22 +498,22 @@ task call_variants{
 
     command <<<
       merge_bam=`/data/genarsa_project/bioinfo_miniconda3/envs/snakemake_python3.9.0/bin/python ~{select_array_script} ~{sep="," merge_bam_array} - ~{sample} bam` && \
-      mkdir -p ~{outdir}/result/called && \
+      mkdir -p ~{outdir}/called && \
         singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' \
         HaplotypeCaller \
             --annotate-with-num-discovered-alleles true \
             -R ~{genome_fa} \
             -I ${merge_bam} \
             -ERC GVCF \
-            -O ~{outdir}/result/called/~{sample}.~{contig}.g.vcf.gz \
+            -O ~{outdir}/called/~{sample}.~{contig}.g.vcf.gz \
             -L ~{contig}
 
     >>>
 
 
     output{
-        File gvcf = "~{outdir}/result/called/~{sample}.~{contig}.g.vcf.gz"
-        File tbi = "~{outdir}/result/called/~{sample}.~{contig}.g.vcf.gz.tbi"
+        File gvcf = "~{outdir}/called/~{sample}.~{contig}.g.vcf.gz"
+        File tbi = "~{outdir}/called/~{sample}.~{contig}.g.vcf.gz.tbi"
 
     }
 
@@ -543,14 +543,14 @@ task merge_variants_sample_contig{
 
        singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' MergeVcfs \
             ~{sep=" " prefix('INPUT=',contig_gvcf)} \
-            OUTPUT=~{outdir}/result/called/~{sample}.g.vcf.gz \
+            OUTPUT=~{outdir}/called/~{sample}.g.vcf.gz \
 
     >>>
 
     output{
 
-        File gvcf = "~{outdir}/result/called/~{sample}.g.vcf.gz"
-        File tbi = "~{outdir}/result/called/~{sample}.g.vcf.gz.tbi"
+        File gvcf = "~{outdir}/called/~{sample}.g.vcf.gz"
+        File tbi = "~{outdir}/called/~{sample}.g.vcf.gz.tbi"
 
     }
 
@@ -605,14 +605,14 @@ task combine_calls{
     command <<<
       singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' CombineGVCFs \
             -R ~{genome_fa} \
-            -O ~{outdir}/result/called/all.~{interval_idx}.g.vcf.gz\
+            -O ~{outdir}/called/all.~{interval_idx}.g.vcf.gz\
             ~{sep=" " prefix('-V ',gvcfs)} \
             -L ~{interval_list_file}
     >>>
 
     output{
-        File gvcf="~{outdir}/result/called/all.~{interval_idx}.g.vcf.gz"
-        File gvcftbi="~{outdir}/result/called/all.~{interval_idx}.g.vcf.gz.tbi"
+        File gvcf="~{outdir}/called/all.~{interval_idx}.g.vcf.gz"
+        File gvcftbi="~{outdir}/called/all.~{interval_idx}.g.vcf.gz.tbi"
     }
 }
 
@@ -644,17 +644,17 @@ task genotype_variants{
 
     command <<<
 
-       mkdir -p ~{outdir}/result/genotyped && singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' GenotypeGVCFs \
+       mkdir -p ~{outdir}/genotyped && singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' GenotypeGVCFs \
             -V ~{gvcf} \
             -R ~{genome_fa} \
-            -O ~{outdir}/result/genotyped/all.~{interval_idx}.vcf.gz \
+            -O ~{outdir}/genotyped/all.~{interval_idx}.vcf.gz \
             --dbsnp ~{dbsnp} \
 
     >>>
 
     output{
-        File vcf = "~{outdir}/result/genotyped/all.~{interval_idx}.vcf.gz"
-        File vcf_tbi = "~{outdir}/result/genotyped/all.~{interval_idx}.vcf.gz.tbi"
+        File vcf = "~{outdir}/genotyped/all.~{interval_idx}.vcf.gz"
+        File vcf_tbi = "~{outdir}/genotyped/all.~{interval_idx}.vcf.gz.tbi"
     }
 }
 
@@ -663,7 +663,7 @@ task merge_variants_interval {
     input {
         Array[File] input_vcfs
         String outdir
-#        String output_filename = "~{outdir}/result/genotyped/all.vcf.gz"
+#        String output_filename = "~{outdir}/genotyped/all.vcf.gz"
         Int cpus = 4
         Int mem_mb = 10000
         String queue
@@ -681,12 +681,12 @@ task merge_variants_interval {
         singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' \
         MergeVcfs \
         --INPUT ~{sep=' --INPUT ' input_vcfs} \
-        --OUTPUT ~{outdir}/result/genotyped/all.vcf.gz
+        --OUTPUT ~{outdir}/genotyped/all.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{outdir}/result/genotyped/all.vcf.gz"
-        File output_vcf_index = "~{outdir}/result/genotyped/all.vcf.gz.tbi"
+        File output_vcf = "~{outdir}/genotyped/all.vcf.gz"
+        File output_vcf_index = "~{outdir}/genotyped/all.vcf.gz.tbi"
   }
 }
 
@@ -698,7 +698,7 @@ task select_calls {
         String vartype
         String contig
         String outdir
-#        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz"
+#        String output_filename = "~{outdir}/filtered/all.~{contig}.~{vartype}.vcf.gz"
         String genome_fa = "/data/reference_genome/hg38/hg38.fa"
 #        String ref_dict = "/data/reference_genome/hg38/hg38.dict"
 #        String ref_fai = "/data/reference_genome/hg38/hg38.fa.fai"
@@ -716,19 +716,19 @@ task select_calls {
     }
 
     command <<<
-        mkdir -p ~{outdir}/result/filtered
+        mkdir -p ~{outdir}/filtered
         singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' \
         SelectVariants \
         -select-type ~{vartype} \
         -R ~{genome_fa} \
         -V ~{input_vcf} \
         -L ~{contig} \
-        -O ~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz
+        -O ~{outdir}/filtered/all.~{contig}.~{vartype}.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz"
-        File output_vcf_index = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.vcf.gz.tbi"
+        File output_vcf = "~{outdir}/filtered/all.~{contig}.~{vartype}.vcf.gz"
+        File output_vcf_index = "~{outdir}/filtered/all.~{contig}.~{vartype}.vcf.gz.tbi"
   }
 
 }
@@ -746,7 +746,7 @@ task hard_filter_calls {
         # 下面的参数加工命令没有办法加入到command中，因为会报错
         String filter_str = if vartype == "SNP" then snv_hard_filter else indel_hard_filter
         String outdir
-#        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz"
+#        String output_filename = "~{outdir}/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz"
         String genome_fa = "/data/reference_genome/hg38/hg38.fa"
 #        String ref_dict = "/data/reference_genome/hg38/hg38.dict"
 #        String ref_fai = "/data/reference_genome/hg38/hg38.fa.fai"
@@ -769,12 +769,12 @@ task hard_filter_calls {
         ~{filter_str} \
         -R ~{genome_fa} \
         -V ~{input_vcf} \
-        -O ~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz
+        -O ~{outdir}/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz"
-        File output_vcf_index = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz.tbi"
+        File output_vcf = "~{outdir}/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz"
+        File output_vcf_index = "~{outdir}/filtered/all.~{contig}.~{vartype}.hardfiltered.vcf.gz.tbi"
   }
 
 }
@@ -786,7 +786,7 @@ task sort_vcf {
         String vartype
         String contig
         String outdir
-#        String output_filename = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz"
+#        String output_filename = "~{outdir}/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz"
         Int cpus = 4
         Int mem_mb = 10000
         String queue
@@ -805,12 +805,12 @@ task sort_vcf {
         SortVcf \
         --MAX_RECORDS_IN_RAM 20000 \
         -I ~{input_vcf} \
-        -O ~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz
+        -O ~{outdir}/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz"
-        File output_vcf_index = "~{outdir}/result/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz.tbi"
+        File output_vcf = "~{outdir}/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz"
+        File output_vcf_index = "~{outdir}/filtered/all.~{contig}.~{vartype}.hardfiltered.sort.vcf.gz.tbi"
   }
 
 }
@@ -820,7 +820,7 @@ task merge_calls {
     input {
         Array[Array[File]] input_vcfs
         String outdir
-#        String output_filename = "~{outdir}/result/filtered/all.vcf.gz"
+#        String output_filename = "~{outdir}/filtered/all.vcf.gz"
         Int cpus = 4
         Int mem_mb = 10000
         String queue
@@ -838,12 +838,12 @@ task merge_calls {
         singularity exec -B /mnt,/data ~{singularity} gatk --java-options '~{java_opts}' \
         MergeVcfs \
         --INPUT ~{sep=' --INPUT ' flatten(input_vcfs)} \
-        -O ~{outdir}/result/filtered/all.vcf.gz
+        -O ~{outdir}/filtered/all.vcf.gz
     >>>
 
     output {
-        File output_vcf = "~{outdir}/result/filtered/all.vcf.gz"
-        File output_vcf_index = "~{outdir}/result/filtered/all.vcf.gz.tbi"
+        File output_vcf = "~{outdir}/filtered/all.vcf.gz"
+        File output_vcf_index = "~{outdir}/filtered/all.vcf.gz.tbi"
   }
 
 }
@@ -855,8 +855,8 @@ task annotate_variants {
         File? input_file_idx
         String genome_fa = "/data/reference_genome/hg38/hg38.fa"
         String outdir
-        String output_file = "~{outdir}/result/annotated/all.vcf.gz"
-        String stats_file = "~{outdir}/result/annotated/all.stats.html"
+        String output_file = "~{outdir}/annotated/all.vcf.gz"
+        String stats_file = "~{outdir}/annotated/all.stats.html"
         String output_format = "vcf"
         Boolean output_vcf = output_format == "vcf"
         String compress_output = "bgzip"
@@ -904,7 +904,7 @@ task annotate_variants {
 
     command <<<
         set -e
-        mkdir -p ~{outdir}/result/annotated/
+        mkdir -p ~{outdir}/annotated/
 
         singularity exec -B /mnt,/data ~{singularity} vep \
         ~{"-i " + input_file} \
@@ -1023,7 +1023,7 @@ task fastqc {
         String queue
         String outdir
 #        String? other_args = ""
-#        String result_path = "~{outdir}/result/qc/fastqc"
+#        String result_path = "~{outdir}/qc/fastqc"
         String singularity = "/data/singularity_images_wgsgvcf/fastqc:0.11.9--hdfd78af_1"
     }
 
@@ -1035,17 +1035,17 @@ task fastqc {
 
     command <<<
         set -e
-        mkdir -p ~{outdir}/result/qc/fastqc
+        mkdir -p ~{outdir}/qc/fastqc
         singularity exec -B /mnt,/data ~{singularity} fastqc \
         --quiet \
         -t ~{cpus} \
-        --outdir ~{outdir}/result/qc/fastqc \
+        --outdir ~{outdir}/qc/fastqc \
         ~{read1} \
         ~{read2}
     >>>
 
     output {
-        String result_dir = "~{outdir}/result/qc/fastqc"
+        String result_dir = "~{outdir}/qc/fastqc"
     }
 }
 
@@ -1059,7 +1059,7 @@ task samtools_stats {
         String outdir
         String sample_name
         String sample_unit
-#        String output_filename = "~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
+#        String output_filename = "~{outdir}/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
         String singularity = "/data/singularity_images_wgsgvcf/samtools:1.13--h8c37831_0"
 #        String? other_args = ""
     }
@@ -1072,14 +1072,14 @@ task samtools_stats {
 
     command <<<
         set -e
-        mkdir -p ~{outdir}/result/qc/samtools_stats/
+        mkdir -p ~{outdir}/qc/samtools_stats/
         singularity exec -B /mnt,/data ~{singularity} \
-        samtools stats ~{input_bam} > ~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt
+        samtools stats ~{input_bam} > ~{outdir}/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt
     >>>
 
     output {
-        File bam_stats_file = "~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
-        String result_dir = "~{outdir}/result/qc/samtools_stats/"
+        File bam_stats_file = "~{outdir}/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
+        String result_dir = "~{outdir}/qc/samtools_stats/"
     }
 }
 
@@ -1109,7 +1109,7 @@ task multiqc {
         set -e
         singularity exec -B /mnt,/data ~{singularity} \
         multiqc --force ~{other_args} \
-        -o ~{outdir}/result/qc/ \
+        -o ~{outdir}/qc/ \
         -n multiqc \
         ~{fastqc_result_dir[0]} \
         ~{samtools_stats_dir[0]} \
@@ -1119,7 +1119,7 @@ task multiqc {
     >>>
 
     output {
-        File report_html = "~{outdir}/result/qc/multiqc.html"
+        File report_html = "~{outdir}/qc/multiqc.html"
     }
 }
 
