@@ -917,8 +917,8 @@ task annotate_variants {
         ~{"--species " + species} \
         ~{"--assembly " + assembly_version} \
         --dir_cache ~{vep_cache_dir} \
-        ~{if length(vep_plugin_dir) > 3 then "--dir_plugins " + vep_plugin_dir else ""} \
-        ~{sep=" " if length(plugin_names) > 1 then prefix("--plugin ", plugin_names) else [""]} \
+        ~{if (vep_plugin_dir != "-") then "--dir_plugins " + vep_plugin_dir else ""} \
+        ~{sep=" " if length(plugin_names) > 0 then prefix("--plugin ", plugin_names) else [""]} \
         ~{"--stats_file " + stats_file} \
         ~{if cache then "--cache  " else ""} \
         ~{if offline then "--offline  " else ""} \
