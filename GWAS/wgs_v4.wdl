@@ -861,9 +861,9 @@ task annotate_variants {
         Boolean output_vcf = output_format == "vcf"
         String compress_output = "bgzip"
         Boolean force_overwrite = true
-        Int fork = 4
+#        Int fork = 4
         # 直接给字符串路径作为输入，因singularity可以将数据盘挂载到执行环境
-        String? vep_plugin_dir
+        String vep_plugin_dir = "-"
         String vep_cache_dir = "/data/reference_genome/biodb/vep/grch38/"
 #        Array[String] plugin_names = ['Frameshift', 'Wildtype']
         Array[String] plugin_names = []
@@ -897,7 +897,7 @@ task annotate_variants {
         Boolean filter_common = false # 参考现有流程设置
         # for runtime
         String singularity = "/data/singularity_images_wgsgvcf/ensembl-vep:104.3--pl5262h4a94de4_0"
-        Int cpus = fork + 1
+        Int cpus = 4
         Int mem_mb = 10000
         String queue
     }
@@ -913,12 +913,12 @@ task annotate_variants {
         ~{"--" + output_format} \
         ~{"--compress_output " + compress_output} \
         ~{if force_overwrite then "--force_overwrite  " else ""} \
-        ~{"--fork " + fork} \
+        ~{"--fork " + cpus} \
         ~{"--species " + species} \
         ~{"--assembly " + assembly_version} \
         --dir_cache ~{vep_cache_dir} \
-        ~{if defined(vep_plugin_dir) then "--dir_plugins " + vep_plugin_dir else ""} \
-        ~{sep=" " if length(plugin_names) > 0 then prefix("--plugin ", plugin_names) else [""]} \
+        ~{if length(vep_plugin_dir) > 3 then "--dir_plugins " + vep_plugin_dir else ""} \
+        ~{sep=" " if length(plugin_names) > 1 then prefix("--plugin ", plugin_names) else [""]} \
         ~{"--stats_file " + stats_file} \
         ~{if cache then "--cache  " else ""} \
         ~{if offline then "--offline  " else ""} \
@@ -1022,7 +1022,7 @@ task fastqc {
         Int mem_mb = 10000
         String queue
         String outdir
-        String? other_args = ""
+#        String? other_args = ""
 #        String result_path = "~{outdir}/result/qc/fastqc"
         String singularity = "/data/singularity_images_wgsgvcf/fastqc:0.11.9--hdfd78af_1"
     }
@@ -1038,7 +1038,6 @@ task fastqc {
         mkdir -p ~{outdir}/result/qc/fastqc
         singularity exec -B /mnt,/data ~{singularity} fastqc \
         --quiet \
-        ~{other_args} \
         -t ~{cpus} \
         --outdir ~{outdir}/result/qc/fastqc \
         ~{read1} \
@@ -1062,7 +1061,7 @@ task samtools_stats {
         String sample_unit
 #        String output_filename = "~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt"
         String singularity = "/data/singularity_images_wgsgvcf/samtools:1.13--h8c37831_0"
-        String? other_args = ""
+#        String? other_args = ""
     }
 
     runtime {
@@ -1075,7 +1074,7 @@ task samtools_stats {
         set -e
         mkdir -p ~{outdir}/result/qc/samtools_stats/
         singularity exec -B /mnt,/data ~{singularity} \
-        samtools stats ~{other_args} ~{input_bam} > ~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt
+        samtools stats ~{input_bam} > ~{outdir}/result/qc/samtools_stats/~{sample_name}-~{sample_unit}.txt
     >>>
 
     output {
