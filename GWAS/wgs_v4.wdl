@@ -30,8 +30,10 @@ workflow wgs_wf {
         String queue = "zryh"
         # 样本信息：样本名称,同一个样本不同测序批次的编号,测序平台类型,read1路径，read2路径
         File inputsamplefile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/units_WDL.tsv"
+#        File inputsamplefile = "/mnt/nas_101/genarsa/nasworkspace/test/Results/abf0acea-dd0c-4ce5-a153-6633aa30c4ee/inputsamples_file.tsv"
         # 样本名称信息列表文件
         File inputsamplenamefile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/samples_WDL.tsv"
+#        File inputsamplenamefile = "/mnt/nas_101/genarsa/nasworkspace/test/Results/abf0acea-dd0c-4ce5-a153-6633aa30c4ee/inputsamplenames_file.tsv"
         # contig信息，用于并行分区call突变
         File contigfile = "/mnt/nas_101/bioworkertest/gdq_0519/in_files/contig.tsv"
 
