@@ -287,7 +287,7 @@ class Command:
                             mount_vols.add(os.path.abspath(value))
 
             with open(os.path.join(wkdir, 'cmd.sh'), 'w') as f:
-                f.write('set -o pipefail\n')
+                # f.write('set -o pipefail\n')
                 f.write(self.format_cmd(wf_tasks) + '\n')
                 f.write(f'chown -R {os.getuid()}:{os.getgid()} {wkdir}' + '\n')
             # docker_cmd = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash '
@@ -391,7 +391,10 @@ class TopVar:
         if self.type in ['infile', 'indir']:
             # 对输入文件的路径进行绝对化
             if self.value is not None:
-                self.value = os.path.abspath(self.value)
+                if os.path.exists(self.value):
+                    self.value = os.path.abspath(self.value)
+                else:
+                    raise FileExistsError(self.value)
 
 
 @dataclass()
@@ -563,6 +566,12 @@ class Workflow:
         if parameters.skip:
             self.skip_steps(parameters.skip, skip_depend=not parameters.no_skip_depend)
 
+        if parameters.rerun_steps:
+            rerun_steps = self.get_all_depends(parameters.rerun_steps)
+            print('rerun the following steps:', rerun_steps)
+        else:
+            rerun_steps = tuple()
+
         if parameters.update_args:
             self.update_args(parameters.update_args)
 
@@ -646,9 +655,13 @@ class Workflow:
             with open(outfile, 'w') as configfile:
                 wf.write(configfile)
             if parameters.run:
-                wf = run_wf(outfile, timeout=parameters.wait_resource_time,
-                            assume_success_steps=parameters.assume_success_steps,
-                            plot=parameters.plot, rerun_steps=parameters.rerun_steps)
+                wf = run_wf(
+                    outfile,
+                    timeout=parameters.wait_resource_time,
+                    assume_success_steps=parameters.assume_success_steps,
+                    plot=parameters.plot,
+                    rerun_steps=rerun_steps
+                )
                 self.success = wf.failed == 0
 
             # 通过软连接汇总输出目录
@@ -744,11 +757,55 @@ class Workflow:
             skip_tasks += total_deduced_skips
         print(f'total {len(skip_tasks)} tasks will be skipped', [task_copy[tid].name for tid in skip_tasks])
 
+    def get_all_depends(self, steps):
+        """
+        给定一个或多个step的名称或者前缀(要求字符串末尾加*标志），找到下游所有可能依赖他们的steps
+        :param steps:
+        :return: 列表，包含起始步骤和所有依赖他们的步骤
+        """
+        all_tasks = self.tasks.copy()
+        step_names = [x.name for _, x in all_tasks.items()]
+        all_matched_steps = []
+        for each in steps:
+            match_steps = []
+            if each in step_names:
+                match_steps.append(each)
+            else:
+                if each.endswith('*'):
+                    match_steps += [x for x in step_names if x.startswith(each[:-1])]
+            if match_steps:
+                all_matched_steps += match_steps
+            else:
+                raise Exception(f'{each} matches no task, you may check the task name by "--list_task"')
+        init_tasks = [tid for tid, x in self.tasks.items() if x.name in all_matched_steps]
+        followed_tasks = list()
+        # 从所有的tasks中删掉起始步骤
+        _ = [all_tasks.pop(x) for x in init_tasks]
+        # 通过循环找到依赖的步骤
+        while True:
+            tmp_followed = list()
+            for tid in all_tasks.keys():
+                # print(self.tasks[tid].depends, self.tasks[tid].name)
+                # 检查当前task的依赖步骤是否全部在更新后的tasks中
+                if set(all_tasks[tid].depends) - set(all_tasks.keys()):
+                    # 有些依赖没有找到，说明当前步骤依赖曾经删除的步骤
+                    tmp_followed.append(tid)
+                    followed_tasks.append(tid)
+            if tmp_followed:
+                # 从all task中删除 tmp_followed
+                _ = [all_tasks.pop(x) for x in tmp_followed]
+            else:
+                # 说明所有task的依赖都存在，可以停止循环
+                break
+        target_tids = set(init_tasks + followed_tasks)
+        target_names = [self.tasks[tid].name for tid in target_tids]
+        return tuple(target_names)
+
     def list_cmd(self):
         print(sorted({tsk.cmd.meta.name for _, tsk in self.tasks.items()}))
 
     def list_task(self):
-        print([tsk.name for _, tsk in self.tasks.items()])
+        print(sorted([tsk.name for _, tsk in self.tasks.items()]))
 
     def show_cmd(self, cmd_name):
         for _, tsk in self.tasks.items():
@@ -764,23 +821,22 @@ class Workflow:
             description=self.meta.desc
         )
         wf_args = parser.add_argument_group('Arguments for controlling running mode')
-        wf_args.add_argument('--run', default=False, action='store_true', help="运行流程，默认不运行, 仅生成流程，如果outdir目录已经存在cmd_state.txt文件，则自动续跑")
+        wf_args.add_argument('-outdir', metavar='workdir', default=os.path.join(os.getcwd(), 'Result'), help='结果目录')
+        wf_args.add_argument('--run', default=False, action='store_true', help="默认不运行流程, 仅生成流程; 如果outdir目录已经存在cmd_state.txt文件，则自动续跑")
         wf_args.add_argument('--docker', default=False, action='store_true', help="default won't use docker even if docker image is provided.")
         wf_args.add_argument('--plot', default=False, action='store_true', help="generate directed acyclic graph for whole workflow timely")
-        # wf_args.add_argument('-dump_args', metavar='dump-args', required=False, help="输出参数配置json文件, 其包含流程所有软件需要的参数")
+        wf_args.add_argument('-threads', metavar='max-workers', default=3, type=int, help="允许的最大并行的任务数量, 默认3")
         wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, 其包含流程所有软件需要的参数，该配置文件设置的参数值将是流程中最后实际用的值")
-        wf_args.add_argument('-threads', metavar='max-workers', default=5, type=int, help="允许的最大并行的cmd数目, 默认5")
-        wf_args.add_argument('-outdir', metavar='workdir', default=os.path.join(os.getcwd(), 'Result'), help='分析目录或结果目录')
         wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
         wf_args.add_argument('--no_skip_depend', default=False, action='store_true', help="当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤")
-        wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可以是: 你重新设置了参数. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task")
-        wf_args.add_argument('-assume_success_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果. 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task")
+        wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可能是: 重新设置了命令参数. 使用--list_task可查看候选,可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task")
+        wf_args.add_argument('-assume_success_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果(需要把之前的运行结果放到当前结果目录). 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task")
         wf_args.add_argument('-retry', metavar='max-retry', default=1, type=int, help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
-        wf_args.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 且已经排除指定跳过的步骤")
+        wf_args.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 不会显示指定跳过的步骤")
         wf_args.add_argument('-show_cmd', metavar='cmd-query', help="提供一个cmd名称,输出该cmd的样例")
         wf_args.add_argument('--list_task', default=False, action="store_true", help="仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤")
         wf_args.add_argument('--monitor_resource', default=False, action='store_true', help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
-        wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=600, type=int, help="等待资源的时间上限, 默认每次等待时间为600秒, 等待时间超过这个时间且资源不足时判定任务失败")
+        wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=900, type=int, help="等待资源的时间上限, 默认每次等待时间为900秒, 等待时间超过这个时间且资源不足时判定任务失败")
         wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true', help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
         self.argparser = parser
         # for user defined arguments

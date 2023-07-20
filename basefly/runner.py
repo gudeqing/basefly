@@ -146,6 +146,7 @@ class Command(object):
 
         os.makedirs(cmd_wkdir, exist_ok=True)
         with open(os.path.join(cmd_wkdir, 'cmd.sh'), 'w') as f:
+            f.write('set -o pipefail\n')
             f.write(self.cmd + '\n')
 
         if self.image:
@@ -198,7 +199,9 @@ class Command(object):
         if self.image:
             # 无论是否运行成功，修改结果文件权限
             docker_cmd = 'docker run --rm --privileged -i '
-            docker_cmd += f'-v {cmd_wkdir}:{cmd_wkdir} {self.image} '
+            # docker_cmd += f'-v {cmd_wkdir}:{cmd_wkdir} {self.image} '
+            # 由于有些镜像会导致出错如”/bin/chown: cannot execute binary file“，所以采用固定镜像来执行
+            docker_cmd += f'-v {cmd_wkdir}:{cmd_wkdir} bash:latest '
             docker_cmd += f'chown -R {os.getuid()}:{os.getgid()} {cmd_wkdir}'
             os.system(docker_cmd)
 
@@ -628,7 +631,13 @@ class RunCommands(CommandNetwork):
         if assume_success_steps:
             detail_steps = []
             for each in assume_success_steps:
-                detail_steps += [x for x in self.names() if x.startswith(each)]
+                if each in self.names():
+                    detail_steps.append(each)
+                else:
+                    if each.endswith("*"):
+                        detail_steps += [x for x in self.names() if x.startswith(each[:-1])]
+                    else:
+                        print(f'{each} is not a valid task name and we will skip this one !')
             for each in detail_steps:
                 self.ever_queued.add(each)
                 self.state[each]['state'] = 'success'
@@ -642,7 +651,7 @@ class RunCommands(CommandNetwork):
             thread = threading.Thread(target=self.single_run, daemon=True)
             threads.append(thread)
             thread.start()
-            # 每隔2秒提交一个任务，一定程度可以避免同时提交多个消耗资源比较大的任务。
+            # 每隔3秒提交一个任务，一定程度可以避免同时提交多个消耗资源比较大的任务。
             time.sleep(3)
 
         # update state
@@ -662,14 +671,6 @@ class RunCommands(CommandNetwork):
         return self.success, len(self.state)
 
     def continue_run(self, rerun_steps=tuple(), assume_success_steps=tuple()):
-        detail_steps = []
-        for each in rerun_steps:
-            to_be_rerun_steps = [x for x in self.names() if x.startswith(each)]
-            if to_be_rerun_steps:
-                detail_steps += to_be_rerun_steps
-            else:
-                raise Exception(f'{each} matches no task, you may check the task name by "--list_task"')
-
         self.ever_queued = set()
         # 使用已有状态信息更新状态
         existed_state_file = os.path.join(self.outdir, 'cmd_state.txt')
@@ -682,7 +683,8 @@ class RunCommands(CommandNetwork):
                 fields = ['state', 'used_time', 'mem', 'cpu', 'pid', 'depend', 'cmd']
                 if line_lst[1] == 'success' or (line_lst[0] in assume_success_steps):
                     line_lst[1] = 'success'
-                    if line_lst[0] in detail_steps:
+                    if line_lst[0] in rerun_steps:
+                        line_lst[1] = 'failed'
                         continue
                     self.ever_queued.add(line_lst[0])
                     # 已有的depend和cmd信息不被带入到continue运行模式, 给续跑功能带来更多可能
