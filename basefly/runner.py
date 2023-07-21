@@ -198,7 +198,7 @@ class Command(object):
 
         if self.image:
             # 无论是否运行成功，修改结果文件权限
-            docker_cmd = self.docker_cmd_prefix
+            docker_cmd = "docker run --rm --privileged -i"
             # 由于有些镜像会导致出错如”/bin/chown: cannot execute binary file“，所以采用固定镜像来执行
             docker_cmd += f' -v {cmd_wkdir}:{cmd_wkdir} bash:latest '
             docker_cmd += f'chown -R {os.getuid()}:{os.getgid()} {cmd_wkdir}'
