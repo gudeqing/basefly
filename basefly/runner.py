@@ -79,11 +79,12 @@ def set_logger(name='workflow.log', logger_id='x'):
 
 
 class Command(object):
-    def __init__(self, cmd, name, timeout=3600*24*7, outdir=os.getcwd(), image=None, mount_vols=None, wkdir=None,
+    def __init__(self, cmd, name, timeout=3600*24*7, outdir=os.getcwd(), image=None, docker_cmd_prefix=None, mount_vols=None, wkdir=None,
                  monitor_resource=True, monitor_time_step=2, logger=None, **kwargs):
         self.name = name
         self.cmd = cmd
         self.image = image
+        self.docker_cmd_prefix = docker_cmd_prefix or 'docker run --rm --privileged -i --entrypoint /bin/bash'
         self.mount_vols = mount_vols
         self.proc = None
         self.stdout = None
@@ -150,10 +151,9 @@ class Command(object):
             f.write(self.cmd + '\n')
 
         if self.image:
-            # docker_cmd = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash '
-            docker_cmd = 'docker run --rm --privileged -i --entrypoint /bin/bash '
+            docker_cmd = self.docker_cmd_prefix
             for each in self.mount_vols.split(';'):
-                docker_cmd += f'-v {each}:{each} '
+                docker_cmd += f' -v {each}:{each} '
             docker_cmd += f'-w {cmd_wkdir} {self.image} cmd.sh'
             with open(os.path.join(cmd_wkdir, 'docker.cmd.sh'), 'w') as f:
                 f.write((docker_cmd+'\n'))
@@ -198,10 +198,9 @@ class Command(object):
 
         if self.image:
             # 无论是否运行成功，修改结果文件权限
-            docker_cmd = 'docker run --rm --privileged -i '
-            # docker_cmd += f'-v {cmd_wkdir}:{cmd_wkdir} {self.image} '
+            docker_cmd = self.docker_cmd_prefix
             # 由于有些镜像会导致出错如”/bin/chown: cannot execute binary file“，所以采用固定镜像来执行
-            docker_cmd += f'-v {cmd_wkdir}:{cmd_wkdir} bash:latest '
+            docker_cmd += f' -v {cmd_wkdir}:{cmd_wkdir} bash:latest '
             docker_cmd += f'chown -R {os.getuid()}:{os.getgid()} {cmd_wkdir}'
             os.system(docker_cmd)
 

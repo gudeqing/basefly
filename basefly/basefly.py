@@ -121,6 +121,9 @@ class RunTime:
     max_cpu: int = 0
     # 运行时间上限默认7天
     timeout: int = 3600*24*7
+    # docker cmd prefix
+    docker_cmd_prefix2: str = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash'
+    docker_cmd_prefix: str = 'docker run --rm --privileged -i --entrypoint /bin/bash'
 
 
 @dataclass()
@@ -290,10 +293,9 @@ class Command:
                 # f.write('set -o pipefail\n')
                 f.write(self.format_cmd(wf_tasks) + '\n')
                 f.write(f'chown -R {os.getuid()}:{os.getgid()} {wkdir}' + '\n')
-            # docker_cmd = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash '
-            docker_cmd = 'docker run --rm --privileged -i --entrypoint /bin/bash '
+            docker_cmd = self.runtime.docker_cmd_prefix
             for each in mount_vols:
-                docker_cmd += f'-v {each}:{each} '
+                docker_cmd += f' -v {each}:{each} '
             docker_cmd += f'-w {wkdir} {self.runtime.image} cmd.sh'
             subprocess.check_call(docker_cmd, cwd=wkdir, shell=True)
         else:
@@ -635,6 +637,7 @@ class Workflow:
                 max_cpu=task.cmd.runtime.max_cpu,
                 timeout=task.cmd.runtime.timeout,
                 image='' if not parameters.docker else (task.cmd.runtime.image or ''),
+                docker_cmd_prefix=task.cmd.runtime.docker_cmd_prefix,
                 wkdir=cmd_wkdir,
                 mount_vols=';'.join(mount_vols)
             )
