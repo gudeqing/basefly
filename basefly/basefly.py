@@ -596,6 +596,8 @@ class Workflow:
                 continue
 
             for k, v in task.cmd.args.items():
+                if v.level == 'required' and v.value is None:
+                    v.value = v.default
                 if type(v.value) in [list, tuple]:
                     values = v.value
                 else:
