@@ -1,4 +1,3 @@
-import pylab as p
 import pysam
 
 
