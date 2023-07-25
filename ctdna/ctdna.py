@@ -290,7 +290,7 @@ def SortAndIndexBam():
 
 def Bamdst():
     cmd = Command()
-    cmd.meta.name = 'SortAndIndexBam'
+    cmd.meta.name = 'Bamdst'
     cmd.meta.source = 'https://github.com/shiquan/bamdst'
     cmd.meta.desc = 'Bamdst is a lightweight tool to stat the depth coverage of target regions of bam file(s).'
     cmd.runtime.image = 'biocontainers/bamdst:1.0.9_cv1'
@@ -595,13 +595,13 @@ def pipeline():
         args['input'].value = map_task.outputs['out']
         args['output'].value = sample + '.filtered.bam'
 
-        bamdst_task, args = wf.add_task(Bamdst(), tag=sample, depends=[filter_bam_task])
-        args['input'].value = filter_bam_task.outputs['output']
-        args['bed'].value = wf.topvars['bed']
-
         sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
         args['input'].value = filter_bam_task.outputs['output']
         args['output'].value = sample + '.sorted.bam'
+
+        bamdst_task, args = wf.add_task(Bamdst(), tag=sample, depends=[sort_bam_task])
+        args['input'].value = sort_bam_task.outputs['output']
+        args['bed'].value = wf.topvars['bed']
 
         vardict_task, args = wf.add_task(VardictSingle(), tag=sample, depends=[sort_bam_task])
         args['sample'].value = sample
