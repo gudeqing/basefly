@@ -903,11 +903,12 @@ if __name__ == '__main__':
     import argparse
     from pathlib import Path
     parser = argparse.ArgumentParser()
-    parser.add_argument('-vcf', type=Path, required=True, help='path to vcf annotated with vep')
+    parser.add_argument('-vcf', type=Path, required=True, help='vcf file annotated with vep')
     parser.add_argument('-genome', type=Path, required=True, help='path to indexed genome fasta')
-    parser.add_argument('-bam', type=Path, required=False, help='path to bam file which will be used to estimate background noise')
-    parser.add_argument('-bed', type=Path,  required=False, help='path to target region file which will be used to estimate background noise')
+    parser.add_argument('-bam', type=Path, required=False, help='bam file which will be used to estimate background noise')
+    parser.add_argument('-bed', type=Path,  required=False, help='target region file which will be used to estimate background noise')
     parser.add_argument('-center_size', type=int, nargs='+', default=(1, 1), help='extending size around ref base during background noise estimating')
+    parser.add_argument('-exclude_from', type=Path, required=False, help='bed file containing known variant in input bam, these variants will be excluded during background noise estimating')
     parser.add_argument('-ref_dict', type=Path, required=False, help='path to genome dict file which will be used to add contig header in vcf')
     parser.add_argument('-tumor_name', required=False, help='tumor sample name in vcf')
     parser.add_argument('-normal_vcf', type=Path, required=False, help='normal sample vcf file')
@@ -921,6 +922,7 @@ if __name__ == '__main__':
         genome=args.genome,
         bam=args.bam,
         bed=args.bed,
+        exclude_from=args.exclude_from,
         ref_dict=args.ref_dict,
         center_size=args.center_size,
         tumor_name=args.tumor_name,
