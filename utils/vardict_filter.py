@@ -755,21 +755,22 @@ class VcfFilter(object):
         discard = 0
         total = 0
         filter_reasons = []
+        log_file = open(out_prefix + '.filtering.log', 'w')
         for r in self.vcf:
             total += 1
             reasons = []
             if '<' in r.alts[0]:
                 discard += 1
                 # 跳过vardict中输出的特殊突变
-                print('skip special variant:', r.contig, r.pos, r.ref, list(r.alts))
+                print('skip special variant:', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
                 continue
 
             if 'N' in r.alts[0]:
-                print('skip "N" containing variant:', r.contig, r.pos, r.ref, list(r.alts))
+                print('skip "N" containing variant:', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
                 continue
 
             if r.info['DP'] < min_depth:
-                print(f'skip variant in shallow depth({r.info["DP"]}):', r.contig, r.pos, r.ref, list(r.alts))
+                print(f'skip variant in shallow depth({r.info["DP"]}):', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
                 continue
 
             # 过滤VCF中原本没有被判定通过的突变
@@ -869,18 +870,14 @@ class VcfFilter(object):
         vcf_discard.close()
         gn.close()
         self.write_out_txt(out_vcf_name, out_prefix+'.final.txt')
-        print('median LOD:', statistics.median(lod_list))
-        print('min LOD:', min(lod_list))
-        print('max LOD:', max(lod_list))
-        print(f'discard {discard} variants while keep {total-discard} ones!')
+        print('median LOD:', statistics.median(lod_list), file=log_file)
+        print('min LOD:', min(lod_list), file=log_file)
+        print('max LOD:', max(lod_list), file=log_file)
+        print(f'discard {discard} variants while keep {total-discard} ones!', file=log_file)
         reason_couts = Counter(filter_reasons).most_common()
         for k, v in reason_couts:
-            print(f'{v} variants are filtered out because of {k}')
+            print(f'{v} variants are filtered out because of {k}', file=log_file)
 
-
-# 如果提供对照样本的vcf，利用对照样本的vcf信息进行过滤
-# 输出时，按照室间质评的方式输出
-# Chr Start End Ref Alt Gene Type Transcript cHGVS pHGVS VAF (%)
 
 def filterVcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, normal_vcf=None, alpha=0.05,
               exclude_from=None, out_prefix=None, min_error_rate=1e-6, error_rate_file=None, center_size:tuple=(1, 1)):
