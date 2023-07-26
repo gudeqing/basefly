@@ -323,7 +323,7 @@ class VcfFilter(object):
         # 可以根据样本量估算公式反推已知测序错误率和测序深度的条件下，计算测序错误率的上限，作为检测下限
         # e = z/(depth/(error_rate*(1-error_rate)))**0.5
         # lower = 0 if (error_rate - e <= 0) else (error_rate - e)
-        lower, upper = stats.binom.interval(confidence=confidence, n=depth, p=error_rate)
+        lower, upper = stats.binom.interval(confidence, n=depth, p=error_rate)
         lower, upper = lower/depth, upper/depth
         if lower < 1e-6:
             lower = 1e-6
@@ -827,7 +827,7 @@ class VcfFilter(object):
             if error_rate > 0.999:
                 reasons.append('FromGermline')
             else:
-                judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
+                judge = self.pass_seq_error(r, self.tumor, seq_error=error_rate, alpha=alpha)
                 if not judge[0]:
                     if ctrl_af_as_error_rate:
                         reasons.append('NoiseFromNormal')
@@ -879,7 +879,7 @@ class VcfFilter(object):
             print(f'{v} variants are filtered out because of {k}', file=log_file)
 
 
-def filterVcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, normal_vcf=None, alpha=0.05,
+def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, normal_vcf=None, alpha=0.05,
               exclude_from=None, out_prefix=None, min_error_rate=1e-6, error_rate_file=None, center_size:tuple=(1, 1)):
     if bam and bed:
         error_rate_file = estimate_context_seq_error(
@@ -898,6 +898,35 @@ def filterVcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, n
 
 
 if __name__ == '__main__':
-    from xcmds import xcmds
-    xcmds.xcmds(locals())
-
+    # from xcmds import xcmds
+    # xcmds.xcmds(locals())
+    import argparse
+    from pathlib import Path
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-vcf', type=Path, required=True, help='path to vcf annotated with vep')
+    parser.add_argument('-genome', type=Path, required=True, help='path to indexed genome fasta')
+    parser.add_argument('-bam', type=Path, required=False, help='path to bam file which will be used to estimate background noise')
+    parser.add_argument('-bed', type=Path,  required=False, help='path to target region file which will be used to estimate background noise')
+    parser.add_argument('-center_size', type=int, nargs='+', default=(1, 1), help='extending size around ref base during background noise estimating')
+    parser.add_argument('-ref_dict', type=Path, required=False, help='path to genome dict file which will be used to add contig header in vcf')
+    parser.add_argument('-tumor_name', required=False, help='tumor sample name in vcf')
+    parser.add_argument('-normal_vcf', type=Path, required=False, help='normal sample vcf file')
+    parser.add_argument('-error_rate_file', type=Path, required=False, help='Estimated background noise file, if not provided, bam file will be used to generate one')
+    parser.add_argument('-min_error_rate', type=float, default=1e-6, help='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
+    parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model')
+    parser.add_argument('-out_prefix', help='output file prefix')
+    args = parser.parse_args()
+    filter_vcf(
+        vcf=args.vcf,
+        genome=args.genome,
+        bam=args.bam,
+        bed=args.bed,
+        ref_dict=args.ref_dict,
+        center_size=args.center_size,
+        tumor_name=args.tumor_name,
+        normal_vcf=args.normal_vcf,
+        error_rate_file=args.error_rate_file,
+        min_error_rate=args.min_error_rate,
+        alpha=args.alpha,
+        out_prefix=args.out_prefix
+    )
