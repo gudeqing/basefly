@@ -626,7 +626,7 @@ class VcfFilter(object):
             "pHGVS": pHGVS,  # P-Dot Notation
             "VAF(%)": f'{self.get_af_value(r, self.tumor)*100:.2f}',  # Allele Frequency
             # additional information
-            "Consequence": csq_dict['Consequence'],  # Consequence(s)
+            '=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")': csq_dict['Consequence'],  # Consequence(s)
             "CLIN_SIG": csq_dict['CLIN_SIG'],
             "Exon": csq_dict['EXON'],  # Affected Exon(s)
             "Strand": csq_dict['STRAND'],
@@ -637,8 +637,67 @@ class VcfFilter(object):
             "MAX_AF_POPS": csq_dict['MAX_AF_POPS'],
             "gnomADe_EAS_AF": csq_dict['gnomADe_EAS_AF'],
             "LSEQ": r.info['LSEQ'],  # from vardict output
+            "REF": ref,
             "RSEQ": r.info['RSEQ'],  # from vardict output
+            "CANONICAL": csq_dict['CANONICAL'],
+            "HGVS_OFFSET": 0
         }
+        # 根据注释结果判断是否报告，增加报告字段
+        consequences = set(csq_dict['Consequence'].split('&'))
+        if (consequences - {
+            'intron_variant',
+            '5_prime_UTR_variant',
+            '3_prime_UTR_variant',
+            'upstream_gene_variant',
+            'downstream_gene_variant',
+            'synonymous_variant',
+            '5_prime_UTR_variant',
+            '3_prime_UTR_variant',
+            'splice_donor_5th_base_variant',
+            'splice_region_variant',
+            'splice_donor_region_variant',
+            'splice_polypyrimidine_tract_variant',
+            'incomplete_terminal_codon_variant',
+            'start_retained_variant',
+            'stop_retained_variant',
+        }):
+            target_info['SelectedByCsq'] = 'Yes'
+        else:
+            target_info['SelectedByCsq'] = 'No'
+
+        # 还有突变坐标的潜在问题需要解决
+        # https://hgvs.readthedocs.io/en/stable/examples/manuscript-example.html
+        # VEP现在默认会给出符合HGVS右对齐的注释信息，但是不会更改突变的基因组上坐标信息
+        # 因此正链上的基因的突变位置信息需要修改于hgvs保持一致，这是室间质评的要求。
+        # ----解决问题方案一-----：
+        # import hgvs.variantmapper
+        # vm = hgvs.assemblymapper.AssemblyMapper(
+        #     hdp, assembly_name='GRCh37', alt_aln_method='splign')
+        # vm.c_to_g(var_c1) 输出如下:
+        # SequenceVariant(ac=NC_000001.10, type = g, posedit = 150550916; G > A)
+        # 从posedit中获取坐标信息，希望是正确的
+        # https://hgvs.readthedocs.io/en/stable/installation.html
+        # ---解决问题方案二---：其实可以根据VEP的注释结果直接提取，如下说明，VEP其实提供了HGVS_OFFSET值
+        # http://asia.ensembl.org/info/docs/tools/vep/script/vep_options.html#opt_shift_hgvs
+        # Enable or disable 3' shifting of HGVS notations.
+        # When enabled, this causes ambiguous insertions or deletions
+        # (typically in repetetive sequence tracts) to be "shifted" to their most 3' possible coordinates
+        # (relative to the transcript sequence and strand) before the HGVS notations are calculated;
+        # the flag HGVS_OFFSET is set to the number of bases by which the variant has shifted,
+        # relative to the input genomic coordinates.
+        # If HGVS_OFFSET is equals to 0, no value will be added to HGVS_OFFSET column.
+        # Disabling retains the original input coordinates of the variant. Default: 1 (shift)
+        if 'HGVS_OFFSET' in csq_dict and csq_dict['HGVS_OFFSET']:
+            target_info['HGVS_OFFSET'] = int(csq_dict['HGVS_OFFSET'])
+            if mutation_type == 'Insertion':
+                # 室间质评要求对于insertion，start是插入序列前一个碱基位置
+                target_info['Start'] = start_pos + int(csq_dict['HGVS_OFFSET']) - 1
+                if end_pos != '-':
+                    target_info['End'] = start_pos + int(csq_dict['HGVS_OFFSET'])
+            else:
+                target_info['Start'] = start_pos + int(csq_dict['HGVS_OFFSET'])
+                target_info['End'] = end_pos + int(csq_dict['HGVS_OFFSET'])
+
         return target_info
 
     def write_out_txt(self, vcf, out):
@@ -650,7 +709,7 @@ class VcfFilter(object):
         df.to_csv(out, sep='\t', index=False)
         df.to_excel(out[:-4]+'.xlsx', index=False)
 
-    def filtering(self, genome, ref_dict=None, out_prefix=None, min_error_rate=1e-6, error_rate_file=None, alpha=0.05):
+    def filtering(self, genome, ref_dict=None, out_prefix=None, min_error_rate=1e-6, error_rate_file=None, min_depth=5, alpha=0.05):
         # 先给vcf的header添加新字段定义才能往添加新的字段信息
         self.vcf.header.info.add(
             'LOD', number=3, type='Float',
@@ -660,6 +719,7 @@ class VcfFilter(object):
         )
         self.vcf.header.filters.add('NoiseFromNormal', number=None, type=None, description='noise from normal sample')
         self.vcf.header.filters.add('BackgroundNoise', number=None, type=None, description='noise from background')
+        self.vcf.header.filters.add('FromGermline', number=None, type=None, description='considered as germline variant found in normal vcf')
         self.vcf.header.filters.add('HighPopFreq', number=None, type=None, description='Population frequency')
         if 'Bias' not in self.vcf.header.filters:
             self.vcf.header.filters.add('Bias', number=None, type=None, description="severe strand bias")
@@ -701,11 +761,15 @@ class VcfFilter(object):
             if '<' in r.alts[0]:
                 discard += 1
                 # 跳过vardict中输出的特殊突变
-                print('skip', r.contig, r.ref, list(r.alts))
+                print('skip special variant:', r.contig, r.pos, r.ref, list(r.alts))
                 continue
 
             if 'N' in r.alts[0]:
-                print('skip "N" containing variant', r.contig, r.ref, list(r.alts))
+                print('skip "N" containing variant:', r.contig, r.pos, r.ref, list(r.alts))
+                continue
+
+            if r.info['DP'] < min_depth:
+                print(f'skip variant in shallow depth({r.info["DP"]}):', r.contig, r.pos, r.ref, list(r.alts))
                 continue
 
             # 过滤VCF中原本没有被判定通过的突变
@@ -759,16 +823,19 @@ class VcfFilter(object):
                     error_rate = normal_af
 
             # 1.seq error过滤或者germline突变过滤
-            judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
-            if not judge[0]:
-                if ctrl_af_as_error_rate:
-                    reasons.append('NoiseFromNormal')
-                else:
-                    # print(key, error_rate, r.ref, list(r.alts))
-                    reasons.append('BackgroundNoise')
-                pass
-            r.info['LOD'] = (round(error_rate, 5), round(judge[2], 5), round(judge[3], 7))
-            lod_list.append(judge[2])
+            if error_rate > 0.999:
+                reasons.append('FromGermline')
+            else:
+                judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
+                if not judge[0]:
+                    if ctrl_af_as_error_rate:
+                        reasons.append('NoiseFromNormal')
+                    else:
+                        # print(key, error_rate, r.ref, list(r.alts))
+                        reasons.append('BackgroundNoise')
+                    pass
+                r.info['LOD'] = (round(error_rate, 5), round(judge[2], 5), round(judge[3], 7))
+                lod_list.append(judge[2])
 
             # 2.根据strand bias进行过滤
             judge2 = self.pass_strand_bias(r, cutoff=0.003, sample=self.tumor)
