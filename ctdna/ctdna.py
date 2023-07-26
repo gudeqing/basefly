@@ -432,6 +432,34 @@ def vep(sample):
     return cmd
 
 
+def VardictFilter():
+    cmd = Command()
+    cmd.meta.name = 'VardictFilter'
+    cmd.meta.desc = 'filtering vcf'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 2 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'python'
+    cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/vardict_filter.py', desc='script path')
+    cmd.args['vcf'] = Argument(prefix='-vcf ', type='infile', desc='path to vcf annotated with vep')
+    cmd.args['genome'] = Argument(prefix='-genome ', type='infile', desc='path to indexed genome fasta')
+    cmd.args['ref_dict'] = Argument(prefix='-ref_dict ', type='infile', level='optional', desc='path to genome dict file which will be used to add contig header in vcf')
+    cmd.args['bam'] = Argument(prefix='-bam ', type='infile', level='optional', desc='path to bam file which will be used to estimate background noise')
+    cmd.args['bed'] = Argument(prefix='-bed ', type='infile', level='optional', desc='path to target region file which will be used to estimate background noise')
+    cmd.args['center_size'] = Argument(prefix='-center_size ', default=(1, 1), array=True,  desc='extending size around ref base during background noise estimating')
+    cmd.args['tumor_name'] = Argument(prefix='-tumor_name ', level='optional', desc='tumor sample name in vcf')
+    cmd.args['normal_vcf'] = Argument(prefix='-normal_vcf ', type='infile', level='optional', desc='normal sample vcf file')
+    cmd.args['error_rate_file'] = Argument(prefix='-error_rate_file ', type='infile', level='optional', desc='Estimated background noise file, if not provided, bam file will be used')
+    cmd.args['min_error_rate'] = Argument(prefix='-min_error_rate ', default=1e-6, desc='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
+    cmd.args['alpha'] = Argument(prefix='-alpha ', default=0.05, desc='cutoff of pvalue from background noise model')
+    cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', desc='output file prefix')
+    cmd.outputs['final_vcf'] = Output(value='{out_prefix}.final.vcf', report=True)
+    cmd.outputs['final_txt'] = Output(value='{out_prefix}.final.txt', report=True)
+    cmd.outputs['final_xls'] = Output(value='{out_prefix}.final.xlsx', report=True)
+    cmd.outputs['log'] = Output(value='{out_prefix}.filtering.log', report=True)
+    return cmd
+
+
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'ctDNA'
@@ -467,6 +495,7 @@ def pipeline():
                     help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.add_argument('-bed', help="bed file for target region")
+    wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
     # 参考数据库参数
     wf.add_argument('-ref', default='/home/hxbio04/dbs/hg19/hs37d5.fa', help='reference fasta file')
     wf.add_argument('-vep_cache', default='/home/hxbio04/dbs/vep', help='VEP cache directory')
@@ -479,6 +508,7 @@ def pipeline():
         bed=TopVar(value=os.path.abspath(wf.args.bed), type='infile'),
         vep_cache=TopVar(value=os.path.abspath(wf.args.vep_cache), type='indir'),
         vep_plugin=TopVar(value=os.path.abspath(wf.args.vep_plugin) if wf.args.vep_plugin else None, type='indir'),
+        pair_info=TopVar(value=os.path.abspath(wf.args.pair) if wf.args.pair else None)
     )
     wf.add_topvars(top_vars)
 
@@ -515,6 +545,8 @@ def pipeline():
         wf.topvars['ref_dict'].value = creat_dict_task.outputs['ref_dict'].value
 
     # 开始处理
+    bam_task_dict = dict()
+    vep_task_dict = dict()
     for sample, reads in fastq_info.items():
         # 跳过不需要分析的样本
         if sample in wf.args.exclude_samples:
@@ -598,6 +630,7 @@ def pipeline():
         sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
         args['input'].value = filter_bam_task.outputs['output']
         args['output'].value = sample + '.sorted.bam'
+        bam_task_dict[sample] = sort_bam_task
 
         bamdst_task, args = wf.add_task(Bamdst(), tag=sample, depends=[sort_bam_task])
         args['input'].value = sort_bam_task.outputs['output']
@@ -629,6 +662,29 @@ def pipeline():
         args['dir_plugins'].value = top_vars['vep_plugin']
         vep_task.outputs['out_vcf'].report = True
         vep_task.outputs['out_vcf_idx'].report = True
+        vep_task_dict[sample] = vep_task
+
+    # filtering vcf
+    if wf.topvars['pair_info']:
+        pairs = [x.strip().split('\t')[:2] for x in open(wf.topvars['pair_info'].value)]
+    else:
+        pairs = zip(bam_task_dict.keys(), ['None']*len(bam_task_dict))
+    for tumor, normal in pairs:
+        tumor_bam_task = bam_task_dict[tumor]
+        tumor_vep_task = vep_task_dict[tumor]
+        if normal != 'None':
+            normal_vep_task = vep_task_dict[normal]
+            normal_vcf = normal_vep_task.outputs['out_vcf']
+        else:
+            normal_vcf = None
+        filter_task, args = wf.add_task(VardictFilter(), tag=tumor)
+        args['vcf'].value = tumor_vep_task.outputs['out_vcf']
+        args['bam'].value = tumor_bam_task.outputs['output']
+        args['genome'].value = wf.topvars['ref']
+        args['bed'].value = wf.topvars['bed']
+        args['normal_vcf'].value = normal_vcf
+        args['out_prefix'].value = tumor
+
     # end
     wf.run()
 
