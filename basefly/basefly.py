@@ -861,6 +861,14 @@ class Workflow:
                     task.depends[ind] = each.task_id
                 elif type(each) != UUID:
                     raise Exception(f'valid "depends" for task {task.name} should be UUID object or Task Object but not "{each}"')
+
+            # 根据输入数据矫正忘了添加的依赖
+            for k, v in task.cmd.args.items():
+                if type(v.value) == Output:
+                    if v.value.task_id not in task.depends:
+                        # print(f'You may forgot to add dependency {self.tasks[v.value.task_id].name} for {task.name}. We will fixed it.')
+                        task.depends.append(v.value.task_id)
+
             # format output
             value_dict = dict()
             for k, v in task.cmd.args.items():
