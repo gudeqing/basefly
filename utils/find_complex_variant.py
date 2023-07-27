@@ -9,6 +9,8 @@ from pysam import AlignmentFile
 from Bio import Align
 import logging
 
+__author__ = 'gdq'
+
 """"
 pip install -i https://mirrors.aliyun.com/pypi/simple/ biopython pysam
 测试路径：/home/report/gdqtest
@@ -595,7 +597,7 @@ def set_logger(name='log.info', logger_id='x'):
     return logger
 
 
-def format_complex_variant(vcf, out=None, genome=None, bam=None, filter_by_pass=False, logger=None):
+def find_complex_variant(vcf, out=None, genome=None, bam=None, filter_by_pass=False, logger=None):
     """
     1. 要求vcf是排序好的
     2. 检查相邻的SNP突变的距离是否在2个碱基以内，如果是，如果是，将尝试合并突变
@@ -619,8 +621,8 @@ def format_complex_variant(vcf, out=None, genome=None, bam=None, filter_by_pass=
         # 只保留filter=PASS和alt不为空的行
         with VariantFile(infile) as temp:
             vcf_header = temp.header
-            if 'MergeFrom' not in header.info:
-                vcf_header.info.add('MergeFrom', number=1, type='String', description='Merged Variant Support Number | VariantPos | VariantPos')
+            # if 'MergeFrom' not in header.info: 有些pysam版本中这个判断失效
+            vcf_header.info.add('MergeFrom', number=1, type='String', description='Merged Variant Support Number | VariantPos | VariantPos')
             for r in temp:
                 if keep_pass:
                     if list(r.filter)[0] == "PASS" and (r.alts is not None):
@@ -701,7 +703,7 @@ def format_complex_variant(vcf, out=None, genome=None, bam=None, filter_by_pass=
                     # 搜索支持merge突变的reads
                     mut_c_supports = get_support_reads(record, get_mutation_type(record), bam, fasta)
                     logger.info(f'--Merged variant supporting read number:{len(mut_c_supports)}, they are {mut_c_supports}')
-                    if len(mut_c_supports) < 2:
+                    if len(mut_c_supports) < 2 and len(alt) >= 3:
                         logger.info('支持合并后的突变的reads少于2个，说明2个snp中间也是snp，但原vcf中没有')
                         mid_alt, mid_req, mid_depth = detect_snp(bam, mut_a.contig, mut_a.start + 1, fasta_file=fasta)
                         record.alts = [alt[0] + mid_alt + alt[2]]
@@ -814,8 +816,14 @@ def add_complex_variant_to_tso500_report(infile, out=None, genome=None, bam=None
 
 
 if __name__ == '__main__':
-    if sys.argv[1].endswith('.tsv'):
-        add_complex_variant_to_tso500_report(sys.argv[1], out=sys.argv[2], genome=sys.argv[3],
-                                             bam=sys.argv[4], cache_dir=sys.argv[5])
-    else:
-        format_complex_variant(sys.argv[1], out=sys.argv[2], genome=sys.argv[3], bam=sys.argv[4])
+    import argparse
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-vcf', type=Path, required=True, help='vcf file annotated with vep. 假设最后一个样本是肿瘤样本')
+    parser.add_argument('-genome', type=Path, required=True, help='path to indexed genome fasta')
+    parser.add_argument('-bam', type=Path, required=True, help='bam file')
+    parser.add_argument('--filter_by_pass', default=False, action='store_true', help='if filter record which is flagged as PASS')
+    parser.add_argument('-out', required=True,  help='output vcf file')
+    args = parser.parse_args()
+    find_complex_variant(args.vcf, out=args.out, genome=args.genome, bam=args.bam, filter_by_pass=args.filter_by_pass)
