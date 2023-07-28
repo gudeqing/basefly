@@ -810,7 +810,7 @@ def add_complex_variant_to_tso500_report(infile, out=None, genome=None, bam=None
     base_name = os.path.basename(infile)
     outdir = os.path.dirname(out) if out else os.getcwd()
     vcf = small_variant_tsv_to_vcf(infile, out=os.path.join(outdir, base_name[:-3] + 'SmallVariant.vcf'))
-    _, vcf = format_complex_variant(vcf, genome=genome, bam=bam, filter_by_pass=False)
+    _, vcf = find_complex_variant(vcf, genome=genome, bam=bam, filter_by_pass=False)
     vep_vcf = vep_annotation(vcf, fasta=genome, cache_dir=cache_dir)
     add_vep_annot_back_to_tsv(vep_vcf, infile, out=out)
 
