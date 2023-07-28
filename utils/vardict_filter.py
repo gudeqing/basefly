@@ -71,7 +71,7 @@ https://www.ebi.ac.uk/training-beta/online/courses/human-genetic-variation-intro
 """
 
 
-def get_seq_qual(contig, start, end, bam, min_bq=15):
+def get_seq_and_qual(contig, start, end, bam, min_bq=15, get_qual=False):
     cols = bam.pileup(
         contig, start, end,
         stepper='samtools',
@@ -82,7 +82,10 @@ def get_seq_qual(contig, start, end, bam, min_bq=15):
     )
     # 针对每一个位点，得到相应覆盖的碱基和碱基质量值
     # 如果相应位置出现删除或插入，则用D和I分别代替表示
-    seq_qual = [[col.get_query_sequences(add_indels=True), col.get_query_qualities()] for col in cols]
+    if get_qual:
+        seq_qual = [[col.get_query_sequences(add_indels=True), col.get_query_qualities()] for col in cols]
+    else:
+        seq_qual = [[col.get_query_sequences(add_indels=True)] for col in cols]
     # A pattern
     # `\+[0-9]+[ACGTNacgtn]+' indicates there is an insertion
     # between this reference position and the next reference
@@ -102,10 +105,10 @@ def get_seq_qual(contig, start, end, bam, min_bq=15):
                 seqs.append('D')
             elif '-' in i:
                 # 当前碱基的后一个碱基发生删除
-                seqs.append(i.split('-')[0])
+                seqs.append(i.split('-')[0].upper())
             else:
-                seqs.append(i)
-        seq_qual[index][0] = [x.upper() for x in seqs]
+                seqs.append(i.upper())
+        seq_qual[index][0] = seqs
     return seq_qual
 
 
@@ -169,16 +172,16 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
     # 初始化变异字典
     alt_raw_dict = {x: dict() for x in ['A', 'T', 'C', 'G', 'I', 'D']}
     with open(bed) as bed_file, open(f'{prefix}.each_site.txt', 'w') as fw:
-        header = ['contig', 'pos', 'ref', 'centered_ref', 'depth', 'alt_stat', 'base_qual_stat']
+        # header = ['contig', 'pos', 'ref', 'centered_ref', 'depth', 'alt_stat', 'base_qual_stat']
+        header = ['contig', 'pos', 'ref', 'centered_ref', 'depth', 'alt_stat']
         fw.write('\t'.join(header)+'\n')
         for line in bed_file:
             if line.startswith('track') or line.startswith('#'):
                 continue
-            lst = line.strip().split()
-            r, s, t = lst[:3]
+            r, s, t = line.strip().split()
             s, t = int(s), int(t)
-            seq_quals = get_seq_qual(r, s, t, bam)
-
+            seq_quals = get_seq_and_qual(r, s, t, bam)
+            target_info_lst = []
             for pos, seq_qual in zip(range(s, t), seq_quals):
                 if (r, str(pos+1)) in excludes:
                     # print('skip', pos)
@@ -186,37 +189,41 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
                 if len(seq_qual[0]) > 0:
                     # 统计当前位点A/T/C/G/I/D出现的频数
                     seq_counter = Counter(seq_qual[0])
-                    qual_counter = Counter(seq_qual[1])
+                    # qual_counter = Counter(seq_qual[1])
                     center_seq = get_center_seq(r, pos, gn, sizes=center_size).upper()
                     ref = center_seq[len(center_seq)//2]
                     # 统计alternative碱基的总数
                     alt_types = seq_counter.keys() - {ref}
-                    alt_num = sum(seq_counter[x] for x in alt_types)
-                    total = sum(seq_counter.values())
-                    alt_freq = alt_num / (total)
-                    if alt_freq > 0.05 and total > 20:
-                        # 这里的判断可以较大程度的剔除真实突变的位点，目的是为了防止这些突变导致高估测序错误率
-                        # 当然，对于测序比较浅的时候，这个过滤的作用不大
-                        continue
+                    total_depth = sum(seq_counter.values())
+                    # alt_freq = alt_num / (total)
                     for alt_type in alt_types:
-                        alt_raw_dict[alt_type].setdefault(center_seq, Counter())
-                        alt_raw_dict[alt_type][center_seq] += seq_counter
+                        alt_depth = seq_counter[alt_type]
+                        alt_freq = alt_depth/total_depth
+                        if alt_freq < 0.01:
+                            # 只考虑低频突变
+                            alt_raw_dict[alt_type].setdefault(center_seq, Counter())
+                            # {'G': 'CAT':{'A': 10, 'G':2}}
+                            alt_raw_dict[alt_type][center_seq] += seq_counter
 
                     if alt_types:
-                        info = [
+                        target_info_lst.append([
                             r, pos, ref,
                             center_seq,
-                            total,
+                            total_depth,
                             dict(seq_counter.most_common()),
-                            dict(qual_counter.most_common())
-                        ]
-                        fw.write('\t'.join(str(x) for x in info)+'\n')
+                            # dict(qual_counter.most_common())
+                        ])
+                # write out
+                for info in target_info_lst:
+                    fw.write('\t'.join(str(x) for x in info)+'\n')
     bam.close()
-    # 查看碱基之间的转换频率
-    print(dict(zip(alt_raw_dict.keys(), (len(v) for k, v in alt_raw_dict.items()))))
+    gn.close()
 
+    # 查看字段结构大小
+    print(dict(zip(alt_raw_dict.keys(), (len(v) for k, v in alt_raw_dict.items()))))
     alt_dict = dict()
     for alt_type, mdict in alt_raw_dict.items():
+        # 例如alt_type='G', mdict={'CAT':{'A': 10, 'G':2}}
         # 合并：由于观察到A->C时，可能是pcr时把A错配成C, 也有可能pcr时把互补链的T错配为G
         result = dict()
         for base in ['A', 'T', 'C', 'G', 'I', 'D']:
@@ -232,13 +239,14 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
         for center_seq in sorted(result.keys()):
             v = result[center_seq]
             total = sum(v.values())
-            # total是总的depth，如果总的depth不够多，则统计意义将不足
-            if total < 1000:
-                print(f'For context named "{center_seq}", the total depth is only {total}')
+            if total < 2000:
+                # total是总的depth，如果总的depth不够多，则统计意义将不足
+                print(f'For context named "{center_seq}", the total depth is only {total}, skip it for not enough statistic meaning')
                 continue
             v = dict(v.most_common())
             # 仅仅输出目标突变的概率
-            freq = {x: v[x]/total for x in v if x==alt_type}
+            # freq = {x: v[x]/total for x in v if x==alt_type}
+            freq = {alt_type: v[alt_type]/total}
             freq_result[center_seq] = freq
         # 排序
         freq_result = dict(sorted(
@@ -642,6 +650,8 @@ class VcfFilter(object):
             "CANONICAL": csq_dict['CANONICAL'],
             "HGVS_OFFSET": 0
         }
+        if 'LOD' in r.info:
+            target_info['LOD'] = r.info['LOD']
         # 根据注释结果判断是否报告，增加报告字段
         consequences = set(csq_dict['Consequence'].split('&'))
         if (consequences - {
