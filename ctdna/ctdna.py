@@ -181,11 +181,11 @@ def GroupReadsByUmi(sample):
     cmd.runtime.tool = 'fgbio GroupReadsByUmi'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', default=f'{sample}.umi_grouped.bam', desc='The output BAM file.')
+    cmd.args['strategy'] = Argument(prefix='-s ', default="adjacency", desc='The UMI assignment strategy. edit: reads are clustered into groups such that each read within a group has at least one other read in the group with <= edits differences and there are inter-group pairings with <= edits differences. Effective when there are small numbers of reads per UMI, but breaks down at very high coverage of UMIs. 3.adjacency: a version of the directed adjacency method described in umi_tools that allows for errors between UMIs but only when there is a count gradient.')
     cmd.args['family-size-histogram'] = Argument(prefix='-f ', default=f'{sample}.family.size.txt', desc='Optional output of tag family size counts.')
     cmd.args['raw-tag'] = Argument(prefix='-t ', default='RX', desc='The tag containing the raw UMI.')
     cmd.args['assign-tag'] = Argument(prefix='-T ', default='MI', desc='The output tag for UMI grouping.')
     cmd.args['min-map-q'] = Argument(prefix='-m ', default=1, desc='Minimum mapping quality for mapped reads.')
-    cmd.args['strategy'] = Argument(prefix='-s ', default="paired", desc='The UMI assignment strategy. edit: reads are clustered into groups such that each read within a group has at least one other read in the group with <= edits differences and there are inter-group pairings with <= edits differences. Effective when there are small numbers of reads per UMI, but breaks down at very high coverage of UMIs. 3.adjacency: a version of the directed adjacency method described in umi_tools that allows for errors between UMIs but only when there is a count gradient.')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
 
@@ -202,9 +202,31 @@ def CallDuplexConsensusReads():
     cmd.runtime.tool = 'fgbio CallDuplexConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
+    cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
     cmd.args['error-rate-pre-umi'] = Argument(prefix='-1 ', default=45, desc='The Phred-scaled error rate for an error prior to the UMIs being integrated.')
     cmd.args['error-rate-post-umi'] = Argument(prefix='-2 ', default=30, desc='The Phred-scaled error rate for an error post the UMIs have been integrated.')
     cmd.args['min-input-base-quality'] = Argument(prefix='-m ', default=30, desc='Ignore bases in raw reads that have Q below this value.')
+    cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='The number of threads to use while consensus calling')
+    cmd.outputs['output'] = Output(value='{output}')
+    return cmd
+
+
+def CallMolecularConsensusReads():
+    cmd = Command()
+    cmd.meta.name = 'CallMolecularConsensusReads'
+    cmd.meta.version = '2.1.0'
+    cmd.meta.source = 'https://fulcrumgenomics.github.io/fgbio/tools/latest/CallMolecularConsensusReads.html'
+    cmd.meta.desc = 'Calls consensus sequences from reads with the same unique molecular tag.'
+    cmd.runtime.image = 'dceoy/fgbio:latest'
+    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'fgbio CallMolecularConsensusReads'
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
+    cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
+    cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
+    cmd.args['error-rate-pre-umi'] = Argument(prefix='-1 ', default=45, desc='The Phred-scaled error rate for an error prior to the UMIs being integrated.')
+    cmd.args['error-rate-post-umi'] = Argument(prefix='-2 ', default=30, desc='The Phred-scaled error rate for an error post the UMIs have been integrated.')
+    cmd.args['min-input-base-quality'] = Argument(prefix='-m ', default=20, desc='Ignore bases in raw reads that have Q below this value.')
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='The number of threads to use while consensus calling')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
@@ -326,16 +348,14 @@ def VardictSingle():
     cmd.args['region_end'] = Argument(prefix='-E ', default=3, desc='The column of region end')
     cmd.args['gene'] = Argument(prefix='-g ', default=4, desc='The column of gene name')
     cmd.args['fisher'] = Argument(prefix='--fisher', type='bool', default=True, desc='Fisher exact test.')
-    cmd.args['realignment'] = Argument(prefix='-k', type='bool', default=True, desc='Indicate whether to perform local realignment')
     cmd.args['mfreq'] = Argument(prefix='-mfreq ', default=0.25, desc="The variant frequency threshold to determine variant as good in case of monomer MSI. Default: 0.25")
     cmd.args['nmfreq'] = Argument(prefix='-nmfreq ', default=0.1, desc='The variant frequency threshold to determine variant as good in case of non-monomer MSI')
     cmd.args['read_position_filter'] = Argument(prefix='-P ', default=3, desc="If the mean variants position is less that specified, it's considered false")
-    cmd.args['min-reads'] = Argument(prefix='-r ', default=3, desc='The minimum # of variant reads')
+    cmd.args['min-reads'] = Argument(prefix='-r ', default=2, desc='The minimum # of variant reads')
     cmd.args['nosv'] = Argument(prefix='--nosv', type='bool', default=True,)
     cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
-    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -E', desc='pipe to another script')
-    cmd.args['min-freq2'] = Argument(prefix='-f ', default="0.00001", desc='The threshold for allele frequency')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 2 -q 15 -d 3 -v 1 -f 0.00001 ', desc='pipe to another script')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
@@ -432,10 +452,10 @@ def vep(sample):
     return cmd
 
 
-def VardictFilter():
+def VcfFilter():
     cmd = Command()
-    cmd.meta.name = 'VardictFilter'
-    cmd.meta.desc = 'filtering vcf'
+    cmd.meta.name = 'VcfFilter'
+    cmd.meta.desc = 'filtering vcf, 输出符合室间质评的格式结果'
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
     cmd.runtime.memory = 2 * 1024 ** 3
     cmd.runtime.cpu = 2
@@ -456,6 +476,7 @@ def VardictFilter():
     cmd.outputs['final_vcf'] = Output(value='{out_prefix}.final.vcf', report=True)
     cmd.outputs['final_txt'] = Output(value='{out_prefix}.final.txt', report=True)
     cmd.outputs['final_xls'] = Output(value='{out_prefix}.final.xlsx', report=True)
+    cmd.outputs['final_xls'] = Output(value='{out_prefix}.discarded.vcf', report=True)
     cmd.outputs['log'] = Output(value='{out_prefix}.filtering.log', report=True)
     return cmd
 
@@ -496,6 +517,7 @@ def pipeline():
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.add_argument('-bed', help="bed file for target region")
     wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
+    wf.add_argument('-umi', required=True, desc='A string describes the read structural. Such as “1S3M3S144T,1S3M3S144T” denotes UMIs locate at 2-4bp of read1 and read2')
     # 参考数据库参数
     wf.add_argument('-ref', default='/home/hxbio04/dbs/hg19/hs37d5.fa', help='reference fasta file')
     wf.add_argument('-vep_cache', default='/home/hxbio04/dbs/vep', help='VEP cache directory')
@@ -508,7 +530,7 @@ def pipeline():
         bed=TopVar(value=os.path.abspath(wf.args.bed), type='infile'),
         vep_cache=TopVar(value=os.path.abspath(wf.args.vep_cache), type='indir'),
         vep_plugin=TopVar(value=os.path.abspath(wf.args.vep_plugin) if wf.args.vep_plugin else None, type='indir'),
-        pair_info=TopVar(value=os.path.abspath(wf.args.pair) if wf.args.pair else None)
+        pair_info=TopVar(value=os.path.abspath(wf.args.pair) if wf.args.pair else None),
     )
     wf.add_topvars(top_vars)
 
@@ -574,7 +596,8 @@ def pipeline():
             # ExtractUmisFromBam
             get_umi_task, args = wf.add_task(ExtractUmisFromBam(), tag=uniq_tag, depends=[fastq2sam_task])
             args['input'].value = fastq2sam_task.outputs['out']
-            args['read-structure'].value = ['2S3M2S144T', '2S3M2S144T']
+            # args['read-structure'].value = ['1S3M3S144T', '1S3M3S144T']
+            args['read-structure'].value = wf.args.umi.split(',')
             args['output'].value = f'{uniq_tag}.umi.ubam'
 
             # 去除接头MarkIlluminaAdapters
@@ -609,8 +632,10 @@ def pipeline():
 
         group_umi_task, args = wf.add_task(GroupReadsByUmi(sample), tag=sample, depends=[merge_sam_task])
         args['input'].value = merge_sam_task.outputs['out']
+        # args['strategy'].value = 'paired'
 
-        consensus_task, args = wf.add_task(CallDuplexConsensusReads(), tag=sample, depends=[group_umi_task])
+        # consensus_task, args = wf.add_task(CallDuplexConsensusReads(), tag=sample, depends=[group_umi_task])
+        consensus_task, args = wf.add_task(CallMolecularConsensusReads(), tag=sample, depends=[group_umi_task])
         args['input'].value = group_umi_task.outputs['output']
         args['output'].value = sample + '.consensus.bam'
 
@@ -677,7 +702,7 @@ def pipeline():
             normal_vcf = normal_vep_task.outputs['out_vcf']
         else:
             normal_vcf = None
-        filter_task, args = wf.add_task(VardictFilter(), tag=tumor)
+        filter_task, args = wf.add_task(VcfFilter(), tag=tumor)
         args['vcf'].value = tumor_vep_task.outputs['out_vcf']
         args['bam'].value = tumor_bam_task.outputs['output']
         args['genome'].value = wf.topvars['ref']
