@@ -350,7 +350,7 @@ class VcfFilter(object):
     def get_af_value(self, record, sample):
         if 'HIAF' in record.info and 'AF' in record.info:
             # vardict style
-            af = min([record.info['HIAF'], record.info['AF'][0]])
+            af = max([record.info['HIAF'], record.info['AF'][0]])
         elif 'AF' in record.samples[sample]:
             af = record.samples[sample]['AF'][0]
         elif 'FREQ' in record.samples[sample]:
