@@ -64,7 +64,7 @@ import pysam
 import scipy.stats as stats
 import statistics
 from collections import Counter
-from stat_3bases_error_rate import estimate_context_seq_error
+from stat_3bases_error import estimate_context_seq_error
 """
 要求vcf每一行只包含一个突变，这个可以通过bcftools norm 快速实现
 变异类型的分类
