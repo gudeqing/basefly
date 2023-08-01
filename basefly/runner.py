@@ -23,6 +23,8 @@ except Exception as e:
 PROCESS_local = weakref.WeakKeyDictionary()
 TIMERS = weakref.WeakKeyDictionary()
 
+# 终止流程时，如何kill容器，可以考虑运行docker时给容器一个特别的名称，然后在流程退出前执行docker kill命令进行清理
+Container_Marker = 'bfly'+ str(time.time())
 
 @atexit.register
 def _kill_processes_when_exit():
@@ -41,18 +43,22 @@ def _kill_processes_when_exit():
                 proc.kill()
             PROCESS_local.pop(proc)
         living_processes = list(PROCESS_local.items())
-    # 取消计时器
-    # living_timers = list(TIMERS.items())
-    # while living_timers:
-    #     for tmp_timer, cmd_name in living_timers:
-    #         # print(f'Cancel running timer of task {cmd_name}')
-    #         tmp_timer.cancel()
-    #         TIMERS.pop(tmp_timer)
-    #     living_timers = list(TIMERS.items())
+
+    # 清理docker容器
+    try:
+        proc = psutil.Popen('docker ps --format "{{.ID}}:{{.Names}}"', shell=True, stderr=PIPE, stdout=PIPE)
+        stdout, stderr = proc.communicate()
+        for line in stdout.split():
+            cid, name = line.decode().split(':', 1)
+            if name.endswith(Container_Marker):
+                print('kill running container:', line)
+                os.system(f"docker kill {cid}")
+    finally:
+        print('finish cleaning up, but you are recommended to check it manually')
 
 
 def shutdown(signum, frame):
-    print('\nyou are Killing the main process, and we will help to kill the derived processes!')
+    print('\nYou are Stopping the BaseFly workflow, and we will help to kill the derived processes!')
     exit(0)
 
 
@@ -152,6 +158,7 @@ class Command(object):
 
         if self.image:
             docker_cmd = self.docker_cmd_prefix
+            docker_cmd += f' --name {self.name}-{Container_Marker}'
             for each in self.mount_vols.split(';'):
                 docker_cmd += f' -v {each}:{each} '
             docker_cmd += f'-w {cmd_wkdir} {self.image} cmd.sh'
