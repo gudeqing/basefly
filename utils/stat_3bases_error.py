@@ -175,7 +175,7 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
                     center_seq = get_center_seq(r, pos, gn, sizes=center_size).upper()
                     ref = center_seq[len(center_seq)//2]
                     # 统计alternative碱基的总数
-                    alt_types = seq_counter.keys() - {ref}
+                    alt_types = seq_counter.keys() - {ref, 'N', 'n'}
                     total_depth = sum(seq_counter.values())
                     # alt_freq = alt_num / (total)
                     for alt_type in alt_types:
