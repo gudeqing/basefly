@@ -1,4 +1,7 @@
 import os
+
+import pandas as pd
+
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from basefly.basefly import Argument, Output, Command, Workflow, TopVar, ToWdlTask
@@ -21,6 +24,38 @@ def creat_ref_dict():
     cmd.args['alt_names'] = Argument(prefix='-ALT_NAMES ', type='infile', level='optional', desc="Optional file containing the alternative names for the contigs. Tools may use this information to consider different contig notations as identical (e.g: 'chr1' and '1'). The alternative names will be put into the appropriate @AN annotation for each contig. No header. First column is the original name, the second column is an alternative name. One contig may have more than one alternative name. Default value: null.")
     cmd.outputs['ref_genome'] = Output(value='ref_genome.fa')
     cmd.outputs['ref_dict'] = Output(value='{_ref_dict}')
+    return cmd
+
+
+def BedToIntervalList():
+    cmd = Command()
+    cmd.meta.name = 'BedToIntervalList'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 3 * 1024 ** 3
+    cmd.runtime.tool = 'gatk BedToIntervalList'
+    cmd.args['bed'] = Argument(prefix='-I ', type='infile', desc='input bed file')
+    cmd.args['ref_dict'] = Argument(prefix='-SD ', type='infile', desc='input sequence dictionary file')
+    cmd.args['out'] = Argument(prefix='-O ',  desc='output interval file')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def SplitIntervals(scatter_number):
+    cmd = Command()
+    cmd.meta.name = 'SplitIntervals'
+    cmd.meta.desc = 'This tool takes in intervals via the standard arguments of IntervalArgumentCollection and splits them into interval files for scattering. The resulting files contain equal number of bases.'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 3 * 1024 ** 3
+    cmd.runtime.tool = 'gatk SplitIntervals'
+    cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
+    cmd.args['intervals'] = Argument(prefix='-L ', level='optional', type='infile', multi_times=True, desc='One or more genomic intervals over which to operate')
+    cmd.args['scatter'] = Argument(prefix='-scatter ', type='int', value=scatter_number, desc='number of output interval files to split into')
+    cmd.args['mode'] = Argument(prefix='-mode ', default="INTERVAL_SUBDIVISION", range=['INTERVAL_SUBDIVISION', 'BALANCING_WITHOUT_INTERVAL_SUBDIVISION', 'BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW'], desc='How to divide intervals.')
+    cmd.args['interval-merging-rule'] = Argument(prefix='--interval-merging-rule ', default='OVERLAPPING_ONLY')
+    cmd.args['outdir'] = Argument(prefix='-O ', default='.', desc='The directory into which to write the scattered interval sub-directories.')
+    for i in range(scatter_number):
+        # 如果mode=BALANCING_WITHOUT_INTERVAL_SUBDIVISION，有可能生成的interval数量少于指定的scatter—number
+        cmd.outputs[f'out{i}'] = Output(value='{outdir}/'+f'{i:04d}-scattered.interval_list', type='outfile')
     return cmd
 
 
@@ -63,6 +98,24 @@ def FastqToSam(sample):
     cmd.args['platform'] = Argument(prefix='--PLATFORM ', default='illumina', desc='sequencing platform name')
     cmd.args['tmpdir'] = Argument(prefix='--TMP_DIR ', default='.', desc='directorie with space available to be used by this program for temporary storage of working files')
     cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def SamToFastq():
+    cmd = Command()
+    cmd.meta.name = 'SamToFastq'
+    cmd.meta.desc = 'Use samtools to convert sam to Fastq. This tool enables user to copy tag to fastq header line'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'samtools fastq'
+    cmd.args['read1'] = Argument(prefix='-1 ', desc='write paired reads flagged READ1 to FILE')
+    cmd.args['read2'] = Argument(prefix='-2 ', desc='write paired reads flagged READ2 to FILE')
+    cmd.args['tags'] = Argument(prefix='-T ', level='optional', array=True, delimiter=',', desc='copy arbitrary tags to the FASTQ header line')
+    cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='Number of additional threads to use')
+    cmd.args['bam'] = Argument(prefix='', desc='input bam file')
+    cmd.outputs['read1'] = Output(value='{read1}')
+    cmd.outputs['read2'] = Output(value='{read2}')
     return cmd
 
 
@@ -112,12 +165,32 @@ def Bam2FastqBwaMem(sample):
     cmd.args['paired'] = Argument(prefix='--INTERLEAVE ', default='true', range=['true', 'false'], desc='if input is paired fastq, set it be true, else set it be false')
     cmd.args['_fix1'] = Argument(type='fix', value='--FASTQ /dev/stdout -NON_PF true')
     cmd.args['_fix2'] = Argument(type='fix', value='| /opt/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -M -Y -p -v 3', desc='this is bwa base command')
-    cmd.args['k'] = Argument(prefix='-K ', default=10000000)
+    cmd.args['k'] = Argument(prefix='-K ', default=100000000, desc='process INT input bases in each batch regardless of nThreads (for reproducibility)')
     cmd.args['t'] = Argument(prefix='-t ', default=cmd.runtime.cpu, desc='number of threads to use in mapping step')
     cmd.args['ref'] = Argument(prefix='', type='infile', desc='reference fasta file')
     cmd.args['_fix3'] = Argument(type='fix', value='/dev/stdin - ')
-    cmd.args['_fix4'] = Argument(type='fix', value=' | samtools view -1 - ', desc='input data to samtools view')
+    cmd.args['_fix4'] = Argument(type='fix', value=f' | samtools view --threads {cmd.runtime.cpu} -1 - ', desc='input data to samtools view')
     cmd.args['out'] = Argument(prefix='> ',  value=f'{sample}.unmerged.bam', desc='output bam file')
+    cmd.outputs['out'] = Output(value="{out}")
+    return cmd
+
+
+def bwa_mem(sample, platform):
+    cmd = Command()
+    cmd.meta.name = 'BwaMem2'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.tool = '/opt/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -M -Y -v 3'
+    cmd.runtime.memory = 15 * 1024 ** 3
+    cmd.runtime.cpu = 8
+    cmd.args['include_read_header'] = Argument(prefix='-C', type='bool', default=False, desc='Append FASTA/FASTQ comment to SAM output')
+    cmd.args['readgroup'] = Argument(prefix='-R ', desc='read group info', value=f'"@RG\\tID:{sample}\\tSM:{sample}\\tPL:{platform}"')
+    cmd.args['k'] = Argument(prefix='-K ', default=100000000, desc='process INT input bases in each batch regardless of nThreads (for reproducibility)')
+    cmd.args['t'] = Argument(prefix='-t ', default=cmd.runtime.cpu, desc='number of threads to use in computation')
+    cmd.args['ref'] = Argument(prefix='', type='infile', desc='reference fasta file')
+    cmd.args['read1'] = Argument(prefix='', type='infile', desc='read1 fastq file')
+    cmd.args['read2'] = Argument(prefix='', level='optional', type='infile', desc='read2 fastq file')
+    cmd.args['_fix'] = Argument(type='fix', value=f'| samtools view -O BAM --threads {cmd.runtime.cpu} - ')
+    cmd.args['out'] = Argument(prefix='> ', value=f'{sample}.unmerged.bam', desc='output bam file')
     cmd.outputs['out'] = Output(value="{out}")
     return cmd
 
@@ -244,7 +317,7 @@ def FilterConsensusReads():
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
-    cmd.args['min-reads'] = Argument(prefix='-M ', default='2 1 1', desc='The minimum number of reads supporting a consensus base/read.')
+    cmd.args['min-reads'] = Argument(prefix='-M ', default='1 1 1', desc='The minimum number of reads supporting a consensus base/read.')
     cmd.args['PhredScore'] = Argument(prefix='-N ', default=20, desc="Mask (make 'N') consensus bases with quality less than this threshold")
     cmd.args['require-single-strand-agreement'] = Argument(prefix='-s ', default='true', desc='Mask (make N) consensus bases where the AB and BA consensus reads disagree (for duplex-sequencing only).')
     cmd.outputs['output'] = Output(value='{output}')
@@ -307,6 +380,37 @@ def SortAndIndexBam():
     cmd.args['input'] = Argument(prefix='', type='infile', desc='input bam file')
     cmd.args['_fix'] = Argument(type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
     cmd.outputs['output'] = Output(value='{output}')
+    return cmd
+
+
+def gencore():
+    cmd = Command()
+    cmd.meta.name = 'Gencore'
+    cmd.meta.source = ''
+    cmd.meta.desc = ''
+    cmd.meta.version = '0.17.2'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 12 * 1024 ** 3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'gencore'
+    cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='input sorted bam/sam file.')
+    cmd.args['out'] = Argument(prefix='-o ', desc='output bam/sam file')
+    cmd.args['ref'] = Argument(prefix='--ref ', type='infile', desc='reference fasta file name (should be an uncompressed .fa/.fasta file)')
+    cmd.args['bed'] = Argument(prefix='--bed ', type='infile', desc='bed file to specify the capturing region')
+    cmd.args['duplex_only'] = Argument(prefix='--duplex_only', type='bool', default=False, desc='only output duplex consensus sequences, which means single stranded consensus sequences will be discarded')
+    cmd.args['no_duplex'] = Argument(prefix='--no_duplex', type='bool', default=False, desc="don't merge single stranded consensus sequences to duplex consensus sequences.")
+    cmd.args['umi_prefix'] = Argument(prefix='--umi_prefix ', level='optional', desc='the prefix for UMI, if it has. None by default. Check the README for the defails of UMI formats. such as: "NB551106:8:H5Y57BGX2:1:13304:3538:1404:UMI_GAGCATAC", prefix = "UMI", umi = "GAGCATAC"')
+    cmd.args['supporting_reads'] = Argument(prefix='--supporting_reads ', default=1, desc='only output consensus reads/pairs that merged by >= <supporting_reads> reads/pairs. The valud should be 1~10')
+    cmd.args['ratio_threshold'] = Argument(prefix='--ratio_threshold ', default=0.8, desc='if the ratio of the major base in a cluster is less than <ratio_threshold>, it will be further compared to the reference. The valud should be 0.5~1.0')
+    cmd.args['score_threshold'] = Argument(prefix='--score_threshold ', default=6, desc='if the score of the major base in a cluster is less than <score_threshold>, it will be further compared to the reference.')
+    cmd.args['umi_diff_threshold'] = Argument(prefix='--umi_diff_threshold ',  level='optional', default=1, desc='if two reads with identical mapping position have UMI difference <= <umi_diff_threshold>, then they will be merged to generate a consensus read.')
+    cmd.args['duplex_diff_threshold'] = Argument(prefix='duplex_diff_threshold ', level='optional', default=2, desc='if the forward consensus and reverse consensus sequences have <= <duplex_diff_threshold> mismatches, then they will be merged to generatea duplex consensus sequence, otherwise will be discarded')
+    cmd.args['coverage_sampling'] = Argument(prefix='--coverage_sampling ', default=10000, desc='the sampling rate for genome scale coverage statistics. Default 10000 means 1/10000.')
+    cmd.args['json'] = Argument(prefix='--json ', default='gencore.json', desc='the json format report file name')
+    cmd.args['html'] = Argument(prefix='--html ', default='gencore.html', desc='the html format report file name')
+    cmd.outputs['json'] = Output(value='{json}')
+    cmd.outputs['html'] = Output(value='{html}')
+    cmd.outputs['out'] = Output(value='{out}')
     return cmd
 
 
@@ -375,6 +479,39 @@ def add_vcf_contig():
     cmd.args['header_txt'] = Argument(prefix='-header_txt ', level='optional', type='infile', desc='path to file which contains header lines')
     cmd.args['out'] = Argument(prefix='-out ', desc='output file name')
     cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def Mutect2(prefix):
+    cmd = Command()
+    cmd.meta.name = 'Mutect2'
+    cmd.meta.desc = 'Call somatic short mutations via local assembly of haplotypes. Short mutations include single nucleotide (SNA) and insertion and deletion (indel) alterations.'
+    cmd.meta.source = 'https://github.com/broadinstitute/gatk'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 5*1024**3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'gatk Mutect2'
+    cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
+    cmd.args['tumor_bam'] = Argument(prefix='-I ', type='infile', desc='tumor bam')
+    cmd.args['normal_bam'] = Argument(prefix='-I ', type='infile', level='optional', desc='normal bam')
+    cmd.args['tumor_name'] = Argument(prefix='-tumor ', desc='tumor sample name')
+    cmd.args['normal_name'] = Argument(prefix='-normal ', level='optional', desc='normal sample name')
+    cmd.args['germline-resource'] = Argument(prefix='--germline-resource ', type='infile', level='optional', desc='optional database of known germline variants (and its index) (see http://gnomad.broadinstitute.org/downloads)')
+    cmd.args['pon'] = Argument(prefix='-pon ', type='infile', level='optional', desc='')
+    cmd.args['intervals'] = Argument(prefix='-L ', type='infile', level='optional', multi_times=True, desc='One or more genomic intervals over which to operate')
+    cmd.args['string_intervals'] = Argument(prefix='-L ', level='optional', desc='interval string such as "chrM"')
+    cmd.args['alleles'] = Argument(prefix='--alleles ', type='infile', level='optional', desc='The set of alleles to force-call regardless of evidence')
+    cmd.args['initial-tumor-lod'] = Argument(prefix='--initial-tumor-lod ', default=3.0, desc='Log 10 odds threshold to consider pileup active.')
+    cmd.args['normal-lod'] = Argument(prefix='--normal-lod ', default=2.2, desc='Log 10 odds threshold for calling normal variant non-germline. ')
+    cmd.args['tumor-lod-to-emit'] = Argument(prefix='--tumor-lod-to-emit ', default=3.0, desc='Log 10 odds threshold to emit variant to VCF')
+    cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.vcf.gz', desc='output vcf')
+    cmd.args['bam-output'] = Argument(prefix='--bam-output ', level='optional', desc='output bam file')
+    cmd.args['f1r2-tar-gz'] = Argument(prefix='--f1r2-tar-gz ', type='infile', default=f'{prefix}.f1r2.tar.gz', desc='If specified, collect F1R2 counts and output files into this tar.gz file')
+    cmd.args['mitochondria'] = Argument(prefix='--mitochondira', type='bool', desc='if to turn on mitochondria mode. Specifically, the mode sets --initial-tumor-lod to 0, --tumor-lod-to-emit to 0, --af-of-alleles-not-in-resource to 4e-3, and the advanced parameter --pruning-lod-thres')
+    cmd.args['tmpdir'] = Argument(prefix='--tmp-dir ', default='.', desc='directorie with space available to be used by this program for temporary storage of working files')
+    cmd.outputs['out'] = Output(value='{out}')
+    cmd.outputs['f1r2'] = Output(value='{f1r2-tar-gz}')
+    cmd.outputs['stats'] = Output(value='{out}.stats')
     return cmd
 
 
@@ -452,6 +589,26 @@ def vep(sample):
     return cmd
 
 
+def stat_context_seq_error():
+    cmd = Command()
+    cmd.meta.name = 'StatSeqError'
+    cmd.meta.desc = '假设大部分低频突变是测序错误，基于bam文件估计测序错误率'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 2 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'python'
+    cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/stat_3bases_error.py', desc='script path')
+    cmd.args['bam'] = Argument(prefix='-bam ', type='infile', level='optional', desc='path to bam file which will be used to estimate background noise')
+    cmd.args['bed'] = Argument(prefix='-bed ', type='infile', level='optional', desc='path to target region file which will be used to estimate background noise')
+    cmd.args['genome'] = Argument(prefix='-genome ', type='infile', desc='path to indexed genome fasta')
+    cmd.args['exclude_from'] = Argument(prefix='-exclude_from ', type='infile', level='optional', desc='bed or vcf file containing known variant in input bam, these variants will be excluded during background noise estimating')
+    cmd.args['center_size'] = Argument(prefix='-center_size ', default=(1, 1), array=True, desc='extending size around ref base during background noise estimating')
+    cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', desc='output file prefix')
+    cmd.outputs['stat_per_site'] = Output(value='{out_prefix}.each_site.txt', report=True)
+    cmd.outputs['context_error_rate'] = Output(value='{out_prefix}.centered11_site.json', report=True)
+    return cmd
+
+
 def VcfFilter():
     cmd = Command()
     cmd.meta.name = 'VcfFilter'
@@ -460,48 +617,131 @@ def VcfFilter():
     cmd.runtime.memory = 2 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
-    cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/vardict_filter.py', desc='script path')
+    cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/vcf_filter.py', desc='script path')
     cmd.args['vcf'] = Argument(prefix='-vcf ', type='infile', desc='path to vcf annotated with vep')
     cmd.args['genome'] = Argument(prefix='-genome ', type='infile', desc='path to indexed genome fasta')
     cmd.args['ref_dict'] = Argument(prefix='-ref_dict ', type='infile', level='optional', desc='path to genome dict file which will be used to add contig header in vcf')
     cmd.args['bam'] = Argument(prefix='-bam ', type='infile', level='optional', desc='path to bam file which will be used to estimate background noise')
     cmd.args['bed'] = Argument(prefix='-bed ', type='infile', level='optional', desc='path to target region file which will be used to estimate background noise')
+    cmd.args['exclude_from'] = Argument(prefix='-exclude_from ', type='infile', level='optional', desc='bed or vcf file containing known variant in input bam, these variants will be excluded during background noise estimating')
     cmd.args['center_size'] = Argument(prefix='-center_size ', default=(1, 1), array=True,  desc='extending size around ref base during background noise estimating')
     cmd.args['tumor_name'] = Argument(prefix='-tumor_name ', level='optional', desc='tumor sample name in vcf')
     cmd.args['normal_vcf'] = Argument(prefix='-normal_vcf ', type='infile', level='optional', desc='normal sample vcf file')
     cmd.args['error_rate_file'] = Argument(prefix='-error_rate_file ', type='infile', level='optional', desc='Estimated background noise file, if not provided, bam file will be used')
     cmd.args['min_error_rate'] = Argument(prefix='-min_error_rate ', default=1e-6, desc='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
-    cmd.args['alpha'] = Argument(prefix='-alpha ', default=0.05, desc='cutoff of pvalue from background noise model')
+    cmd.args['alpha'] = Argument(prefix='-alpha ', default=0.01, desc='cutoff of pvalue from background noise model')
     cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', desc='output file prefix')
     cmd.outputs['final_vcf'] = Output(value='{out_prefix}.final.vcf', report=True)
     cmd.outputs['final_txt'] = Output(value='{out_prefix}.final.txt', report=True)
     cmd.outputs['final_xls'] = Output(value='{out_prefix}.final.xlsx', report=True)
-    cmd.outputs['final_xls'] = Output(value='{out_prefix}.discarded.vcf', report=True)
+    cmd.outputs['discarded_vcf'] = Output(value='{out_prefix}.discarded.vcf', report=True)
     cmd.outputs['log'] = Output(value='{out_prefix}.filtering.log', report=True)
+    return cmd
+
+
+def MergeVcfs(sample):
+    cmd = Command()
+    cmd.meta.name = 'MergeVcfs'
+    cmd.meta.desc = 'Combines multiple variant files into a single variant file.'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360056969852-MergeVcfs-Picard-'
+    cmd.runtime.tool = 'gatk MergeVcfs'
+    cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input vcf list')
+    cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.vcf.gz', desc='The merged VCF or BCF file. File format is determined by file extension.')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def LearnReadOrientationModel(sample):
+    cmd = Command()
+    cmd.meta.name = 'LearnReadOrientationModel'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.meta.desc = 'Learn the prior probability of read orientation artifact from the output of CollectF1R2Counts of Mutect2'
+    cmd.runtime.tool = 'gatk LearnReadOrientationModel'
+    cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='One or more .tar.gz containing outputs of CollectF1R2Counts')
+    cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.artifact-priors.tar.gz', desc='tar.gz of artifact prior tables')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def FilterMutectCalls(sample):
+    cmd = Command()
+    cmd.meta.name = 'FilterMutectCalls'
+    cmd.meta.desc = 'FilterMutectCalls applies filters to the raw output of Mutect2'
+    cmd.runtime.tool = 'gatk FilterMutectCalls'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
+    cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
+    cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.filtered.vcf.gz', desc='output vcf file')
+    cmd.args['contamination-table'] = Argument(prefix='--contamination-table ', level='optional', type='infile')
+    cmd.args['tumor-segmentation'] = Argument(prefix='--tumor-segmentation ', level='optional', type='infile')
+    cmd.args['ob-priors'] = Argument(prefix='--ob-priors ', type='infile', level='optional')
+    cmd.args['stats'] = Argument(prefix='-stats ', type='infile', level='optional')
+    cmd.args['filtering-stats'] = Argument(prefix='--filtering-stats ', default=f'{sample}.filtering.stats', desc='output filtering stat file')
+    cmd.outputs['out'] = Output(value='{out}')
+    cmd.outputs['filtering-stats'] = Output(value='{filtering-stats}')
+    return cmd
+
+
+def FilterAlignmentArtifacts(sample):
+    cmd = Command()
+    cmd.meta.name = 'FilterAlignmentArtifacts'
+    cmd.meta.desc = 'Alignment artifacts can occur whenever there is sufficient sequence similarity between two or more regions in the genome to confuse the alignment algorithm. This can occur when the aligner for whatever reason overestimate how uniquely a read maps, thereby assigning it too high of a mapping quality. It can also occur through no fault of the aligner due to gaps in the reference, which can also hide the true position to which a read should map. By using a good alignment algorithm (the GATK wrapper of BWA-MEM), giving it sensitive settings (which may have been impractically slow for the original bam alignment) and mapping to the best available reference we can avoid these pitfalls. The last point is especially important: one can (and should) use a BWA-MEM index image corresponding to the best reference, regardless of the reference to which the bam was aligned.'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4418051467035-FilterAlignmentArtifacts-EXPERIMENTAL-'
+    cmd.runtime.tool = 'gatk FilterAlignmentArtifacts'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
+    cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
+    cmd.args['bam'] = Argument(prefix='-I ', type='infile', desc='input bam file')
+    cmd.args['bwa-mem-index-image'] = Argument(prefix='--bwa-mem-index-image ', type='infile', desc='BWA-mem index image')
+    cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.align_artifacts_filtered.vcf.gz', desc='output vcf file')
+    cmd.outputs['out'] = Output(value='{out}')
+    return cmd
+
+
+def MergeMutectStats(sample):
+    cmd = Command()
+    cmd.meta.name = 'MergeMutectStats'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.tool = 'gatk MergeMutectStats'
+    cmd.args['stats'] = Argument(prefix='-stats ', type='infile', multi_times=True)
+    cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.vcf.stats', desc='output merged stat files')
+    cmd.outputs['out'] = Output(value='{out}')
     return cmd
 
 
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'ctDNA'
-    wf.meta.source = "https://doi.org/10.1038/s41587-021-00857-z"
+    wf.meta.source = ""
     wf.meta.desc = \
     """
-    参考IDT的分析流程
+    部分参考IDT的分析流程https://doi.org/10.1038/s41587-021-00857-z
     1. FastqToSam
     2. ExtractUmisFromBam
     3. MarkIlluminaAdapters
     4. SamToFastq and bwa-mem
     5. MergeBamAlignment
     6. GroupReadsByUmi
-    7. CallDuplexConsensusReads
-    8. bam2fastq and bwa-mem
-    9. FilterConsensusReads
-    10. CollectHsMetrics
+    7. CallDuplexConsensusReads (如果不是双端UMI，则不建议使用该方法，而用CallMolecularConsensusReads）
+    8. FilterConsensusReads
+    9. bam2fastq and bwa-mem (使用samtools fastq命令，带入consensus相关tag，然后bwa-mem比对时，加上-C参数，相关tag带到bam文件中，方便后续的使用）
+    10. CollectHsMetrics或者bamdst
     11. ClipBam(选择跳过，vardict call变异时可以通过参数指定不重复计数overlapped区域）
     12. filterbam:Supplementary aligned reads and not primary aligned reads were removed using samtools v1.5（可以用fgbio自带得filterbam）
     13. vardict
     14. (无)Low frequency mutations that were called in the Sample B replicates were removed in all other samples, and mutations flagged as p8 in the filter column were removed
+    
+    尝试评估哪个假阳性更少:
+    (1) CallDuplexConsensusReads vs CallMolecularConsensusReads
+    预期CallDuplexConsensusReads效果大于CallMolecularConsensusReads
+    （2）mutect2 vs vardict:
+    预期mutect2效果好于vardict，个人认为最大的理由是因为vardict近几年都停止更新，而mutect2还在积极的维护
+    (3) 检查每一个突变支持的read的UMI状态
+    (4) 是否需要find_complex_variant
+    * 由于分析结果中，很多的UMI family size==1, 可以考虑进一步使用gencore进行简单意义上的去重，进一步减少假阳性
+    * 过滤时，对支持变异的read的family size进行检查，如果family size 小于3，考虑如何用一个更合适的背景测序错误率：
+        可以考虑利用fgbio提供的cE信息，使用最后的3base context的策略统计背景噪音过滤
     """
     wf.meta.version = "1.0"
 
@@ -517,11 +757,16 @@ def pipeline():
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.add_argument('-bed', help="bed file for target region")
     wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
-    wf.add_argument('-umi', required=True, desc='A string describes the read structural. Such as “1S3M3S144T,1S3M3S144T” denotes UMIs locate at 2-4bp of read1 and read2')
+    wf.add_argument('-umi', required=True, help='A string describes the read structural. Such as “1S3M3S144T,1S3M3S144T” denotes UMIs locate at 2-4bp of read1 and read2')
+    wf.add_argument('-scatter', default=10, help='scatter number used for interval splitting of mutect2 variant calling steps')
+
     # 参考数据库参数
     wf.add_argument('-ref', default='/home/hxbio04/dbs/hg19/hs37d5.fa', help='reference fasta file')
     wf.add_argument('-vep_cache', default='/home/hxbio04/dbs/vep', help='VEP cache directory')
     wf.add_argument('-vep_plugin', required=False, help='VEP plugin directory')
+    wf.add_argument('-germline_vcf', default='/home/hxbio04/dbs/hg19/af-only-gnomad.raw.sites.b37.vcf.gz', help='for Mutect2 input, will be used for germline variant filtering')
+    wf.add_argument('-bwaMemIndexImage', required=False, help='bwa-mem-index-mage for artifact alignment filtering. you may created it with tool BwaMemIndexImageCreator with only fasta as input')
+
 
     # 收集参数
     wf.parse_args()
@@ -531,6 +776,8 @@ def pipeline():
         vep_cache=TopVar(value=os.path.abspath(wf.args.vep_cache), type='indir'),
         vep_plugin=TopVar(value=os.path.abspath(wf.args.vep_plugin) if wf.args.vep_plugin else None, type='indir'),
         pair_info=TopVar(value=os.path.abspath(wf.args.pair) if wf.args.pair else None),
+        germline_vcf=TopVar(value=os.path.abspath(wf.args.germline_vcf), type='infile'),
+        bwaMemIndexImage=TopVar(value=os.path.abspath(wf.args.bwaMemIndexImage) if wf.args.bwaMemIndexImage else None, type='infile'),
     )
     wf.add_topvars(top_vars)
 
@@ -565,6 +812,23 @@ def pipeline():
             creat_dict_task.run_now(wkdir=tmp_wkdir, docker=wf.args.docker)
         wf.topvars['ref'].value = creat_dict_task.outputs['ref_genome'].value
         wf.topvars['ref_dict'].value = creat_dict_task.outputs['ref_dict'].value
+
+    # interval creation for bed file
+    if not os.path.exists(wf.topvars['bed'].value + '.interval_list'):
+        bed2intervals_task, args = wf.add_task(BedToIntervalList())
+        args['bed'].value = wf.topvars['bed']
+        args['ref_dict'].value = wf.topvars['ref_dict']
+        args['out'].value = os.path.basename(wf.topvars['bed'].value) + '.interval_list'
+    else:
+        wf.topvars['bed_interval'] = TopVar(value=wf.topvars['bed'].value + '.interval_list')
+        bed2intervals_task = None
+
+    # split intervals
+    split_task, args = wf.add_task(SplitIntervals(scatter_number=int(wf.args.scatter)), tag='ForCaller')
+    args['ref'].value = wf.topvars['ref']
+    args['intervals'].value = [wf.topvars['bed_interval'] if not bed2intervals_task else bed2intervals_task.outputs['out']]
+    args['outdir'].value = '.'
+    interval_files = [split_task.outputs[f'out{i}'] for i in range(int(wf.args.scatter))]
 
     # 开始处理
     bam_task_dict = dict()
@@ -610,7 +874,8 @@ def pipeline():
             bwa_task, args = wf.add_task(Bam2FastqBwaMem(uniq_tag), tag=uniq_tag, depends=[index_task, markadapter_task])
             args['input'].value = markadapter_task.outputs['output']
             args['CLIPPING_ATTRIBUTE'].value = 'XT'
-            args['CLIPPING_ACTION'].value = 'X'
+            # 为了在mergeBamAlignment时和markIlluminaAdapters的输入保持一致，建议下面的设置为‘N'
+            args['CLIPPING_ACTION'].value = 'N'
             args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
 
             # merge mapped bam and unmapped bam
@@ -644,9 +909,17 @@ def pipeline():
         args['ref'].value = wf.topvars['ref']
         args['output'].value = sample + '.filtered_consensus.bam'
 
-        map_task, args = wf.add_task(Bam2FastqBwaMem(sample), tag=sample+'-remap', depends=[filter_consensus_task])
-        args['input'].value = filter_consensus_task.outputs['output']
+        sam2fastq_task, args = wf.add_task(SamToFastq(), tag=sample, depends=[filter_consensus_task])
+        args['bam'].value = filter_consensus_task.outputs['output']
+        args['read1'].value = sample + '.consensus.R1.fq.gz'
+        args['read2'].value = sample + '.consensus.R2.fq.gz'
+        args['tags'].value = ['cD', 'cE', 'cM']
+
+        map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag=sample, depends=[sam2fastq_task])
+        args['read1'].value = sam2fastq_task.outputs['read1']
+        args['read2'].value = sam2fastq_task.outputs['read2']
         args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        args['include_read_header'].value = True
 
         filter_bam_task, args = wf.add_task(FilterBam(), tag=sample, depends=[map_task])
         args['input'].value = map_task.outputs['out']
@@ -654,6 +927,19 @@ def pipeline():
 
         sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
         args['input'].value = filter_bam_task.outputs['output']
+        args['output'].value = sample + '.sorted.bam'
+        bam_task_dict[sample] = sort_bam_task
+
+        gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[sort_bam_task])
+        args['bam'].value = sort_bam_task.outputs['output']
+        args['bed'].value = wf.topvars['bed']
+        args['ref'].value = wf.topvars['ref']
+        args['out'].value = sample + '.gencore.unsorted.bam'
+        args['json'].value = sample + '.gencore.json'
+        args['html'].value = sample + '.gencore.html'
+
+        sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample+'-re', depends=[gencore_task])
+        args['input'].value = gencore_task.outputs['out']
         args['output'].value = sample + '.sorted.bam'
         bam_task_dict[sample] = sort_bam_task
 
@@ -694,24 +980,132 @@ def pipeline():
         pairs = [x.strip().split('\t')[:2] for x in open(wf.topvars['pair_info'].value)]
     else:
         pairs = zip(bam_task_dict.keys(), ['None']*len(bam_task_dict))
+
+    vardict_filter_task_ids = []
+    mutect2_filter_task_ids = []
     for tumor, normal in pairs:
         tumor_bam_task = bam_task_dict[tumor]
-        tumor_vep_task = vep_task_dict[tumor]
+        tumor_vardict_vep_task = vep_task_dict[tumor]
         if normal != 'None':
             normal_vep_task = vep_task_dict[normal]
             normal_vcf = normal_vep_task.outputs['out_vcf']
+            normal_bam_task = bam_task_dict[normal]
         else:
             normal_vcf = None
-        filter_task, args = wf.add_task(VcfFilter(), tag=tumor)
-        args['vcf'].value = tumor_vep_task.outputs['out_vcf']
+            normal_bam_task = None
+
+        # ----mutect2---------------------------------------------------
+        mutect_tasks = []
+        for ind, interval_file in enumerate(interval_files):
+            mutect_task, args = wf.add_task(Mutect2(f'{tumor}-{ind}'), tag=f'{tumor}-{ind}', parent_wkdir='Mutect2')
+            mutect_tasks.append(mutect_task)
+            args['ref'].value = wf.topvars['ref']
+            args['tumor_bam'].value = tumor_bam_task.outputs['output']
+            args['tumor_name'].value = tumor
+            if normal_bam_task:
+                args['normal_bam'].value = normal_bam_task.outputs['output']
+                args['normal_name'].value = normal
+            args['bam-output'].value = f'{tumor}-{ind}' + '.haplotypes.bam'
+            args['germline-resource'].value = wf.topvars['germline_vcf']
+            args['intervals'].value = [interval_file]
+
+        # LearnReadOrientationModel
+        lrom_task, args = wf.add_task(LearnReadOrientationModel(tumor), tag=tumor, depends=mutect_tasks)
+        args['inputs'].value = [x.outputs['f1r2'] for x in mutect_tasks]
+
+        # merge vcf
+        merge_vcf_task, args = wf.add_task(MergeVcfs(tumor), tag=tumor, depends=mutect_tasks)
+        args['inputs'].value = [x.outputs['out'] for x in mutect_tasks]
+
+        # normalize vcf
+        norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor, depends=[merge_vcf_task])
+        args['fasta-ref'].value = wf.topvars['ref']
+        args['multiallelics'].value = '+both'
+        args['vcf'].value = merge_vcf_task.outputs['out']
+        args['out'].value = tumor + '.mutect2.normed.raw.vcf'
+
+        # merge stats
+        merge_stat_task, args = wf.add_task(MergeMutectStats(tumor), tag=tumor, depends=mutect_tasks)
+        args['stats'].value = [x.outputs['stats'] for x in mutect_tasks]
+        merge_stat_task.outputs['out'].report = True
+
+        # filter
+        filter_task, args = wf.add_task(FilterMutectCalls(tumor), tag=tumor, depends=[norm_vcf_task, merge_stat_task, lrom_task])
+        args['vcf'].value = norm_vcf_task.outputs['out']
+        args['ref'].value = wf.topvars['ref']
+        args['ob-priors'].value = lrom_task.outputs['out']
+        args['stats'].value = merge_stat_task.outputs['out']
+        filter_task.outputs['out'].report = True
+
+        # filter alignment artifact
+        filter_align_task = None
+        if wf.topvars['bwaMemIndexImage'].value is not None:
+            filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor), tag=tumor, depends=[filter_task])
+            args['vcf'].value = filter_task.outputs['out']
+            args['ref'].value = wf.topvars['ref']
+            args['bam'].value = tumor_bam_task.outputs['output']
+            args['bwa-mem-index-image'].value = wf.topvars['bwaMemIndexImage']
+            filter_align_task.outputs['out'].report = True
+
+        # vep 注释
+        depend_task = filter_align_task or filter_task
+        vep_task, args = wf.add_task(vep(tumor), tag=tumor, depends=[depend_task])
+        args['input_file'].value = depend_task.outputs['out']
+        args['fasta'].value = wf.topvars['ref']
+        args['refseq'].value = True
+        args['dir_cache'].value = top_vars['vep_cache']
+        args['dir_plugins'].value = top_vars['vep_plugin']
+        vep_task.outputs['out_vcf'].report = True
+        vep_task.outputs['out_vcf_idx'].report = True
+        # ----end mutect2---------------------------------------------------
+        # 自研脚本估计错误率
+        error_stat_task, args = wf.add_task(stat_context_seq_error(), tag=tumor)
         args['bam'].value = tumor_bam_task.outputs['output']
+        args['genome'].value = wf.topvars['ref']
+        args['bed'].value = wf.topvars['bed']
+        args['out_prefix'].value = tumor
+
+        # varidct结果过滤和整理
+        filter_task, args = wf.add_task(VcfFilter(), tag=tumor)
+        args['vcf'].value = tumor_vardict_vep_task.outputs['out_vcf']
+        args['error_rate_file'].value = error_stat_task.outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
         args['bed'].value = wf.topvars['bed']
         args['normal_vcf'].value = normal_vcf
         args['out_prefix'].value = tumor
+        vardict_filter_task_ids.append(filter_task.task_id)
+
+        # mutect2结果过滤和整理
+        filter_task, args = wf.add_task(VcfFilter(), tag=tumor)
+        args['vcf'].value = vep_task.outputs['out_vcf']
+        args['error_rate_file'].value = error_stat_task.outputs['context_error_rate']
+        args['genome'].value = wf.topvars['ref']
+        args['bed'].value = wf.topvars['bed']
+        args['normal_vcf'].value = normal_vcf
+        args['out_prefix'].value = tumor
+        mutect2_filter_task_ids.append(filter_task.task_id)
 
     # end
     wf.run()
+    # tidy
+    if wf.success:
+        xls_lst = []
+        for tid in vardict_filter_task_ids:
+            xls_file = wf.tasks[tid].outputs['final_xls'].value
+            xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
+            xls_lst.append(xls_file)
+        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
+        df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
+        df.to_excel(out_file, index=False)
+
+        xls_lst = []
+        for tid in mutect2_filter_task_ids:
+            xls_file = wf.tasks[tid].outputs['final_xls'].value
+            xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
+            xls_lst.append(xls_file)
+        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
+        df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
+        df.to_excel(out_file, index=False)
 
 
 if __name__ == '__main__':
