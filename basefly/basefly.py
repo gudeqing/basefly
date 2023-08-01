@@ -332,7 +332,8 @@ class Task:
             if self.tag:
                 self.name = self.cmd.meta.name + '-' + str(self.tag)
             else:
-                self.name = self.cmd.meta.name + '-' + str(self.task_id)
+                # self.name = self.cmd.meta.name + '-' + str(self.task_id)
+                self.name = self.cmd.meta.name
 
         # 为每一个output带入
         for key in self.cmd.outputs.keys():
@@ -430,6 +431,7 @@ class Workflow:
     success = False
     add_argument = None
     wkdir: str = None
+    task_order: int = 0
 
     def __post_init__(self):
         for k, v in self.topvars.items():
@@ -445,7 +447,9 @@ class Workflow:
         self.topvars.update(var_dict)
 
     def add_task(self, cmd: Command, depends: list = [], parent_wkdir: str ='', name: str = None, tag: str = None):
+        self.task_order += 1
         task = Task(cmd=cmd, depends=depends.copy(), name=name, tag=tag, parent_wkdir=parent_wkdir)
+        task.name = task.name + '-T' + str(self.task_order)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
