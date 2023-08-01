@@ -51,6 +51,7 @@ import json
 import pysam
 import statistics
 from collections import Counter
+__author__ = 'gdq'
 
 
 def get_seq_and_qual(contig, start, end, bam, min_bq=15, get_qual=False):

@@ -138,13 +138,17 @@ class VcfFilter(object):
             self.vcf.header.contigs.add(line[0], length=line[1])
 
     def poll_error_binomial_conf(self, error_rate, depth, confidence=0.95):
-        # 可以根据样本量估算公式反推已知测序错误率和测序深度的条件下，计算测序错误率的上限，作为检测下限
-        # e = z/(depth/(error_rate*(1-error_rate)))**0.5
-        # lower = 0 if (error_rate - e <= 0) else (error_rate - e)
         lower, upper = stats.binom.interval(confidence, n=depth, p=error_rate)
         lower, upper = lower/depth, upper/depth
         if lower < 1e-6:
             lower = 1e-6
+        return lower, upper
+
+    def poll_error_norm_conf(self, error_rate, depth, z=1.96):
+        # 可以根据样本量估算公式反推已知测序错误率和测序深度的条件下，计算测序错误率的上限，作为检测下限
+        e = z/(depth/(error_rate*(1-error_rate)))**0.5
+        lower = 0 if (error_rate - e <= 0) else (error_rate - e)
+        upper = error_rate + e
         return lower, upper
 
     def get_alt_binomial_pvalue(self, alt_depth, depth, error_rate):
