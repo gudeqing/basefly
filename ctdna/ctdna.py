@@ -122,6 +122,8 @@ def SamToFastq():
 def ExtractUmisFromBam():
     cmd = Command()
     cmd.meta.name = 'ExtractUmisFromBam'
+    cmd.meta.source = 'https://fulcrumgenomics.github.io/fgbio/tools/latest/ExtractUmisFromBam.html'
+    cmd.meta.desc = 'Extracts unique molecular indexes from reads in a BAM file into tags'
     cmd.runtime.image = 'dceoy/fgbio:latest'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
@@ -129,6 +131,7 @@ def ExtractUmisFromBam():
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='Input BAM file')
     cmd.args['read-structure'] = Argument(prefix='-r ', array=True, default=['3M2S146T', '3M2S146T'], desc='The read structure, one per read in a template.')
     cmd.args['molecular-index-tags'] = Argument(prefix='-t ', array=True, default=['ZA', 'ZB'], desc='SAM tag(s) in which to store the molecular indices.')
+    cmd.args['annotate-read-names'] = Argument(prefix='-a ', default='false', desc='Annotate the read names with the molecular indices.')
     cmd.args['single-tag'] = Argument(prefix='-s ', default='RX', desc="Single tag into which to concatenate all molecular indices.")
     cmd.args['output'] = Argument(prefix='-o ', desc='Output BAM file')
     # 定义输出
