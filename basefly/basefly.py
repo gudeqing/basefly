@@ -872,6 +872,13 @@ class Workflow:
                     if v.value.task_id not in task.depends:
                         # print(f'You may forgot to add dependency {self.tasks[v.value.task_id].name} for {task.name}. We will fixed it.')
                         task.depends.append(v.value.task_id)
+                elif type(v.value) == list:
+                    for each in v.value:
+                        if type(each) == Output:
+                            if each.task_id not in task.depends:
+                                task.depends.append(each.task_id)
+                else:
+                    pass
 
             # format output
             value_dict = dict()
