@@ -228,19 +228,14 @@ class VcfFilter(object):
         elif 'MBQ' in record.info:
             # mutect2 style
             error_rate = self.qual_to_error_rate(record.info['MBQ'])
-        print(f'error rate for {record.start}:{record.ref}>{record.alts[0]}:', error_rate)
+        print(f'we guess error rate for {record.start}:{record.ref}>{record.alts[0]}:', error_rate)
         return error_rate
 
-    def pass_seq_error(self, record, sample, seq_error:float=None, alpha=0.05, read_len=150):
+    def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, read_len=150):
         # 置信水平99%对应Z值为2.58
         # 置信水平95%对应Z值为1.96
         dp = self.get_depth(record, sample)
         af = self.get_af_value(record, sample)
-        if seq_error is None:
-            # 尝试从record的字段信息提取error_rate的估计值
-            error_rate = self.get_raw_error_rate(record, read_len=read_len)
-        else:
-            error_rate = seq_error
         # 估计error_rate的置信区间
         confidence = 1 - alpha
         lower, upper = self.poll_error_binomial_conf(error_rate=error_rate, depth=dp, confidence=confidence)
@@ -531,7 +526,7 @@ class VcfFilter(object):
         df.to_csv(out, sep='\t', index=False)
         df.to_excel(out[:-4]+'.xlsx', index=False)
 
-    def filtering(self, genome, ref_dict=None, out_prefix=None, min_error_rate=1e-6, error_rate_file=None, min_depth=5, alpha=0.05):
+    def filtering(self, genome, ref_dict=None, out_prefix=None, min_error_rate=None, error_rate_file=None, min_af=0.001, min_depth=5, alpha=0.05):
         # 先给vcf的header添加新字段定义才能往添加新的字段信息
         self.vcf.header.info.add(
             'LOD', number=3, type='Float',
@@ -543,6 +538,7 @@ class VcfFilter(object):
         self.vcf.header.filters.add('BackgroundNoise', number=None, type=None, description='noise from background')
         self.vcf.header.filters.add('FromGermline', number=None, type=None, description='considered as germline variant found in normal vcf')
         self.vcf.header.filters.add('HighPopFreq', number=None, type=None, description='Population frequency')
+        self.vcf.header.filters.add('LowAF', number=None, type=None, description=f'AF smaller than {min_af}')
         if 'Bias' not in self.vcf.header.filters:
             self.vcf.header.filters.add('Bias', number=None, type=None, description="severe strand bias")
         if self.vcf.header.contigs.__len__() < 1:
@@ -556,19 +552,19 @@ class VcfFilter(object):
 
         # 如果仅仅提供了一个全局的最低错误率信息
         key_left = key_right = 0
-        seq_error_dict = None
-        if min_error_rate:
-            seq_error_dict = dict()
-            for b in 'ATCGID':
-                for i in set('ATCG') - {b}:
-                    seq_error_dict.setdefault(b, dict())[i] = {b: float(min_error_rate)}
         if error_rate_file:
             seq_error_dict = json.load(open(error_rate_file))
             key_len = max(len(x) for x in seq_error_dict['A'].keys())//2
             key_left = key_right = key_len
-
-        if error_rate_file is None:
-            print(f'{seq_error_dict} is used as the background noise information')
+        else:
+            if min_error_rate:
+                seq_error_dict = dict()
+                for b in 'ATCGID':
+                    for i in set('ATCG') - {b}:
+                        seq_error_dict.setdefault(b, dict())[i] = {b: float(min_error_rate)}
+                print(f'{seq_error_dict} is used as the background noise information')
+            else:
+                seq_error_dict = dict()
 
         # 读取参考基因组信息
         gn = pysam.FastaFile(genome)
@@ -598,6 +594,11 @@ class VcfFilter(object):
             # 过滤VCF中原本没有被判定通过的突变
             if list(r.filter)[0] != "PASS":
                 reasons = list(r.filter)
+
+            # af cutoff
+            af = self.get_af_value(r, self.tumor)
+            if af < min_af:
+                reasons.append('LowAF')
 
             # 1.根据测序错误率或germline突变频率过滤
             ctrl_af_as_error_rate = False
@@ -636,20 +637,23 @@ class VcfFilter(object):
 
             if self.normal:
                 # 当存在对照样本时，如果某个位点在对照样本也存在突变，且突变频率大于seq_error时，可以把对照样本中的突变频率作为测序错误率进行过滤
-                # 这样既可以过滤掉germline突变
-                # 如果对照样本测序深度足够，还可以过滤假阳性突变、克隆造血突变
-                # 如果对照样本测序深度不够，germline的突变AF可能被低估，而肿瘤样本由于测序深度足够，可以检测到远高于对照样本的AF
-                # 此时如果对照样本的AF作为error_rate, 肿瘤样本有可能通过，所以直接扔掉被判定为germline的突变
+                # 一开始认为这样可以过滤掉germline突变，如果对照样本测序深度足够，还可以过滤假阳性突变、克隆造血突变
+                # 但是如果对照样本测序深度不够，germline的突变AF可能被低估，而肿瘤样本由于测序深度足够，可以检测到远高于对照样本的AF
+                # 此时如果直接用对照样本的AF作为error_rate, 肿瘤样本有可能通过判定，所以最好的方式是直接扔掉被判定为germline的突变
                 normal_af = self.get_normal_af(r)
                 if normal_af and (normal_af > error_rate):
                     ctrl_af_as_error_rate = True
                     error_rate = normal_af
 
+            if error_rate is None:
+                # 尝试从record的字段信息提取error_rate的估计值
+                error_rate = self.get_raw_error_rate(r, read_len=150)
+
             # 1.seq error过滤或者germline突变过滤
             if error_rate > 0.999:
                 reasons.append('FromGermline')
             else:
-                judge = self.pass_seq_error(r, self.tumor, seq_error=error_rate, alpha=alpha)
+                judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
                 if not judge[0]:
                     if ctrl_af_as_error_rate:
                         reasons.append('NoiseFromNormal')
@@ -701,8 +705,8 @@ class VcfFilter(object):
             print(f'{v} variants are filtered out because of {k}', file=log_file)
 
 
-def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, normal_vcf=None, alpha=0.05,
-              exclude_from=None, out_prefix=None, min_error_rate=1e-6, error_rate_file=None, center_size:tuple=(1, 1)):
+def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, normal_vcf=None, alpha=0.01, min_af=0.001,
+              exclude_from=None, out_prefix=None, min_error_rate=None, error_rate_file=None, center_size:tuple=(1, 1)):
     if bam and bed and (not error_rate_file):
         error_rate_file = estimate_context_seq_error(
             bed, bam, prefix=out_prefix, center_size=center_size,
@@ -715,7 +719,8 @@ def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, 
         out_prefix=out_prefix,
         min_error_rate=min_error_rate,
         error_rate_file=error_rate_file,
-        alpha=alpha
+        alpha=alpha,
+        min_af=min_af
     )
 
 
@@ -731,12 +736,13 @@ if __name__ == '__main__':
     parser.add_argument('-bed', type=Path,  required=False, help='target region file which will be used to estimate background noise')
     parser.add_argument('-center_size', type=int, nargs='+', default=(1, 1), help='extending size around ref base during background noise estimating')
     parser.add_argument('-exclude_from', type=Path, required=False, help='bed file containing known variant in input bam, these variants will be excluded during background noise estimating')
-    parser.add_argument('-ref_dict', type=Path, required=False, help='path to genome dict file which will be used to add contig header in vcf')
+    parser.add_argument('-ref_dict', type=Path, required=False, help='path to genome dict file which will be used to add missed contig header in vcf')
     parser.add_argument('-tumor_name', required=False, help='tumor sample name in vcf')
     parser.add_argument('-normal_vcf', type=Path, required=False, help='normal sample vcf file')
     parser.add_argument('-error_rate_file', type=Path, required=False, help='Estimated background noise file, if not provided, bam file will be used to generate one')
     parser.add_argument('-min_error_rate', type=float, default=1e-6, help='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
     parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model')
+    parser.add_argument('-min_af', type=float, default=0.001, help='hard cutoff of AF')
     parser.add_argument('-out_prefix', help='output file prefix')
     args = parser.parse_args()
     filter_vcf(
