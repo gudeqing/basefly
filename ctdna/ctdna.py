@@ -1,7 +1,5 @@
 import os
-
 import pandas as pd
-
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from basefly.basefly import Argument, Output, Command, Workflow, TopVar, ToWdlTask
@@ -449,6 +447,39 @@ def VardictSingle():
     cmd.args['bam'] = Argument(prefix='-b ', type='infile', desc='The indexed BAM file')
     cmd.args['genome'] = Argument(prefix='-G ', type='infile', desc='The reference fasta. Should be indexed (.fai).')
     cmd.args['threads'] = Argument(prefix='-th ', default=8, desc='Threads count.')
+    cmd.args['min-freq'] = Argument(prefix='-f ', default="0.0001", desc='The threshold for allele frequency')
+    cmd.args['chromosome'] = Argument(prefix='-c ', default=1, desc='The column of chromosome')
+    cmd.args['region_start'] = Argument(prefix='-S ', default=2, desc='The column of region start')
+    cmd.args['region_end'] = Argument(prefix='-E ', default=3, desc='The column of region end')
+    cmd.args['gene'] = Argument(prefix='-g ', default=4, desc='The column of gene name')
+    cmd.args['fisher'] = Argument(prefix='--fisher', type='bool', default=True, desc='Fisher exact test.')
+    cmd.args['mfreq'] = Argument(prefix='-mfreq ', default=0.25, desc="The variant frequency threshold to determine variant as good in case of monomer MSI. Default: 0.25")
+    cmd.args['nmfreq'] = Argument(prefix='-nmfreq ', default=0.1, desc='The variant frequency threshold to determine variant as good in case of non-monomer MSI')
+    cmd.args['read_position_filter'] = Argument(prefix='-P ', default=3, desc="If the mean variants position is less that specified, it's considered false")
+    cmd.args['min-reads'] = Argument(prefix='-r ', default=2, desc='The minimum # of variant reads')
+    cmd.args['nosv'] = Argument(prefix='--nosv', type='bool', default=True,)
+    cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
+    cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 2 -q 15 -d 3 -v 1 -f 0.0001 ', desc='pipe to another script')
+    cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
+    cmd.outputs['output'] = Output(value='{output}')
+    return cmd
+
+
+def VardictPaired():
+    cmd = Command()
+    cmd.meta.name = 'VardictPaired'
+    cmd.meta.source = 'https://github.com/AstraZeneca-NGS/VarDictJava'
+    cmd.meta.version = 'VarDict_v1.8.2'
+    cmd.meta.desc = "VarDictJava is a variant discovery program written in Java and Perl."
+    cmd.runtime.image = 'docker.io/truwl/vardict-java:latest'
+    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'vardict-java'
+    cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
+    cmd.args['bam'] = Argument(prefix='-b ', type='infile', array=True, delimiter='|', desc='The indexed BAM files, tumor|normal')
+    cmd.args['genome'] = Argument(prefix='-G ', type='infile', desc='The reference fasta. Should be indexed (.fai).')
+    cmd.args['threads'] = Argument(prefix='-th ', default=8, desc='Threads count.')
     cmd.args['min-freq'] = Argument(prefix='-f ', default="0.00001", desc='The threshold for allele frequency')
     cmd.args['chromosome'] = Argument(prefix='-c ', default=1, desc='The column of chromosome')
     cmd.args['region_start'] = Argument(prefix='-S ', default=2, desc='The column of region start')
@@ -462,7 +493,8 @@ def VardictSingle():
     cmd.args['nosv'] = Argument(prefix='--nosv', type='bool', default=True,)
     cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
-    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 2 -q 15 -d 3 -v 1 -f 0.00001 ', desc='pipe to another script')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 3 -q 15 -d 3 -v 1 -f 0.0001 ', desc='pipe to another script')
+    cmd.args['names'] = Argument(prefix='-N ', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
@@ -507,6 +539,8 @@ def Mutect2(prefix):
     cmd.args['initial-tumor-lod'] = Argument(prefix='--initial-tumor-lod ', default=3.0, desc='Log 10 odds threshold to consider pileup active.')
     cmd.args['normal-lod'] = Argument(prefix='--normal-lod ', default=2.2, desc='Log 10 odds threshold for calling normal variant non-germline. ')
     cmd.args['tumor-lod-to-emit'] = Argument(prefix='--tumor-lod-to-emit ', default=3.0, desc='Log 10 odds threshold to emit variant to VCF')
+    cmd.args['active-probability-threshold'] = Argument(prefix='--active-probability-threshold ', default=0.001, desc='Minimum probability for a locus to be considered active')
+    cmd.args['disable-adaptive-pruning'] = Argument(prefix='--disable-adaptive-pruning ', default='true', desc='Disable the adaptive algorithm for pruning paths in the graph')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.vcf.gz', desc='output vcf')
     cmd.args['bam-output'] = Argument(prefix='--bam-output ', level='optional', desc='output bam file')
     cmd.args['f1r2-tar-gz'] = Argument(prefix='--f1r2-tar-gz ', type='infile', default=f'{prefix}.f1r2.tar.gz', desc='If specified, collect F1R2 counts and output files into this tar.gz file')
@@ -587,8 +621,8 @@ def vep(sample):
     cmd.args['filter_common'] = Argument(prefix='--filter_common ', type='bool', default=False, desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters.")
     cmd.args['other_args'] = Argument(default='', desc='specify other arguments that you want to append to the command')
     cmd.args['_create_index'] = Argument(value='&& tabix *vcf.gz', type='fix')
-    cmd.outputs['out_vcf'] = Output(value='{output_file}')
-    cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi')
+    cmd.outputs['out_vcf'] = Output(value='{output_file}', report=True)
+    cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi', report=True)
     return cmd
 
 
@@ -628,7 +662,7 @@ def VcfFilter():
     cmd.args['bed'] = Argument(prefix='-bed ', type='infile', level='optional', desc='path to target region file which will be used to estimate background noise')
     cmd.args['exclude_from'] = Argument(prefix='-exclude_from ', type='infile', level='optional', desc='bed or vcf file containing known variant in input bam, these variants will be excluded during background noise estimating')
     cmd.args['center_size'] = Argument(prefix='-center_size ', default=(1, 1), array=True,  desc='extending size around ref base during background noise estimating')
-    cmd.args['tumor_name'] = Argument(prefix='-tumor_name ', level='optional', desc='tumor sample name in vcf')
+    cmd.args['tumor_name'] = Argument(prefix='-tumor_name ', level='optional', desc='tumor sample name in vcf. default to the last column sample')
     cmd.args['normal_vcf'] = Argument(prefix='-normal_vcf ', type='infile', level='optional', desc='normal sample vcf file')
     cmd.args['error_rate_file'] = Argument(prefix='-error_rate_file ', type='infile', level='optional', desc='Estimated background noise file, if not provided, bam file will be used')
     cmd.args['min_error_rate'] = Argument(prefix='-min_error_rate ', default=1e-6, desc='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
@@ -758,6 +792,13 @@ def pipeline():
     * 由于分析结果中，很多的UMI family size==1, 可以考虑进一步使用gencore进行简单意义上的去重，进一步减少假阳性
     * 过滤时，对支持变异的read的family size进行检查，如果family size 小于3，考虑如何用一个更合适的背景测序错误率：
         可以考虑利用fgbio提供的cE信息，使用最后的3base context的策略统计背景噪音过滤
+    
+    检查过滤结果发现，mutect2的filter误判strand_bias  
+    gatk Mutect2  -R /home/hxbio04/dbs/hg19/hs37d5.fa -I /home/hxbio04/projects/ctDNA-test/Result/SortAndIndexBam-ctDNA-0422-A-re-T73/ctDNA-0422-A.sorted.bam 
+    -I /home/hxbio04/projects/ctDNA-test/Result/SortAndIndexBam-ctDNA-0422-F-re-T54/ctDNA-0422-F.sorted.bam -tumor ctDNA-0422-A -normal ctDNA-0422-F 
+    --germline-resource /home/hxbio04/dbs/hg19/af-only-gnomad.raw.sites.b37.vcf.gz -L /home/hxbio04/projects/ctDNA-test/Result/SplitIntervals-ForCaller-T2/./0000-scattered.interval_list 
+    --initial-tumor-lod 3.0 --normal-lod 2.2 --tumor-lod-to-emit 3.0 -O ctDNA-0422-A-0.vcf.gz --bam-output ctDNA-0422-A-0.haplotypes.bam --f1r2-tar-gz ctDNA-0422-A-0.f1r2.tar.gz --tmp-dir .  
+    以上参数，目前的得到的结果是1%以下的突变都没有检测出来
     """
     wf.meta.version = "1.0"
 
@@ -773,7 +814,7 @@ def pipeline():
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.add_argument('-bed', help="bed file for target region")
     wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
-    wf.add_argument('-umi', required=True, help='A string describes the read structural. Such as “1S3M3S144T,1S3M3S144T” denotes UMIs locate at 2-4bp of read1 and read2')
+    wf.add_argument('-umi', required=True, help='A string describes the read structural. Such as “1S3M3S143T,1S3M3S143T” denotes UMIs locate at 2-4bp of read1 and read2')
     wf.add_argument('-scatter', default=10, help='scatter number used for interval splitting of mutect2 variant calling steps')
 
     # 参考数据库参数
@@ -801,6 +842,14 @@ def pipeline():
     fastq_info = get_fastq_info(fastq_info=wf.args.fastq_info, r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
+
+    # 处理配对信息
+    if wf.topvars['pair_info']:
+        # 如果没有对照，对照样本名可以用"None"替代
+        pairs = [x.strip().split('\t')[:2] for x in open(wf.topvars['pair_info'].value)]
+    else:
+        # 如果不提供配对信息，全部都当作无对照处理
+        pairs = zip(fastq_info.keys(), ['None']*len(fastq_info))
 
     # 建bwa索引, 也会同时建fai和dict文件
     make_index = False
@@ -848,7 +897,8 @@ def pipeline():
 
     # 开始处理
     bam_task_dict = dict()
-    vep_task_dict = dict()
+    bamdst_task_dict = dict()
+    error_stat_task_dict = dict()
     for sample, reads in fastq_info.items():
         # 跳过不需要分析的样本
         if sample in wf.args.exclude_samples:
@@ -903,16 +953,14 @@ def pipeline():
 
         if len(r1s) > 1:
             # 合并一个样本的多个fastq的比对结果
-            merge_sam_task, args = wf.add_task(MergeSamFiles(), tag=sample, depends=merge_bam_tasks)
+            merge_bam_task, args = wf.add_task(MergeSamFiles(), tag=sample, depends=merge_bam_tasks)
             args['INPUT'].value = [x.outputs['out'] for x in merge_bam_tasks]
             # GroupReadsByUmi 不强求bam是否是sorted
             args['SORT_ORDER'].value = 'unsorted'
             args['OUTPUT'].value = sample + '.merged.bam'
-        else:
-            merge_sam_task = merge_bam_task
 
-        group_umi_task, args = wf.add_task(GroupReadsByUmi(sample), tag=sample, depends=[merge_sam_task])
-        args['input'].value = merge_sam_task.outputs['out']
+        group_umi_task, args = wf.add_task(GroupReadsByUmi(sample), tag=sample, depends=[merge_bam_task])
+        args['input'].value = merge_bam_task.outputs['out']
         # args['strategy'].value = 'paired'
 
         # consensus_task, args = wf.add_task(CallDuplexConsensusReads(), tag=sample, depends=[group_umi_task])
@@ -929,12 +977,14 @@ def pipeline():
         args['bam'].value = filter_consensus_task.outputs['output']
         args['read1'].value = sample + '.consensus.R1.fq.gz'
         args['read2'].value = sample + '.consensus.R2.fq.gz'
+        # 带信息到read header
         args['tags'].value = ['cD', 'cE', 'cM']
 
         map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag=sample, depends=[sam2fastq_task])
         args['read1'].value = sam2fastq_task.outputs['read1']
         args['read2'].value = sam2fastq_task.outputs['read2']
         args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        # header 信息带到bam
         args['include_read_header'].value = True
 
         filter_bam_task, args = wf.add_task(FilterBam(), tag=sample, depends=[map_task])
@@ -962,52 +1012,29 @@ def pipeline():
         bamdst_task, args = wf.add_task(Bamdst(), tag=sample, depends=[sort_bam_task])
         args['input'].value = sort_bam_task.outputs['output']
         args['bed'].value = wf.topvars['bed']
+        bamdst_task_dict[sample] = bamdst_task
 
-        vardict_task, args = wf.add_task(VardictSingle(), tag=sample, depends=[sort_bam_task])
-        args['sample'].value = sample
+        # 自研脚本估计错误率
+        error_stat_task, args = wf.add_task(stat_context_seq_error(), tag=sample)
         args['bam'].value = sort_bam_task.outputs['output']
         args['genome'].value = wf.topvars['ref']
         args['bed'].value = wf.topvars['bed']
-        args['output'].value = sample + '.raw.vcf'
-
-        add_contig_task, args = wf.add_task(add_vcf_contig(), tag=sample, depends=[vardict_task])
-        args['vcf'].value = vardict_task.outputs['output']
-        args['ref_dict'].value = wf.topvars['ref_dict']
-        args['out'].value = sample + '.raw.vcf'
-
-        vcf_norm_task, args = wf.add_task(bcftools_norm(), tag=sample, depends=[add_contig_task])
-        args['fasta-ref'].value = wf.topvars['ref']
-        args['multiallelics'].value = '-both'
-        args['vcf'].value = add_contig_task.outputs['out']
-        args['out'].value = sample + '.normed.raw.vcf'
-
-        vep_task, args = wf.add_task(vep(sample), tag=sample, depends=[vcf_norm_task])
-        args['input_file'].value = vcf_norm_task.outputs['out']
-        args['fasta'].value = wf.topvars['ref']
-        args['refseq'].value = True
-        args['dir_cache'].value = top_vars['vep_cache']
-        args['dir_plugins'].value = top_vars['vep_plugin']
-        vep_task.outputs['out_vcf'].report = True
-        vep_task.outputs['out_vcf_idx'].report = True
-        vep_task_dict[sample] = vep_task
-
-    # filtering vcf
-    if wf.topvars['pair_info']:
-        pairs = [x.strip().split('\t')[:2] for x in open(wf.topvars['pair_info'].value)]
-    else:
-        pairs = zip(bam_task_dict.keys(), ['None']*len(bam_task_dict))
+        args['out_prefix'].value = sample
+        error_stat_task_dict[sample] = error_stat_task
 
     vardict_filter_task_ids = []
     mutect2_filter_task_ids = []
     for tumor, normal in pairs:
+        if tumor not in bam_task_dict:
+            print(f'skip {tumor}')
+            continue
         tumor_bam_task = bam_task_dict[tumor]
-        tumor_vardict_vep_task = vep_task_dict[tumor]
         if normal != 'None':
-            normal_vep_task = vep_task_dict[normal]
-            normal_vcf = normal_vep_task.outputs['out_vcf']
-            normal_bam_task = bam_task_dict[normal]
+            if normal in bam_task_dict:
+                normal_bam_task = bam_task_dict[normal]
+            else:
+                raise Exception(f'{normal} not found')
         else:
-            normal_vcf = None
             normal_bam_task = None
 
         # ----mutect2---------------------------------------------------
@@ -1033,21 +1060,14 @@ def pipeline():
         merge_vcf_task, args = wf.add_task(MergeVcfs(tumor), tag=tumor, depends=mutect_tasks)
         args['inputs'].value = [x.outputs['out'] for x in mutect_tasks]
 
-        # normalize vcf
-        norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor, depends=[merge_vcf_task])
-        args['fasta-ref'].value = wf.topvars['ref']
-        args['multiallelics'].value = '-both'
-        args['vcf'].value = merge_vcf_task.outputs['out']
-        args['out'].value = tumor + '.mutect2.normed.raw.vcf'
-
         # merge stats
         merge_stat_task, args = wf.add_task(MergeMutectStats(tumor), tag=tumor, depends=mutect_tasks)
         args['stats'].value = [x.outputs['stats'] for x in mutect_tasks]
         merge_stat_task.outputs['out'].report = True
 
         # filter
-        filter_task, args = wf.add_task(FilterMutectCalls(tumor), tag=tumor, depends=[norm_vcf_task, merge_stat_task, lrom_task])
-        args['vcf'].value = norm_vcf_task.outputs['out']
+        filter_task, args = wf.add_task(FilterMutectCalls(tumor), tag=tumor, depends=[merge_vcf_task, merge_stat_task, lrom_task])
+        args['vcf'].value = merge_vcf_task.outputs['out']
         args['ref'].value = wf.topvars['ref']
         args['ob-priors'].value = lrom_task.outputs['out']
         args['stats'].value = merge_stat_task.outputs['out']
@@ -1063,43 +1083,77 @@ def pipeline():
             args['bwa-mem-index-image'].value = wf.topvars['bwaMemIndexImage']
             filter_align_task.outputs['out'].report = True
 
-        # vep 注释
+        # normalize vcf
         depend_task = filter_align_task or filter_task
-        vep_task, args = wf.add_task(vep(tumor), tag=tumor, depends=[depend_task])
-        args['input_file'].value = depend_task.outputs['out']
+        norm_vcf_task, args = wf.add_task(bcftools_norm(), tag='mutect2-'+tumor, depends=[depend_task])
+        args['fasta-ref'].value = wf.topvars['ref']
+        args['multiallelics'].value = '-both'
+        args['vcf'].value = depend_task.outputs['out']
+        args['out'].value = tumor + '.mutect2.normed.raw.vcf'
+
+        # vep 注释
+        mutect2_vep_task, args = wf.add_task(vep(tumor), tag='mutect2-'+tumor, depends=[norm_vcf_task])
+        args['input_file'].value = norm_vcf_task.outputs['out']
         args['fasta'].value = wf.topvars['ref']
         args['refseq'].value = True
         args['dir_cache'].value = top_vars['vep_cache']
         args['dir_plugins'].value = top_vars['vep_plugin']
-        vep_task.outputs['out_vcf'].report = True
-        vep_task.outputs['out_vcf_idx'].report = True
-        # ----end mutect2---------------------------------------------------
-        # 自研脚本估计错误率
-        error_stat_task, args = wf.add_task(stat_context_seq_error(), tag=tumor)
-        args['bam'].value = tumor_bam_task.outputs['output']
-        args['genome'].value = wf.topvars['ref']
-        args['bed'].value = wf.topvars['bed']
-        args['out_prefix'].value = tumor
 
-        # varidct结果过滤和整理
-        filter_task, args = wf.add_task(VcfFilter(), tag=tumor)
-        args['vcf'].value = tumor_vardict_vep_task.outputs['out_vcf']
-        args['error_rate_file'].value = error_stat_task.outputs['context_error_rate']
+        # mutect2结果最终过滤和整理
+        filter_task, args = wf.add_task(VcfFilter(), tag='mutect2-' + tumor)
+        args['vcf'].value = mutect2_vep_task.outputs['out_vcf']
+        args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
         args['bed'].value = wf.topvars['bed']
-        args['normal_vcf'].value = normal_vcf
-        args['out_prefix'].value = tumor
-        vardict_filter_task_ids.append(filter_task.task_id)
-
-        # mutect2结果过滤和整理
-        filter_task, args = wf.add_task(VcfFilter(), tag=tumor)
-        args['vcf'].value = vep_task.outputs['out_vcf']
-        args['error_rate_file'].value = error_stat_task.outputs['context_error_rate']
-        args['genome'].value = wf.topvars['ref']
-        args['bed'].value = wf.topvars['bed']
-        args['normal_vcf'].value = normal_vcf
+        args['tumor_name'].value = tumor
         args['out_prefix'].value = tumor
         mutect2_filter_task_ids.append(filter_task.task_id)
+        # ----end mutect2---------------------------------------------------
+
+        # ----varidict ------------------------
+        if normal_bam_task:
+            vardict_task, args = wf.add_task(VardictPaired(), tag=tumor)
+            args['sample'].value = tumor
+            args['bam'].value = [tumor_bam_task.outputs['output'], normal_bam_task.outputs['output']]
+            args['genome'].value = wf.topvars['ref']
+            args['bed'].value = wf.topvars['bed']
+            args['names'].value = [tumor, normal]
+            args['output'].value = tumor + '.raw.vcf'
+        else:
+            vardict_task, args = wf.add_task(VardictSingle(), tag=tumor, depends=[tumor_bam_task])
+            args['sample'].value = tumor
+            args['bam'].value = tumor_bam_task.outputs['output']
+            args['genome'].value = wf.topvars['ref']
+            args['bed'].value = wf.topvars['bed']
+            args['output'].value = tumor + '.raw.vcf'
+
+        add_contig_task, args = wf.add_task(add_vcf_contig(), tag=tumor, depends=[vardict_task])
+        args['vcf'].value = vardict_task.outputs['output']
+        args['ref_dict'].value = wf.topvars['ref_dict']
+        args['out'].value = tumor + '.raw.vcf'
+
+        vcf_norm_task, args = wf.add_task(bcftools_norm(), tag='vardict-'+tumor, depends=[add_contig_task])
+        args['fasta-ref'].value = wf.topvars['ref']
+        args['multiallelics'].value = '-both'
+        args['vcf'].value = add_contig_task.outputs['out']
+        args['out'].value = tumor + '.normed.raw.vcf'
+
+        vardict_vep_task, args = wf.add_task(vep(tumor), tag=tumor, depends=[vcf_norm_task])
+        args['input_file'].value = vcf_norm_task.outputs['out']
+        args['fasta'].value = wf.topvars['ref']
+        args['refseq'].value = True
+        args['dir_cache'].value = top_vars['vep_cache']
+        args['dir_plugins'].value = top_vars['vep_plugin']
+
+        filter_task, args = wf.add_task(VcfFilter(), tag='vardict-'+tumor)
+        args['vcf'].value = vardict_vep_task.outputs['out_vcf']
+        args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
+        args['genome'].value = wf.topvars['ref']
+        args['bed'].value = wf.topvars['bed']
+        args['out_prefix'].value = tumor
+        args['tumor_name'].value = tumor
+        vardict_filter_task_ids.append(filter_task.task_id)
+        # ----end of varidict-----------------------
 
     # end
     wf.run()
