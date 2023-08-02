@@ -527,7 +527,7 @@ def bcftools_norm():
     cmd.runtime.cpu = 2
     cmd.runtime.tool = "bcftools norm"
     cmd.args['fasta-ref'] = Argument(prefix='-f ', type='infile', desc='reference fasta file')
-    cmd.args['multiallelics'] = Argument(prefix='-m ', level='optional', desc='Split multiallelics (-) or join biallelics (+), type: snps|indels|both|any [both]' )
+    cmd.args['multiallelics'] = Argument(prefix='-m ', default='-both', desc='Split multiallelics (-) or join biallelics (+), type: snps|indels|both|any [both]' )
     cmd.args['out'] = Argument(prefix='-o ', desc='Write output to a file [standard output]')
     cmd.args['output-type'] = Argument(prefix='--output-type ', default='v', desc="'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]")
     cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc="Use multithreading with <int> worker threads")
@@ -632,7 +632,8 @@ def VcfFilter():
     cmd.args['normal_vcf'] = Argument(prefix='-normal_vcf ', type='infile', level='optional', desc='normal sample vcf file')
     cmd.args['error_rate_file'] = Argument(prefix='-error_rate_file ', type='infile', level='optional', desc='Estimated background noise file, if not provided, bam file will be used')
     cmd.args['min_error_rate'] = Argument(prefix='-min_error_rate ', default=1e-6, desc='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
-    cmd.args['alpha'] = Argument(prefix='-alpha ', default=0.01, desc='cutoff of pvalue from background noise model')
+    cmd.args['alpha'] = Argument(prefix='-alpha ', default=0.05, desc='cutoff of pvalue from background noise model. higher value means stricter condition')
+    cmd.args['min_af'] = Argument(prefix='-min_af ', default=0.001, desc='Variant AF hard cutoff')
     cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', desc='output file prefix')
     cmd.outputs['final_vcf'] = Output(value='{out_prefix}.final.vcf', report=True)
     cmd.outputs['final_txt'] = Output(value='{out_prefix}.final.txt', report=True)
@@ -674,6 +675,7 @@ def FilterMutectCalls(sample):
     cmd.runtime.tool = 'gatk FilterMutectCalls'
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
+    cmd.args['bam'] = Argument(prefix='-I ', type='infile', level='optional', desc=' BAM/SAM/CRAM file containing reads')
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.filtered.vcf.gz', desc='output vcf file')
     cmd.args['contamination-table'] = Argument(prefix='--contamination-table ', level='optional', type='infile')
@@ -681,8 +683,19 @@ def FilterMutectCalls(sample):
     cmd.args['ob-priors'] = Argument(prefix='--ob-priors ', type='infile', level='optional')
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', level='optional')
     cmd.args['filtering-stats'] = Argument(prefix='--filtering-stats ', default=f'{sample}.filtering.stats', desc='output filtering stat file')
-    cmd.outputs['out'] = Output(value='{out}')
-    cmd.outputs['filtering-stats'] = Output(value='{filtering-stats}')
+    # hard filer args
+    cmd.args['max-alt-allele-count'] = Argument(prefix='--max-alt-allele-count ', default=2, desc='filter variants with too many alt alleles')
+    cmd.args['max-events-in-region'] = Argument(prefix='--max-events-in-region ', default=2, desc='Variants coming from an assembly region with more than this many events are filtered')
+    cmd.args['unique-alt-read-count'] = Argument(prefix='--unique-alt-read-count ', default=1, desc='Filter a variant if a site contains fewer than this many unique (i.e. deduplicated) reads supporting the alternate allele. unique insert start/end pairs of alt reads')
+    cmd.args['min-slippage-length'] = Argument(prefix='--min-slippage-length ', default=8, desc='Minimum number of reference bases in an STR to suspect PCR slippage')
+    cmd.args['min-median-read-position'] = Argument(prefix='--min-median-read-position ', default=5, desc='filter variants for which the median position of alt alleles within reads is too near the end of reads')
+    cmd.args['min-allele-fraction'] = Argument(prefix='--min-allele-fraction ', default=0.001, desc='Minimum allele fraction required')
+    cmd.args['normal-p-value-threshold'] = Argument(prefix='--normal-p-value-threshold ', default=0.001, desc='P value threshold for normal artifact filter')
+    cmd.args['max-median-fragment-length-difference'] = Argument(prefix='--max-median-fragment-length-difference ', default=10000, desc='Maximum difference between median alt and ref fragment lengths')
+    cmd.args ['long-indel-length'] = Argument(prefix='--long-indel-length ', default=5, desc='Indels of this length or greater are treated specially by the mapping quality filter')
+    cmd.args['pcr-slippage-rate'] = Argument(prefix='--pcr-slippage-rate ', default=0.1, desc='The frequency of polymerase slippage in contexts where it is suspected')
+    cmd.outputs['out'] = Output(value='{out}', report=True)
+    cmd.outputs['filtering-stats'] = Output(value='{filtering-stats}', report=True)
     return cmd
 
 
@@ -741,7 +754,7 @@ def pipeline():
     （2）mutect2 vs vardict:
     预期mutect2效果好于vardict，个人认为最大的理由是因为vardict近几年都停止更新，而mutect2还在积极的维护
     (3) 检查每一个突变支持的read的UMI状态
-    (4) 是否需要find_complex_variant
+    (4) 是否需要find_complex_variant, vardict似乎可以成功报出，mutect2呢？
     * 由于分析结果中，很多的UMI family size==1, 可以考虑进一步使用gencore进行简单意义上的去重，进一步减少假阳性
     * 过滤时，对支持变异的read的family size进行检查，如果family size 小于3，考虑如何用一个更合适的背景测序错误率：
         可以考虑利用fgbio提供的cE信息，使用最后的3base context的策略统计背景噪音过滤
@@ -964,7 +977,7 @@ def pipeline():
 
         vcf_norm_task, args = wf.add_task(bcftools_norm(), tag=sample, depends=[add_contig_task])
         args['fasta-ref'].value = wf.topvars['ref']
-        args['multiallelics'].value = '+both'
+        args['multiallelics'].value = '-both'
         args['vcf'].value = add_contig_task.outputs['out']
         args['out'].value = sample + '.normed.raw.vcf'
 
@@ -1023,7 +1036,7 @@ def pipeline():
         # normalize vcf
         norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor, depends=[merge_vcf_task])
         args['fasta-ref'].value = wf.topvars['ref']
-        args['multiallelics'].value = '+both'
+        args['multiallelics'].value = '-both'
         args['vcf'].value = merge_vcf_task.outputs['out']
         args['out'].value = tumor + '.mutect2.normed.raw.vcf'
 
