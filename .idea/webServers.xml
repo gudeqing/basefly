@@ -2,8 +2,8 @@
 <project version="4">
   <component name="WebServers">
     <option name="servers">
-      <webServer id="42c2eb03-8832-49f7-88ae-8fd019ddcbe5" name="basefly">
-        <fileTransfer rootFolder="/home/deqgu" accessType="SFTP" host="36.137.111.175" port="6222" sshConfigId="39c6e06c-2ecb-45f7-bda5-5f901d112fb3" sshConfig="Genars-A-cloud-prod-me">
+      <webServer id="f07289ad-b2f2-4889-a1f3-3c11aa4ae8c4" name="hxbio04">
+        <fileTransfer rootFolder="/home/hxbio04" accessType="SFTP" host="192.168.3.248" port="22" sshConfigId="8e416166-3912-43b6-a46f-7262266572d2" sshConfig="hxbio04@192.168.3.248:22 password">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
           </advancedOptions>
