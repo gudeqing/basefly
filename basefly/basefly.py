@@ -449,7 +449,9 @@ class Workflow:
     def add_task(self, cmd: Command, depends: list = [], parent_wkdir: str ='', name: str = None, tag: str = None):
         self.task_order += 1
         task = Task(cmd=cmd, depends=depends.copy(), name=name, tag=tag, parent_wkdir=parent_wkdir)
-        task.name = task.name + '-T' + str(self.task_order)
+        existed_names = {x.name for x in self.tasks.values()}
+        if task.name in existed_names:
+            raise Exception(f'{task.name} duplicated, please rename it')
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
