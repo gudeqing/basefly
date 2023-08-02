@@ -952,13 +952,6 @@ def pipeline():
             merge_vcf_task, args = wf.add_task(MergeVcfs(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
             args['inputs'].value = [x.outputs['out'] for x in mutect_tasks]
 
-            # normalize vcf
-            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample, depends=[merge_vcf_task])
-            args['vcf'].value = merge_vcf_task.outputs['out']
-            args['fasta-ref'].value = wf.topvars['ref']
-            args['out'].value = tumor_sample + '.somatic.raw.vcf'
-            norm_vcf_task.outputs['out'].report = True
-
             # merge stats
             merge_stat_task, args = wf.add_task(MergeMutectStats(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
             args['stats'].value = [x.outputs['stats'] for x in mutect_tasks]
@@ -980,11 +973,11 @@ def pipeline():
                 args['normal_pileups'].value = merge_normal_pileup_task.outputs['out']
 
             # filtering variant
-            depend_tasks = [norm_vcf_task, merge_stat_task, lrom_task]
+            depend_tasks = [merge_vcf_task, merge_stat_task, lrom_task]
             if wf.topvars['contamination_vcf'].value is not None:
                 depend_tasks.append(contaminate_task)
             filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample, depends=depend_tasks)
-            args['vcf'].value = norm_vcf_task.outputs['out']
+            args['vcf'].value = merge_vcf_task.outputs['out']
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             if wf.topvars['contamination_vcf'].value is not None:
                 args['contamination-table'].value = contaminate_task.outputs['out']
@@ -1003,11 +996,18 @@ def pipeline():
                 args['bwa-mem-index-image'].value = wf.topvars['bwaMemIndexImage']
                 filter_align_task.outputs['out'].report = True
 
+            # normalize vcf需要调整到过滤之后进行，在vep注释之前完成即可
+            depend_task = filter_align_task or filter_task
+            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample, depends=[depend_task])
+            args['vcf'].value = depend_task.outputs['out']
+            args['fasta-ref'].value = wf.topvars['ref']
+            args['out'].value = tumor_sample + '.somatic.raw.vcf'
+            norm_vcf_task.outputs['out'].report = True
+
             # VEP annotation
             if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-                depend_task = filter_align_task or filter_task
-                vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample, depends=[depend_task])
-                args['input_file'].value = depend_task.outputs['out']
+                vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample, depends=[norm_vcf_task])
+                args['input_file'].value = norm_vcf_task.outputs['out']
                 args['fasta'].value = wf.topvars['ref']
                 args['dir_cache'].value = top_vars['vep_cache_dir']
                 args['dir_plugins'].value = top_vars['vep_plugin_dir']
