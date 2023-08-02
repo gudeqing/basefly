@@ -454,13 +454,15 @@ class VcfFilter(object):
             "MAX_AF": csq_dict['MAX_AF'],
             "MAX_AF_POPS": csq_dict['MAX_AF_POPS'],
             "gnomADe_EAS_AF": csq_dict['gnomADe_EAS_AF'],
-            "LSEQ": r.info['LSEQ'],  # from vardict output
-            "REF": ref,
-            "RSEQ": r.info['RSEQ'],  # from vardict output
             "CANONICAL": csq_dict['CANONICAL'],
             "HGVS_OFFSET": 0,
             'CtrlSample': self.normal,
         }
+        if 'LSEQ' in r.info:
+            target_info['LSEQ'] = r.info['LSEQ']  # from vardict output
+            target_info['REF'] = ref
+            target_info['RSEQ'] = r.info['RSEQ']
+
         if 'LOD' in r.info:
             target_info['LOD(eError,UpperConf,Pvalue)'] = r.info['LOD']
         # 根据注释结果判断是否报告，增加报告字段
@@ -745,7 +747,7 @@ if __name__ == '__main__':
     parser.add_argument('-normal_vcf', type=Path, required=False, help='normal sample vcf file')
     parser.add_argument('-error_rate_file', type=Path, required=False, help='Estimated background noise file, if not provided, bam file will be used to generate one')
     parser.add_argument('-min_error_rate', type=float, default=1e-6, help='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
-    parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model')
+    parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model. The pvalue represents the probability of variants come from background noise, thus higher cutoff means stricter condition')
     parser.add_argument('-min_af', type=float, default=0.001, help='hard cutoff of AF')
     parser.add_argument('-out_prefix', help='output file prefix')
     args = parser.parse_args()
