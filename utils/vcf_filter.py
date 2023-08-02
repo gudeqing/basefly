@@ -235,7 +235,7 @@ class VcfFilter(object):
         print(f'we guess error rate for {record.start}:{record.ref}>{record.alts[0]}:', error_rate)
         return error_rate
 
-    def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, read_len=150):
+    def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, factor=1.1):
         # 置信水平99%对应Z值为2.58
         # 置信水平95%对应Z值为1.96
         dp = self.get_depth(record, sample)
@@ -246,8 +246,8 @@ class VcfFilter(object):
         # 根据二型分布估计突变完全来自背景噪音或测序错误的概率值
         pvalue = self.get_alt_binomial_pvalue(alt_depth=round(dp*af), depth=dp, error_rate=error_rate)
         # print(dp, r.qual, error_rate, lower, upper)
-        # 理论上，下面两个不等式的判定应该是等效的
-        if af >= upper or pvalue < alpha:
+        # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
+        if af >= upper*factor and pvalue < alpha:
             return True, lower, upper, pvalue
         else:
             return False, lower, upper, pvalue
