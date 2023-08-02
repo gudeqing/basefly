@@ -5,8 +5,8 @@
 针对一个突变位点A-T，其AF=0.008，是否可以将当前位点判定为假阳性呢?
 假设还知道当前位点深度为1000，根据这1000 Reads，在95%的置信水平下，估计出来的测序错误概率与真实的错误概率偏差可以使用如下公式推算：
 （下面的公式是根据正态分布来的，即用正太分布近似二型分布，理论依据是当N和p都比较大时，二型分布趋近正太分布。）
-N = p*(1-P)*(Z/E)**2
-=> E = Z/(N/P/(1-P))**0.05
+N = P*(1-P)*(Z/E)**2
+=> E = Z/(N/P/(1-P))**0.5
 即：E = 1.96/(N/(P*(1-P)))**0.5
 99的置信水平：E = 2.58/(N/(P*(1-P)))**0.5
 代入 N=1000, P=0.001得 E=0.00196，也就是，如果A>T是测序错误导致的，那么这个错误频率的置信区间为
@@ -55,6 +55,11 @@ N = ( ( Z/(1/P/(1-P))**0.5 + Z/(1/L/(1-L))**0.5 ) / (L-P) )**2 = 815.21
 P=0.001; L=0.01; Z=2.58
 N = ( ( Z/(1/P/(1-P))**0.5 + Z/(1/L/(1-L))**0.5 ) / (L-P) )**2 = 1412.53
 即选择99%置信区间时，要保证LOD=0.01,测序深度需要大于1413
+
+新思考，下面的过滤是否合理？
+1. 提供error_rate, depth, confidence，计算得到error_rate的估计上限
+2. 根据error_rate, AF, confidence, 计算得到最低测序深度min_alt_depth
+3. 根据error_rate_upper 和 min_alt_depth同时进行突变过滤
 
 """
 import os
@@ -144,12 +149,28 @@ class VcfFilter(object):
             lower = 1e-6
         return lower, upper
 
-    def poll_error_norm_conf(self, error_rate, depth, z=1.96):
+    def poll_error_norm_conf(self, error_rate, depth, confidence=0.95):
         # 可以根据样本量估算公式反推已知测序错误率和测序深度的条件下，计算测序错误率的上限，作为检测下限
+        z = stats.norm.interval(confidence)[1]
         e = z/(depth/(error_rate*(1-error_rate)))**0.5
         lower = 0 if (error_rate - e <= 0) else (error_rate - e)
         upper = error_rate + e
         return lower, upper
+
+    def estimate_min_required_depth(self, error_rate, af, confidence):
+        """
+        设LOD为检测下限，假设某个突变的真实频率为L，为减少假阳性，在某次实验中，我们应该要求“AF最低估计值”大于“测序错误最大估计值”，即：
+        即要求：E由样本量估算公式反推 N = P*(1-P)*(Z/E)**2  用正太分布近似二型分布
+            => L - E‘ > P + E
+            =>  L - Z/(N/L/(1-L))**0.5 > P + Z/(N/P/(1-P))**0.5
+            => (L-P) > Z/(N/P/(1-P))**0.5 + Z/(N/L/(1-L))**0.5
+            => N > ( ( Z/(1/P/(1-P))**0.5 + Z/(1/L/(1-L))**0.5 ) / (L-P) )**2
+        """
+        P = error_rate
+        L = af
+        Z = stats.norm.interval(confidence)[1]
+        N = ((Z / (1 / P / (1 - P)) ** 0.5 + Z / (1 / L / (1 - L)) ** 0.5) / (L - P)) ** 2
+        return N
 
     def get_alt_binomial_pvalue(self, alt_depth, depth, error_rate):
         # 假设测序错误服从二型分布，可以计算alt_depth全部来自错误的概率
@@ -236,21 +257,21 @@ class VcfFilter(object):
         return error_rate
 
     def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, factor=1.1):
-        # 置信水平99%对应Z值为2.58
-        # 置信水平95%对应Z值为1.96
         dp = self.get_depth(record, sample)
         af = self.get_af_value(record, sample)
         # 估计error_rate的置信区间
         confidence = 1 - alpha
-        lower, upper = self.poll_error_binomial_conf(error_rate=error_rate, depth=dp, confidence=confidence)
+        error_lower, error_upper = self.poll_error_binomial_conf(error_rate=error_rate, depth=dp, confidence=confidence)
+        af_lower, af_upper = self.poll_error_binomial_conf(error_rate=af, depth=dp, confidence=confidence)
         # 根据二型分布估计突变完全来自背景噪音或测序错误的概率值
         pvalue = self.get_alt_binomial_pvalue(alt_depth=round(dp*af), depth=dp, error_rate=error_rate)
+        # min_depth = self.estimate_min_required_depth(error_rate, af, confidence)
         # print(dp, r.qual, error_rate, lower, upper)
         # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
-        if af >= upper*factor and pvalue < alpha:
-            return True, lower, upper, pvalue
+        if (af >= error_upper*factor) and (pvalue < alpha) and (af_lower >= error_upper):
+            return True, af_lower, error_upper, pvalue
         else:
-            return False, lower, upper, pvalue
+            return False, af_lower, error_upper, pvalue
 
     def pass_depth_bias(self, record, cutoff=0.05, info_field='', normal=None, tumor=None):
         """
