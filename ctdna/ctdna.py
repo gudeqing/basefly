@@ -1166,7 +1166,7 @@ def pipeline():
         args['vcf'].value = add_contig_task.outputs['out']
         args['out'].value = tumor + '.normed.raw.vcf'
 
-        vardict_vep_task, args = wf.add_task(vep(tumor), tag=tumor, depends=[vcf_norm_task])
+        vardict_vep_task, args = wf.add_task(vep(tumor), tag='vardict-'+tumor, depends=[vcf_norm_task])
         args['input_file'].value = vcf_norm_task.outputs['out']
         args['fasta'].value = wf.topvars['ref']
         args['refseq'].value = True
