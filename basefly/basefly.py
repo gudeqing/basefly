@@ -325,6 +325,7 @@ class Task:
     parent_wkdir: str = ""
     task_id: str = field(default_factory=uuid4)
     depends: List[str] = field(default_factory=list)
+    wkdir: str = ''
 
     def __post_init__(self):
         # task name
@@ -583,11 +584,30 @@ class Workflow:
         if parameters.update_args:
             self.update_args(parameters.update_args)
 
+        if parameters.assume_success_steps:
+            all_task_names = set(x.name for x in self.tasks.values())
+            all_cmd_names = set(x.cmd.meta.name for x in self.tasks.values())
+            assume_success_tasks = set()
+            for each in parameters.assume_success_steps:
+                matched = []
+                if each in all_task_names:
+                    matched.append(assume_success_tasks)
+                elif each.endswith('*'):
+                    matched += [x for x in all_task_names if x.startswith(each[:-1])]
+                elif each in all_cmd_names:
+                    matched += [x for x in self.tasks.values() if x.cmd.meta.name == each]
+                if not matched:
+                    raise Exception(f'{each} matches no task, you may check the task name by "--list_task"')
+                assume_success_tasks.update(matched)
+        else:
+            assume_success_tasks = set()
+
         for task_id, task in self.tasks.items():
             cmd_wkdir = os.path.join("${mode:outdir}", task.parent_wkdir, task.name)
+            task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
             mount_vols = {cmd_wkdir}
 
-            if (task.name in parameters.assume_success_steps) or task.cmd.meta.name in parameters.assume_success_steps:
+            if task.name in assume_success_tasks:
                 task.depends = None
                 wf[task.name] = dict(
                     depend='',
@@ -669,7 +689,7 @@ class Workflow:
                 wf = run_wf(
                     outfile,
                     timeout=parameters.wait_resource_time,
-                    assume_success_steps=parameters.assume_success_steps,
+                    assume_success_steps=tuple(assume_success_tasks),
                     plot=parameters.plot,
                     rerun_steps=rerun_steps
                 )
@@ -681,11 +701,11 @@ class Workflow:
                     src_dir = out.value.replace('${{mode:outdir}}', outdir)
                 else:
                     if out.task_id in self.tasks:
-                        src_dir = os.path.join(outdir, self.tasks[out.task_id].name, out.value)
+                        src_dir = os.path.join(self.tasks[out.task_id].wkdir, out.value)
                     else:
                         continue
                 if os.path.exists(src_dir):
-                    print('Found expected output: ', src_dir)
+                    # print('Found expected output: ', src_dir)
                     final_out_dir = os.path.join(outdir, 'Outputs', self.tasks[out.task_id].name)
                     os.makedirs(final_out_dir, exist_ok=True)
                     dst_path = os.path.join(final_out_dir, os.path.basename(src_dir))
@@ -841,7 +861,7 @@ class Workflow:
         wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
         wf_args.add_argument('--no_skip_depend', default=False, action='store_true', help="当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤")
         wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可能是: 重新设置了命令参数. 使用--list_task可查看候选,可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task")
-        wf_args.add_argument('-assume_success_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果(需要把之前的运行结果放到当前结果目录). 使用--list_task可查看候选，也可以使用task的前缀指定属于同一个步骤的task")
+        wf_args.add_argument('-assume_success_steps', metavar=('task_name', 'task_cmd_name'), default=list(), nargs='+', help="假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果(需要把之前的运行结果放到当前结果目录). 使用--list_task可查看候选, 可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task,也可以使用cmd.meata.name")
         wf_args.add_argument('-retry', metavar='max-retry', default=1, type=int, help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
         wf_args.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 不会显示指定跳过的步骤")
         wf_args.add_argument('-show_cmd', metavar='cmd-query', help="提供一个cmd名称,输出该cmd的样例")

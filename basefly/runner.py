@@ -635,16 +635,7 @@ class RunCommands(CommandNetwork):
     def parallel_run(self, assume_success_steps=tuple()):
         atexit.register(self._update_status_when_exit)
         if assume_success_steps:
-            detail_steps = []
             for each in assume_success_steps:
-                if each in self.names():
-                    detail_steps.append(each)
-                else:
-                    if each.endswith("*"):
-                        detail_steps += [x for x in self.names() if x.startswith(each[:-1])]
-                    else:
-                        print(f'{each} is not a valid task name and we will skip this one !')
-            for each in detail_steps:
                 self.ever_queued.add(each)
                 self.state[each]['state'] = 'success'
                 self.state[each]['used_time'] = 'unknown'
@@ -684,20 +675,32 @@ class RunCommands(CommandNetwork):
             raise Exception('We found no cmd_state.txt file in {}!'.format(self.outdir))
         with open(existed_state_file, 'r') as f:
             _ = f.readline()
+            header = ['name', 'state', 'used_time', 'mem', 'cpu', 'pid', 'depend', 'cmd']
             for line in f:
                 line_lst = line.strip().split('\t')
-                fields = ['state', 'used_time', 'mem', 'cpu', 'pid', 'depend', 'cmd']
-                if line_lst[1] == 'success' or (line_lst[0] in assume_success_steps):
-                    line_lst[1] = 'success'
-                    if line_lst[0] in rerun_steps:
-                        line_lst[1] = 'failed'
-                        continue
-                    self.ever_queued.add(line_lst[0])
-                    # 已有的depend和cmd信息不被带入到continue运行模式, 给续跑功能带来更多可能
-                    if line_lst[0] in self.state:
-                        self.state[line_lst[0]].update(dict(zip(fields[:-2], line_lst[1:])))
-                    else:
-                        self.logger.warning(line_lst[0] + ' was skipped for it is no longer in the modified pipeline.ini')
+                task_info = dict(zip(line_lst, header))
+                task_name = task_info['name']
+
+                if task_name not in self.state:
+                    self.logger.warning(line_lst[0] + ' was skipped for it is no longer in the modified pipeline.ini')
+                    continue
+
+                if task_name in rerun_steps:
+                    # 这里不会用旧信息更新任务信息，因此重跑的任务使用的是最新的命令
+                    task_info['state'] = 'failed'
+                    self.state[task_name]['state'] = 'failed'
+
+                if task_name in assume_success_steps:
+                    task_info['state'] = 'success'
+
+                if task_info['state'] == 'success':
+                    self.ever_queued.add(task_name)
+                    if task_info['cmd'] != self.state[task_name]['cmd']:
+                        # 命令行的更改可能只是字符串层面的更改，而没有实质的任务性质更改
+                        print(f'we noticed that command of {task_name} changed, but we will not rerun it !')
+                    # 对于被已经判定成功的task，使用旧的信息进行更新
+                    self.state[task_name].update(task_info.pop("name"))
+
         failed = set(self.names()) - self.ever_queued
         if failed:
             self.is_continue = True
@@ -723,11 +726,31 @@ def run_wf(wf, plot=False, timeout=300, rerun_steps:tuple=None, assume_success_s
     :return:
     """
     workflow = RunCommands(wf, timeout=timeout, draw_state_graph=plot)
+    assume_success_tasks = []
+    for each in assume_success_steps:
+        if each in workflow.state.keys():
+            assume_success_tasks.append(each)
+        else:
+            if each.endswith("*"):
+                assume_success_tasks += [x for x in workflow.state.keys() if x.startswith(each[:-1])]
+            else:
+                print(f'{each} is not a valid task name and we will skip this one !')
+
+    rerun_tasks = []
+    for each in rerun_steps:
+        if each in workflow.state.keys():
+            rerun_tasks.append(each)
+        else:
+            if each.endswith("*"):
+                rerun_tasks += [x for x in workflow.state.keys() if x.startswith(each[:-1])]
+            else:
+                print(f'{each} is not a valid task name and we will skip this one !')
+
     state = os.path.join(workflow.outdir, 'cmd_state.txt')
     if os.path.exists(state):
-        workflow.continue_run(rerun_steps=rerun_steps, assume_success_steps=assume_success_steps)
+        workflow.continue_run(rerun_steps=tuple(rerun_tasks), assume_success_steps=tuple(assume_success_tasks))
     else:
-        workflow.parallel_run(assume_success_steps=assume_success_steps)
+        workflow.parallel_run(assume_success_steps=tuple(assume_success_tasks))
     return workflow
 
 
