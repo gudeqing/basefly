@@ -760,6 +760,34 @@ def MergeMutectStats(sample):
     return cmd
 
 
+def VarNet():
+    cmd = Command()
+    # https://github.com/broadinstitute/gatk-docs/blob/master/gatk3-tutorials/(howto)_Perform_local_realignment_around_indels.md
+    cmd.meta.desc = ''
+    cmd.meta.name = 'VarNet'
+    cmd.meta.source = 'https://github.com/skandlab/VarNet'
+    cmd.runtime.image = 'kiranchari/varnet:latest'
+    cmd.runtime.tool = 'python /varnet/filter.py'
+    cmd.runtime.cpu = 4
+    cmd.args['sample_name'] = Argument(prefix='--sample_name ', desc='sample name')
+    cmd.args['normal_bam'] = Argument(prefix='--normal_bam ', type='infile', desc='normal sample bam')
+    cmd.args['tumor_bam'] = Argument(prefix='--tumor_bam ', type='infile', desc='tumor sample bam')
+    cmd.args['reference'] = Argument(prefix='--reference ', type='infile', desc='reference fasta file')
+    cmd.args['region_bed'] = Argument(prefix='--region_bed ', type='infile', desc='region bed file')
+    cmd.args['processes'] = Argument(prefix='--processes ', default=cmd.runtime.cpu, desc='cpu number')
+    cmd.args['output_dir'] = Argument(prefix='--output_dir ', default='.',  desc='output dir')
+    cmd.args['_fix'] = Argument(prefix='', type='fix', value=' && python /varnet/predict.py')
+    cmd.args['sample_name_'] = Argument(prefix='--sample_name ', desc='sample name')
+    cmd.args['normal_bam_'] = Argument(prefix='--normal_bam ', type='infile', desc='normal sample bam')
+    cmd.args['tumor_bam_'] = Argument(prefix='--tumor_bam ', type='infile', desc='tumor sample bam')
+    cmd.args['reference_'] = Argument(prefix='--reference ', type='infile', desc='reference fasta file')
+    cmd.args['processes_'] = Argument(prefix='--processes ', default=cmd.runtime.cpu, desc='cpu number')
+    cmd.args['output_dir_'] = Argument(prefix='--output_dir ', default='.',  desc='output dir')
+    cmd.args['include_allele_frequency'] = Argument(prefix='--include_allele_frequency ', default='true')
+    cmd.outputs['vcf'] = Output(value='{output_dir}/*.vcf')
+    return cmd
+
+
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'ctDNA'
@@ -1040,7 +1068,7 @@ def pipeline():
         # ----mutect2---------------------------------------------------
         mutect_tasks = []
         for ind, interval_file in enumerate(interval_files):
-            mutect_task, args = wf.add_task(Mutect2(f'{tumor}-{ind}'), tag=f'{tumor}-{ind}', parent_wkdir='Mutect2')
+            mutect_task, args = wf.add_task(Mutect2(f'{tumor}-{ind}'), tag=f'{tumor}-{ind}', parent_wkdir='Mutect2'+tumor)
             mutect_tasks.append(mutect_task)
             args['ref'].value = wf.topvars['ref']
             args['tumor_bam'].value = tumor_bam_task.outputs['output']
@@ -1155,6 +1183,18 @@ def pipeline():
         vardict_filter_task_ids.append(filter_task.task_id)
         # ----end of varidict-----------------------
 
+        # ---VarNet----
+        varnet_task, args = wf.add_task(VarNet(), tag=tumor)
+        args['sample_name'].value = tumor
+        args['normal_bam'].value = normal_bam_task.outputs['output']
+        args['tumor_bam'].value = tumor_bam_task.outputs['output']
+        args['reference'].value = wf.topvars['ref']
+        args['region_bed'].value = wf.topvars['bed']
+        args['sample_name_'].value = tumor
+        args['normal_bam_'].value = normal_bam_task.outputs['output']
+        args['tumor_bam_'].value = tumor_bam_task.outputs['output']
+        args['reference_'].value = wf.topvars['ref']
+        # ----end of VarNet----
     # end
     wf.run()
     # tidy
