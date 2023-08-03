@@ -747,7 +747,9 @@ def run_wf(wf, plot=False, timeout=300, rerun_steps:tuple=None, assume_success_s
                 print(f'{each} is not a valid task name and we will skip this one !')
 
     state = os.path.join(workflow.outdir, 'cmd_state.txt')
+    state_bak = os.path.join(workflow.outdir, 'cmd_state_history.txt')
     if os.path.exists(state):
+        shutil.copyfile(state, state_bak)
         workflow.continue_run(rerun_steps=tuple(rerun_tasks), assume_success_steps=tuple(assume_success_tasks))
     else:
         workflow.parallel_run(assume_success_steps=tuple(assume_success_tasks))
