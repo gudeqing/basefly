@@ -624,6 +624,8 @@ class Workflow:
                 continue
 
             for k, v in task.cmd.args.items():
+                if type(v) != Argument:
+                    raise Exception(f'Wrong assignment of value to {k} with {v}')
                 if v.level == 'required' and v.value is None:
                     v.value = v.default
                 if type(v.value) in [list, tuple]:
