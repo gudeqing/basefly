@@ -255,7 +255,8 @@ class Command:
                         else:
                             cmd += ' ' + arg.prefix.format(arg_value)
                     else:
-                        cmd += ' ' + arg.prefix + (' ' + arg.prefix).join(arg_value)
+                        if arg_value:
+                            cmd += ' ' + arg.prefix + (' ' + arg.prefix).join(arg_value)
         return cmd
 
     def format_wdl_task(self, outfile=None, wdl_version='development'):
