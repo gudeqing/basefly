@@ -191,6 +191,7 @@ class VcfFilter(object):
             # vardict style
             af = max([record.info['HIAF'], record.info['AF'][0]])
         elif 'AF' in record.samples[sample]:
+            # mutect2中的输出结果符合
             af = record.samples[sample]['AF'][0]
         elif 'FREQ' in record.samples[sample]:
             # for varscan2 style
@@ -350,14 +351,19 @@ class VcfFilter(object):
                     pvalue = record.info[field]
                     break
         # find info in "format"
-        possible_fmt_fields = [fmt_field] + ['SB', 'DP4']
+        possible_fmt_fields = [fmt_field] + ['SB', 'SBF','DP4']
         if (pvalue is None) and (sample is not None):
             ref_fwd, ref_bwd, alt_fwd, alt_bwd = 0, 0, 0, 0
             for field in possible_fmt_fields:
                 if field in record.samples[sample]:
-                    if type(record.samples[sample][field]) == tuple:
-                        ref_fwd, ref_bwd, alt_fwd, alt_bwd = record.samples[sample][field]
+                    if field == 'SBF':
+                        # vardict的配对模式输出该值
+                        pvalue = record.samples[sample][field]
                         break
+                    else:
+                        if type(record.samples[sample][field]) == tuple:
+                            ref_fwd, ref_bwd, alt_fwd, alt_bwd = record.samples[sample][field]
+                            break
             if sum([ref_fwd, ref_bwd, alt_fwd, alt_bwd]) > 0:
                 odds_ratio, pvalue = stats.fisher_exact([[ref_fwd, ref_bwd], [alt_fwd, alt_bwd]])
 
