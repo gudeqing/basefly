@@ -678,7 +678,7 @@ class RunCommands(CommandNetwork):
             header = ['name', 'state', 'used_time', 'mem', 'cpu', 'pid', 'depend', 'cmd']
             for line in f:
                 line_lst = line.strip().split('\t')
-                task_info = dict(zip(line_lst, header))
+                task_info = dict(zip(header, line_lst))
                 task_name = task_info['name']
 
                 if task_name not in self.state:
@@ -687,8 +687,8 @@ class RunCommands(CommandNetwork):
 
                 if task_name in rerun_steps:
                     # 这里不会用旧信息更新任务信息，因此重跑的任务使用的是最新的命令
-                    task_info['state'] = 'failed'
-                    self.state[task_name]['state'] = 'failed'
+                    task_info['state'] = 'unknown'
+                    self.state[task_name]['state'] = 'unknown'
 
                 if task_name in assume_success_steps:
                     task_info['state'] = 'success'
@@ -699,7 +699,8 @@ class RunCommands(CommandNetwork):
                         # 命令行的更改可能只是字符串层面的更改，而没有实质的任务性质更改
                         print(f'we noticed that command of {task_name} changed, but we will not rerun it !')
                     # 对于被已经判定成功的task，使用旧的信息进行更新
-                    self.state[task_name].update(task_info.pop("name"))
+                    task_info.pop("name")
+                    self.state[task_name].update(task_info)
 
         failed = set(self.names()) - self.ever_queued
         if failed:
