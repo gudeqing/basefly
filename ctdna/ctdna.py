@@ -1,4 +1,5 @@
 import os
+import math
 import pandas as pd
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
@@ -540,7 +541,11 @@ def Mutect2(prefix):
     cmd.args['normal-lod'] = Argument(prefix='--normal-lod ', default=2.2, desc='Log 10 odds threshold for calling normal variant non-germline. ')
     cmd.args['tumor-lod-to-emit'] = Argument(prefix='--tumor-lod-to-emit ', default=3.0, desc='Log 10 odds threshold to emit variant to VCF')
     cmd.args['active-probability-threshold'] = Argument(prefix='--active-probability-threshold ', default=0.001, desc='Minimum probability for a locus to be considered active')
-    cmd.args['disable-adaptive-pruning'] = Argument(prefix='--disable-adaptive-pruning ', default='true', desc='Disable the adaptive algorithm for pruning paths in the graph')
+    cmd.args['disable-adaptive-pruning'] = Argument(prefix='--disable-adaptive-pruning ', default='false', desc='Disable the adaptive algorithm for pruning paths in the graph')
+    cmd.args['base-quality-score-threshold'] = Argument(prefix='--base-quality-score-threshold ', default=15, desc='Base qualities below this threshold will be reduced to the minimum (6)')
+    cmd.args['pruning-lod-threshold'] = Argument(prefix='--pruning-lod-threshold ', default=1.3, desc='Ln likelihood ratio threshold for adaptive pruning algorithm')
+    cmd.args['disable-read-filter'] = Argument(prefix='--disable-read-filter ', default=['GoodCigarReadFilter', 'MappingQualityReadFilter', 'NonChimericOriginalAlignmentReadFilter'], array=True, multi_times=True, desc='Read filters to be disabled before analysis')
+    cmd.args['disable-tool-default-read-filters'] = Argument(prefix='--disable-tool-default-read-filters ', default='false', desc='Disable all tool default read filters (WARNING: many tools will not function correctlywithout their default read filters on)')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.vcf.gz', desc='output vcf')
     cmd.args['bam-output'] = Argument(prefix='--bam-output ', level='optional', desc='output bam file')
     cmd.args['f1r2-tar-gz'] = Argument(prefix='--f1r2-tar-gz ', type='infile', default=f'{prefix}.f1r2.tar.gz', desc='If specified, collect F1R2 counts and output files into this tar.gz file')
@@ -665,7 +670,7 @@ def VcfFilter():
     cmd.args['tumor_name'] = Argument(prefix='-tumor_name ', level='optional', desc='tumor sample name in vcf. default to the last column sample')
     cmd.args['normal_vcf'] = Argument(prefix='-normal_vcf ', type='infile', level='optional', desc='normal sample vcf file')
     cmd.args['error_rate_file'] = Argument(prefix='-error_rate_file ', type='infile', level='optional', desc='Estimated background noise file, if not provided, bam file will be used')
-    cmd.args['min_error_rate'] = Argument(prefix='-min_error_rate ', default=1e-6, desc='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
+    cmd.args['min_error_rate'] = Argument(prefix='-min_error_rate ', level='optional', desc='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
     cmd.args['alpha'] = Argument(prefix='-alpha ', default=0.05, desc='cutoff of pvalue from background noise model. higher value means stricter condition')
     cmd.args['min_af'] = Argument(prefix='-min_af ', default=0.001, desc='Variant AF hard cutoff')
     cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', desc='output file prefix')
@@ -718,8 +723,8 @@ def FilterMutectCalls(sample):
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', level='optional')
     cmd.args['filtering-stats'] = Argument(prefix='--filtering-stats ', default=f'{sample}.filtering.stats', desc='output filtering stat file')
     # hard filer args
-    cmd.args['max-alt-allele-count'] = Argument(prefix='--max-alt-allele-count ', default=2, desc='filter variants with too many alt alleles')
-    cmd.args['max-events-in-region'] = Argument(prefix='--max-events-in-region ', default=2, desc='Variants coming from an assembly region with more than this many events are filtered')
+    cmd.args['max-alt-allele-count'] = Argument(prefix='--max-alt-allele-count ', default=3, desc='filter variants with too many alt alleles')
+    cmd.args['max-events-in-region'] = Argument(prefix='--max-events-in-region ', default=3, desc='Variants coming from an assembly region with more than this many events are filtered')
     cmd.args['unique-alt-read-count'] = Argument(prefix='--unique-alt-read-count ', default=1, desc='Filter a variant if a site contains fewer than this many unique (i.e. deduplicated) reads supporting the alternate allele. unique insert start/end pairs of alt reads')
     cmd.args['min-slippage-length'] = Argument(prefix='--min-slippage-length ', default=8, desc='Minimum number of reference bases in an STR to suspect PCR slippage')
     cmd.args['min-median-read-position'] = Argument(prefix='--min-median-read-position ', default=5, desc='filter variants for which the median position of alt alleles within reads is too near the end of reads')
@@ -827,6 +832,9 @@ def pipeline():
     --germline-resource /home/hxbio04/dbs/hg19/af-only-gnomad.raw.sites.b37.vcf.gz -L /home/hxbio04/projects/ctDNA-test/Result/SplitIntervals-ForCaller-T2/./0000-scattered.interval_list 
     --initial-tumor-lod 3.0 --normal-lod 2.2 --tumor-lod-to-emit 3.0 -O ctDNA-0422-A-0.vcf.gz --bam-output ctDNA-0422-A-0.haplotypes.bam --f1r2-tar-gz ctDNA-0422-A-0.f1r2.tar.gz --tmp-dir .  
     以上参数，目前的得到的结果是1%以下的突变都没有检测出来
+    根据参考文献考虑调整参数 disable-read-filter MateOnSameContigOrNoMappedMateReadFilter （https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9705725/）
+    max_alt_alleles_in_normal_count max_alt_allele_in_normal_fraction	https://best-practices-for-processing-hts-data.readthedocs.io/en/latest/mutect2_pitfalls.html
+    vardict 过滤: https://github.com/LeiHaoa/DeepFilter： 
     """
     wf.meta.version = "1.0"
 
@@ -958,7 +966,7 @@ def pipeline():
             args['read-structure'].value = wf.args.umi.split(',')
             args['output'].value = f'{uniq_tag}.umi.ubam'
 
-            # 去除接头MarkIlluminaAdapters
+            # MarkIlluminaAdapters
             markadapter_task, args = wf.add_task(MarkIlluminaAdapters(), tag=uniq_tag, depends=[get_umi_task])
             args['input'].value = get_umi_task.outputs['output']
             args['metrics'].value = uniq_tag + '.markadapters.metircs.txt'
