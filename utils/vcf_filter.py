@@ -78,27 +78,31 @@ https://www.ebi.ac.uk/training-beta/online/courses/human-genetic-variation-intro
 
 
 class VcfFilter(object):
-    def __init__(self, vcf_path, tumor=None, normal_vcf=None, gene_primer_used=False):
+    def __init__(self, vcf_path, tumor=None, normal=None, normal_vcf=None, gene_primer_used=False):
         self.vcf = pysam.VariantFile(vcf_path)
         self.vcf_path = vcf_path
         self.tumor = tumor
-        self.normal = None
+        self.normal = normal
         self.gene_primer_used = gene_primer_used
         samples = list(self.vcf.header.samples)
         self.use_depth_bias = False
         if len(samples) == 1:
             self.tumor = samples[0]
             self.use_depth_bias = False
-        else:
-            if tumor is None:
+        elif len(samples) == 2:
+            if self.tumor is None:
                 self.tumor = samples[1]
                 self.normal = samples[0]
                 print(f'assume tumor and normal samples are {self.tumor} and {self.normal}')
             else:
-                self.tumor = tumor
                 self.normal = list(set(samples) - {tumor})[0]
+        else:
+            if tumor is None:
+                print('More than 2 samples found in the vcf, we consider the last sample as target sample')
+                self.tumor = samples[-1]
 
         if normal_vcf:
+            # 如果单独提供normal vcf时做如下处理
             normal_af_dict = dict()
             ctrl_vcf = pysam.VariantFile(normal_vcf)
             self.normal = list(ctrl_vcf.header.samples)[0]
@@ -206,19 +210,31 @@ class VcfFilter(object):
                 af = self.normal_af[mut_id]
         else:
             # 对照信息来源于paired模式出来的vcf，即和肿瘤样本的信息在同一个vcf
+            # 在vardict的vcf中，DP是一个数，为总的测序深度，AD是一个数组，第一个是ref的depth，剩下的是alt的depth
+            # 在mutect2的vcf中，DP是一个数，而且是一个经过过滤后的测序深度，AD和vardict中的AD含义一样
             normal_dp = record.samples[self.normal]['DP']
             if type(normal_dp) == tuple:
                 normal_dp = sum(normal_dp)
             normal_ad = record.samples[self.normal]['AD']
             if type(normal_ad) == tuple:
                 normal_ad = normal_ad[1]
-            normal_af = normal_ad / normal_dp
+            if normal_ad <= 0:
+                normal_af = 0
+            else:
+                normal_af = normal_ad / normal_dp
             if normal_dp >= 5 and normal_af >= 0.25:
+                # P=0.001; L=0.5; Z=1.96时，N > 4.3
                 af = 1.0
-            elif normal_af >= 500:
+            elif normal_dp >= 15 and normal_af >= 0.07:
+                # 1/15 = 0.0666
+                af = 1.0
+            elif normal_dp >= 300:
+                # 将测序深度超过300的，但又无法判定为germline的突变作为背景噪音，用于后续过滤
                 af = normal_af
             else:
-                pass
+                # 其他 (depth < 5) or (5 <= depth < 300 and af < 0.25)
+                # 认为统计意义不足，不能用作过滤依据
+                af = None
         return af
 
     def get_depth(self, record, sample):
