@@ -282,13 +282,13 @@ class VcfFilter(object):
         af_lower, af_upper = self.poll_error_binomial_conf(error_rate=af, depth=dp, confidence=confidence)
         # 根据二型分布估计突变完全来自背景噪音或测序错误的概率值
         pvalue = self.get_alt_binomial_pvalue(alt_depth=round(dp*af), depth=dp, error_rate=error_rate)
-        # min_depth = self.estimate_min_required_depth(error_rate, af, confidence)
+        min_depth = self.estimate_min_required_depth(error_rate, af, confidence)
         # print(dp, r.qual, error_rate, lower, upper)
         # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
         if (af >= error_upper*factor) and (pvalue < alpha) and (af_lower >= error_upper):
-            return True, af_lower, error_upper, pvalue
+            return True, af_lower, error_upper, pvalue, min_depth
         else:
-            return False, af_lower, error_upper, pvalue
+            return False, af_lower, error_upper, pvalue, min_depth
 
     def pass_depth_bias(self, record, cutoff=0.05, info_field='', normal=None, tumor=None):
         """
@@ -578,7 +578,7 @@ class VcfFilter(object):
     def filtering(self, genome, ref_dict=None, out_prefix=None, min_error_rate=None, error_rate_file=None, min_af=0.001, min_depth=5, alpha=0.05):
         # 先给vcf的header添加新字段定义才能往添加新的字段信息
         self.vcf.header.info.add(
-            'LOD', number=3, type='Float',
+            'LOD', number=5, type='Float',
             description='The first value is input error rate which will be used as theoretical frequency to '
                         f'calculate the second value. The second value is the upper bound of the {alpha} confidence interval of error rate. '
                         'The third value is the probability of alt observed from background noise'
@@ -619,15 +619,15 @@ class VcfFilter(object):
         gn = pysam.FastaFile(genome)
         # print(seq_error_dict.keys())
         lod_list = []
-        discard = 0
+        keep = 0
         total = 0
         filter_reasons = []
         log_file = open(out_prefix + '.filtering.log', 'w')
+        vcf_loh = pysam.VariantFile(out_prefix+'.LOH.vcf', "w", header=self.vcf.header.copy())
         for r in self.vcf:
             total += 1
             reasons = []
             if '<' in r.alts[0]:
-                discard += 1
                 # 跳过vardict中输出的特殊突变
                 print('skip special variant:', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
                 continue
@@ -648,6 +648,12 @@ class VcfFilter(object):
             af = self.get_af_value(r, self.tumor)
             if af < min_af:
                 reasons.append('LowAF')
+
+            # LOH
+            if af <= 0:
+                # print('discard AF=0 variant as following, maybe it called as LOH site', file=log_file)
+                vcf_loh.write(r)
+                continue
 
             # 1.根据测序错误率或germline突变频率过滤
             ctrl_af_as_error_rate = False
@@ -710,7 +716,8 @@ class VcfFilter(object):
                         # print(key, error_rate, r.ref, list(r.alts))
                         reasons.append('BackgroundNoise')
                     pass
-                r.info['LOD'] = (round(error_rate, 5), round(judge[2], 5), round(judge[3], 7))
+                # error_rate, af_lower, error_upper, pvalue, min_depth
+                r.info['LOD'] = (round(error_rate, 5), round(judge[1], 5), round(judge[2], 5), round(judge[3], 7), judge[4])
                 lod_list.append(judge[2])
 
             # 2.根据strand bias进行过滤
@@ -734,21 +741,22 @@ class VcfFilter(object):
             # 更新filter的内容和输出结果
             if reasons:
                 filter_reasons.append(tuple(reasons))
-                discard += 1
                 for each in reasons:
                     r.filter.add(each)
                 vcf_discard.write(r)
             else:
+                keep += 1
                 vcf_out.write(r)
 
         vcf_out.close()
         vcf_discard.close()
+        vcf_loh.close()
         gn.close()
         self.write_out_txt(out_vcf_name, out_prefix+'.final.txt')
         print('median LOD:', statistics.median(lod_list), file=log_file)
         print('min LOD:', min(lod_list), file=log_file)
         print('max LOD:', max(lod_list), file=log_file)
-        print(f'discard {discard} variants while keep {total-discard} ones!', file=log_file)
+        print(f'discard {total - keep} variants while keep {keep} ones!', file=log_file)
         reason_couts = Counter(filter_reasons).most_common()
         for k, v in reason_couts:
             print(f'{v} variants are filtered out because of {k}', file=log_file)
