@@ -434,12 +434,12 @@ class VcfFilter(object):
         return passed, max_pop_af
 
     def pass_msi_filter(self, record):
-        # vardict报出的MSI长度有时候偏低
+        # vardict报出的MSI长度有时候偏短
         passed = True
         af = self.get_af_value(record, self.tumor)
         if ('MSI' in record.info) and ('MSILEN' in record.info):
             # vardict style
-            if (record.info['MSI'] >= 8):
+            if record.info['MSI'] >= 8:
                 if af < 0.15:
                     passed = False
             elif (record.info['MSI'] >= 5) and (record.info['MSILEN'] == 1):
@@ -452,11 +452,29 @@ class VcfFilter(object):
                         passed = False
             else:
                 pass
+        # 特殊情况, 如下情况
+        # [SNV]      : AAAAGA -> AAAAAA;
+        # [Insertion]: AAAAA -> AAAA[A]A;
+        # [Deletion] : AAAAGAA -> AAAAAA
         if 'LSEQ' in record.info and passed:
             if record.info['TYPE'] == 'SNV':
                 alt = record.alts[0]
                 alt_seq = record.info['LSEQ'][:-4] + alt + record.info['RSEQ'][:4]
-                if re.match(alt + '{6,}', alt_seq):
+                if re.findall(alt + '{6,}', alt_seq):
+                    # 如果alt和前后的参考碱基可以形成长度超过6个单碱基重复序列，那么slippage的概率非常大
+                    if af < 0.05:
+                        passed = False
+            elif record.info['TYPE'] == 'Deletion':
+                alt = record.ref[0]
+                alt_seq = record.info['LSEQ'][:-4] + alt + record.info['RSEQ'][:4]
+                if len(record.ref <= 4) and re.findall(alt + '{5,}', alt_seq):
+                    # 如果alt和前后的参考碱基可以形成长度超过6个单碱基重复序列，那么slippage的概率非常大
+                    if af < 0.05:
+                        passed = False
+            elif record.info['TYPE'] == 'Insertion':
+                alt = record.alts[1]
+                alt_seq = record.info['LSEQ'][:-4] + alt + record.info['RSEQ'][:4]
+                if len(alt) <= 3 and re.findall(alt + '{6,}', alt_seq):
                     # 如果alt和前后的参考碱基可以形成长度超过6个单碱基重复序列，那么slippage的概率非常大
                     if af < 0.05:
                         passed = False
