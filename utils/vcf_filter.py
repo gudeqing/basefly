@@ -74,6 +74,8 @@ from stat_3bases_error import estimate_context_seq_error
 要求vcf每一行只包含一个突变，这个可以通过bcftools norm 快速实现
 变异类型的分类
 https://www.ebi.ac.uk/training-beta/online/courses/human-genetic-variation-introduction/what-is-genetic-variation/types-of-genetic-variation/
+
+考虑MSI的识别, 这样可以过滤MSI突变
 """
 
 
@@ -669,8 +671,8 @@ class VcfFilter(object):
                 key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
                 if key in seq_error_dict['I']:
                     error_rate = seq_error_dict['I'][key]['I']
-                    if len(r.alts[0])-len(r.ref) >= 3:
-                        error_rate = error_rate**2
+                    # if len(r.alts[0])-len(r.ref) >= 3:
+                    #     error_rate = error_rate**2
             elif mutation_type == 'Deletion':
                 # deletion
                 key = gn.fetch(r.contig, r.pos - key_left, r.pos + 1 + key_right).upper()
@@ -678,8 +680,8 @@ class VcfFilter(object):
                     # error_rate = seq_error_dict[key]['']
                     if key in seq_error_dict['D']:
                         error_rate = seq_error_dict['D'][key]['D']
-                        if len(r.ref) - len(r.alts[0]) >= 3:
-                            error_rate = error_rate ** 2
+                        # if len(r.ref) - len(r.alts[0]) >= 3:
+                        #     error_rate = error_rate ** 2
                 # print('del', key, error_rate, r.ref, list(r.alts))
             elif mutation_type == 'Complex':
                 # 使用第一个碱基的信息，也即类似snp的方式处理
