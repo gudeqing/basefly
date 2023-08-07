@@ -237,7 +237,7 @@ def MergeSamFiles():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'gatk MergeSamFiles'
-    cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', array=True, multi_times=True, desc='SAM or BAM input file')
+    cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='SAM or BAM input file')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', desc='SAM or BAM file to write merged result')
     cmd.args['CREATE_INDEX'] = Argument(prefix='--CREATE_INDEX ', default='true', range=['true', 'false'], desc='Whether to create a BAM index when writing a coordinate-sorted BAM file.')
     cmd.args['SORT_ORDER'] = Argument(prefix='--SORT_ORDER ', default='coordinate', range=['unsorted', 'queryname', 'coordinate', 'duplicate', 'unknown'], desc='Sort order of output file')
@@ -440,7 +440,7 @@ def VardictSingle():
     cmd.meta.source = 'https://github.com/AstraZeneca-NGS/VarDictJava'
     cmd.meta.version = 'VarDict_v1.8.2'
     cmd.meta.desc = "VarDictJava is a variant discovery program written in Java and Perl."
-    cmd.runtime.image = 'docker.io/truwl/vardict-java:latest'
+    cmd.runtime.image = 'hydragenetics/vardict:1.8.3'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'vardict-java'
@@ -473,15 +473,15 @@ def VardictPaired():
     cmd.meta.source = 'https://github.com/AstraZeneca-NGS/VarDictJava'
     cmd.meta.version = 'VarDict_v1.8.2'
     cmd.meta.desc = "VarDictJava is a variant discovery program written in Java and Perl."
-    cmd.runtime.image = 'docker.io/truwl/vardict-java:latest'
+    cmd.runtime.image = 'hydragenetics/vardict:1.8.3'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'vardict-java'
     cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
-    cmd.args['bam'] = Argument(prefix='-b ', type='infile', array=True, delimiter='|', desc='The indexed BAM files, tumor|normal')
+    cmd.args['bam'] = Argument(prefix='-b "{}"', type='infile', array=True, delimiter='|', desc='The indexed BAM files, tumor|normal')
     cmd.args['genome'] = Argument(prefix='-G ', type='infile', desc='The reference fasta. Should be indexed (.fai).')
     cmd.args['threads'] = Argument(prefix='-th ', default=8, desc='Threads count.')
-    cmd.args['min-freq'] = Argument(prefix='-f ', default="0.00001", desc='The threshold for allele frequency')
+    cmd.args['min-freq'] = Argument(prefix='-f ', default="0.0001", desc='The threshold for allele frequency')
     cmd.args['chromosome'] = Argument(prefix='-c ', default=1, desc='The column of chromosome')
     cmd.args['region_start'] = Argument(prefix='-S ', default=2, desc='The column of region start')
     cmd.args['region_end'] = Argument(prefix='-E ', default=3, desc='The column of region end')
@@ -495,7 +495,7 @@ def VardictPaired():
     cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
     cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 3 -q 15 -d 3 -v 1 -f 0.0001 ', desc='pipe to another script')
-    cmd.args['names'] = Argument(prefix='-N ', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
+    cmd.args['names'] = Argument(prefix='-N "{}"', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
@@ -544,8 +544,8 @@ def Mutect2(prefix):
     cmd.args['disable-adaptive-pruning'] = Argument(prefix='--disable-adaptive-pruning ', default='false', desc='Disable the adaptive algorithm for pruning paths in the graph')
     cmd.args['base-quality-score-threshold'] = Argument(prefix='--base-quality-score-threshold ', default=15, desc='Base qualities below this threshold will be reduced to the minimum (6)')
     cmd.args['pruning-lod-threshold'] = Argument(prefix='--pruning-lod-threshold ', default=1.3, desc='Ln likelihood ratio threshold for adaptive pruning algorithm')
-    cmd.args['disable-read-filter'] = Argument(prefix='--disable-read-filter ', default=['GoodCigarReadFilter', 'MappingQualityReadFilter', 'NonChimericOriginalAlignmentReadFilter'], array=True, multi_times=True, desc='Read filters to be disabled before analysis')
-    cmd.args['disable-tool-default-read-filters'] = Argument(prefix='--disable-tool-default-read-filters ', default='false', desc='Disable all tool default read filters (WARNING: many tools will not function correctlywithout their default read filters on)')
+    cmd.args['disable-read-filter'] = Argument(prefix='--disable-read-filter ', default=['GoodCigarReadFilter', 'MappingQualityReadFilter', 'NonChimericOriginalAlignmentReadFilter'], multi_times=True, desc='Read filters to be disabled before analysis')
+    cmd.args['disable-tool-default-read-filters'] = Argument(prefix='--disable-tool-default-read-filters ', default='true', desc='Disable all tool default read filters (WARNING: many tools will not function correctlywithout their default read filters on)')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.vcf.gz', desc='output vcf')
     cmd.args['bam-output'] = Argument(prefix='--bam-output ', level='optional', desc='output bam file')
     cmd.args['f1r2-tar-gz'] = Argument(prefix='--f1r2-tar-gz ', type='infile', default=f'{prefix}.f1r2.tar.gz', desc='If specified, collect F1R2 counts and output files into this tar.gz file')
