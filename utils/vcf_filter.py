@@ -63,6 +63,7 @@ N = ( ( Z/(1/P/(1-P))**0.5 + Z/(1/L/(1-L))**0.5 ) / (L-P) )**2 = 1412.53
 
 """
 import os
+import re
 import json
 import pandas as pd
 import pysam
@@ -175,8 +176,11 @@ class VcfFilter(object):
         P = error_rate
         L = af
         Z = stats.norm.interval(confidence)[1]
-        N = ((Z / (1 / P / (1 - P)) ** 0.5 + Z / (1 / L / (1 - L)) ** 0.5) / (L - P)) ** 2
-        return round(N, 1)
+        if L - P > 0.0001:
+            N = ((Z / (1 / P / (1 - P)) ** 0.5 + Z / (1 / L / (1 - L)) ** 0.5) / (L - P)) ** 2
+        else:
+            N = 1000000
+        return int(N)
 
     def get_alt_binomial_pvalue(self, alt_depth, depth, error_rate):
         # 假设测序错误服从二型分布，可以计算alt_depth全部来自错误的概率
@@ -275,22 +279,26 @@ class VcfFilter(object):
         print(f'we guess error rate for {record.start}:{record.ref}>{record.alts[0]}:', error_rate)
         return error_rate
 
-    def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, factor=1.1):
+    def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, factor=1.0):
+        if error_rate == 0:
+            raise Exception(record.__str__())
         dp = self.get_depth(record, sample)
         af = self.get_af_value(record, sample)
         # 估计error_rate的置信区间
         confidence = 1 - alpha
+        # confidence越大，则 error_upper越大, af_lower越小，min_depth越大， 这意味着过滤条件越严格
         error_lower, error_upper = self.poll_error_binomial_conf(error_rate=error_rate, depth=dp, confidence=confidence)
         af_lower, af_upper = self.poll_error_binomial_conf(error_rate=af, depth=dp, confidence=confidence)
         # 根据二型分布估计突变完全来自背景噪音或测序错误的概率值
         pvalue = self.get_alt_binomial_pvalue(alt_depth=round(dp*af), depth=dp, error_rate=error_rate)
-        min_depth = self.estimate_min_required_depth(error_rate, af_upper, confidence)
+        min_depth = self.estimate_min_required_depth(error_rate, af, confidence)
+        min_depth = int(min_depth) * 0.9
         # print(dp, r.qual, error_rate, lower, upper)
         # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
-        if (af >= error_upper*factor) and (pvalue < alpha) and (dp > min_depth):
-            return True, af_lower, error_upper, pvalue, min_depth
+        if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth) and (af_lower >= error_rate):
+            return True, error_rate, error_upper, af_lower, pvalue, min_depth
         else:
-            return False, af_lower, error_upper, pvalue, min_depth
+            return False, error_rate, error_upper, af_lower, pvalue, min_depth
 
     def pass_depth_bias(self, record, cutoff=0.05, info_field='', normal=None, tumor=None):
         """
@@ -343,7 +351,7 @@ class VcfFilter(object):
             pass
         return passed, pvalue
 
-    def pass_strand_bias(self, record, info_field='', fmt_field='', cutoff=0.005, sample=None):
+    def pass_strand_bias(self, record, info_field='', fmt_field='', cutoff=0.001, sample=None):
         passed = True
         pvalue = None
         possible_info_fields = [info_field] + ['SBF']
@@ -424,6 +432,35 @@ class VcfFilter(object):
             passed = True
             max_pop_af = None
         return passed, max_pop_af
+
+    def pass_msi_filter(self, record):
+        # vardict报出的MSI长度有时候偏低
+        passed = True
+        af = self.get_af_value(record, self.tumor)
+        if ('MSI' in record.info) and ('MSILEN' in record.info):
+            # vardict style
+            if (record.info['MSI'] >= 8):
+                if af < 0.15:
+                    passed = False
+            elif (record.info['MSI'] >= 5) and (record.info['MSILEN'] == 1):
+                if af < 0.02:
+                    passed = False
+            elif (record.info['MSI'] >= 4) and (record.info['MSILEN'] >= 2):
+                if record.info['TYPE'] in ['Insertion', 'Deletion']:
+                    alt_len = abs(len(record.alts[0]) - len(record.ref))
+                    if af < 0.05 and (alt_len % record.info['MSILEN'] == 0):
+                        passed = False
+            else:
+                pass
+        if 'LSEQ' in record.info and passed:
+            if record.info['TYPE'] == 'SNV':
+                alt = record.alts[0]
+                alt_seq = record.info['LSEQ'][:-4] + alt + record.info['RSEQ'][:4]
+                if re.match(alt + '{6,}', alt_seq):
+                    # 如果alt和前后的参考碱基可以形成长度超过6个单碱基重复序列，那么slippage的概率非常大
+                    if af < 0.05:
+                        passed = False
+        return passed
 
     def format_txt_output(self, r) -> dict:
         csq_format = self.vcf.header.info['CSQ'].description.split('Format: ')[1]
@@ -581,15 +618,17 @@ class VcfFilter(object):
         # 先给vcf的header添加新字段定义才能往添加新的字段信息
         self.vcf.header.info.add(
             'LOD', number=5, type='Float',
-            description='The first value is input error rate which will be used as theoretical frequency to '
+            description='[error_rate, error_upper, af_lower, pvalue, min_depth]. '
+                        'The first value is input error rate which will be used as theoretical frequency to '
                         f'calculate the second value. The second value is the upper bound of the {alpha} confidence interval of error rate. '
-                        'The third value is the probability of alt observed from background noise'
+                        'The fourth value is the probability of alt observed from background noise'
         )
         self.vcf.header.filters.add('NoiseFromNormal', number=None, type=None, description='noise from normal sample')
         self.vcf.header.filters.add('BackgroundNoise', number=None, type=None, description='noise from background')
         self.vcf.header.filters.add('FromGermline', number=None, type=None, description='considered as germline variant found in normal vcf')
         self.vcf.header.filters.add('HighPopFreq', number=None, type=None, description='Population frequency')
         self.vcf.header.filters.add('LowAF', number=None, type=None, description=f'AF smaller than {min_af}')
+        self.vcf.header.filters.add('MSIFilter', number=None, type=None, description=f'likely PCR Slippage in MSI region')
         if 'Bias' not in self.vcf.header.filters:
             self.vcf.header.filters.add('Bias', number=None, type=None, description="severe strand bias")
         if self.vcf.header.contigs.__len__() < 1:
@@ -703,8 +742,9 @@ class VcfFilter(object):
                     error_rate = normal_af
 
             if error_rate is None:
-                # 尝试从record的字段信息提取error_rate的估计值
-                error_rate = self.get_raw_error_rate(r, read_len=150)
+                # 没有提取到错误率信息，尝试从record的字段信息提取error_rate的估计值
+                print(f'No error rate in seq_eror_file found for the following variant', r.__str__())
+                error_rate = self.get_raw_error_rate(r, read_len=150, min_error_rate=1e-6)
 
             # 1.seq error过滤或者germline突变过滤
             if error_rate > 0.999:
@@ -718,12 +758,12 @@ class VcfFilter(object):
                         # print(key, error_rate, r.ref, list(r.alts))
                         reasons.append('BackgroundNoise')
                     pass
-                # error_rate, af_lower, error_upper, pvalue, min_depth
-                r.info['LOD'] = (round(error_rate, 5), round(judge[1], 5), round(judge[2], 5), round(judge[3], 7), judge[4])
+                # error_rate, error_upper, af_lower, pvalue, min_depth
+                r.info['LOD'] = tuple(judge[1:])
                 lod_list.append(judge[2])
 
             # 2.根据strand bias进行过滤
-            judge2 = self.pass_strand_bias(r, cutoff=0.003, sample=self.tumor)
+            judge2 = self.pass_strand_bias(r, cutoff=0.001, sample=self.tumor)
             if not judge2[0]:
                 if 'Bias' not in reasons:
                     reasons.append('Bias')
@@ -739,6 +779,11 @@ class VcfFilter(object):
             judge4 = self.pass_population_af(r, cutoff=0.01)
             if not judge4[0]:
                 reasons.append('HighPopFreq')
+
+            # 5. 根据MSI状况
+            judge5 = self.pass_msi_filter(r)
+            if not judge5:
+                reasons.append('MSIFilter')
 
             # 更新filter的内容和输出结果
             if reasons:
@@ -800,7 +845,7 @@ if __name__ == '__main__':
     parser.add_argument('-normal_vcf', type=Path, required=False, help='normal sample vcf file')
     parser.add_argument('-error_rate_file', type=Path, required=False, help='Estimated background noise file, if not provided, bam file will be used to generate one')
     parser.add_argument('-min_error_rate', type=float, default=1e-6, help='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
-    parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model. The pvalue represents the probability of variants come from background noise, thus higher cutoff means stricter condition')
+    parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model. The pvalue represents the probability of variants come from background noise')
     parser.add_argument('-min_af', type=float, default=0.001, help='hard cutoff of AF')
     parser.add_argument('-out_prefix', help='output file prefix')
     args = parser.parse_args()
