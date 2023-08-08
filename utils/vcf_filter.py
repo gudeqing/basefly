@@ -292,7 +292,7 @@ class VcfFilter(object):
         # 根据二型分布估计突变完全来自背景噪音或测序错误的概率值
         pvalue = self.get_alt_binomial_pvalue(alt_depth=round(dp*af), depth=dp, error_rate=error_rate)
         min_depth = self.estimate_min_required_depth(error_rate, af, confidence)
-        min_depth = int(min_depth) * 0.9
+        min_depth = int(min_depth * 0.9)
         # print(dp, r.qual, error_rate, lower, upper)
         # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
         if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth) and (af_lower >= error_rate):
@@ -577,7 +577,7 @@ class VcfFilter(object):
             target_info['RSEQ'] = r.info['RSEQ']
 
         if 'LOD' in r.info:
-            target_info['LOD(eError,UpperConf,Pvalue)'] = r.info['LOD']
+            target_info['LOD(error_rate,error_upper,af_lower,pvalue,min_depth)'] = r.info['LOD']
         # 根据注释结果判断是否报告，增加报告字段
         consequences = set(csq_dict['Consequence'].split('&'))
         if (consequences - {
