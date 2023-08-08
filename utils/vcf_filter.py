@@ -434,50 +434,63 @@ class VcfFilter(object):
         return passed, max_pop_af
 
     def pass_msi_filter(self, record):
-        # vardict报出的MSI长度有时候偏短
-        passed = True
-        af = self.get_af_value(record, self.tumor)
-        if ('MSI' in record.info) and ('MSILEN' in record.info):
-            # vardict style
-            if record.info['MSI'] >= 8:
-                if af < 0.15:
-                    passed = False
-            elif (record.info['MSI'] >= 5) and (record.info['MSILEN'] == 1):
-                if af < 0.02:
-                    passed = False
-            elif (record.info['MSI'] >= 4) and (record.info['MSILEN'] >= 2):
-                if record.info['TYPE'] in ['Insertion', 'Deletion']:
-                    alt_len = abs(len(record.alts[0]) - len(record.ref))
-                    if af < 0.05 and (alt_len % record.info['MSILEN'] == 0):
-                        passed = False
-            else:
-                pass
-        # 特殊情况, 如下情况
+        # vardict报出的MSI长度有时候偏短，不能作为唯一依据
+        # 考虑聚合酶滑脱现象： 一个或几个重复单元的缺失或者插入，一般占比小于15%
+        # 如果是经过UMI矫正的read，其实这种聚合酶滑脱导致的错误理论上应该可以矫正回来，因此该过滤需要小心对待
         # [SNV]      : AAAAGA -> AAAAAA;
         # [Insertion]: AAAAA -> AAAA[A]A;
         # [Deletion] : AAAAGAA -> AAAAAA
+        passed = True
+        af = self.get_af_value(record, self.tumor)
+        # vardict的info中提供了突变侧翼碱基序列信息
         if 'LSEQ' in record.info and passed:
-            if record.info['TYPE'] == 'SNV':
+            left = record.info['LSEQ']
+            right = record.info['RSEQ']
+            mut_type = record.info['TYPE']
+            if mut_type == 'SNV':
+                # AAAAGA -> AAAAAA
+                # 上述是非典型MSI错误，仅考虑单碱基串联重复
                 alt = record.alts[0]
-                alt_seq = record.info['LSEQ'][:-4] + alt + record.info['RSEQ'][:4]
-                if re.findall(alt + '{6,}', alt_seq):
-                    # 如果alt和前后的参考碱基可以形成长度超过6个单碱基重复序列，那么slippage的概率非常大
+                alt_seq = left[:-5] + alt + right[:5]
+                if re.search(alt + '{6,}', alt_seq):
+                    # 找到不少于6次单碱基重复
                     if af < 0.05:
                         passed = False
-            elif record.info['TYPE'] == 'Deletion':
-                alt = record.ref[0]
-                alt_seq = record.info['LSEQ'][:-4] + alt + record.info['RSEQ'][:4]
-                if len(record.ref <= 4) and re.findall(alt + '{5,}', alt_seq):
-                    # 如果alt和前后的参考碱基可以形成长度超过6个单碱基重复序列，那么slippage的概率非常大
-                    if af < 0.05:
-                        passed = False
-            elif record.info['TYPE'] == 'Insertion':
-                alt = record.alts[1]
-                alt_seq = record.info['LSEQ'][:-4] + alt + record.info['RSEQ'][:4]
-                if len(alt) <= 3 and re.findall(alt + '{6,}', alt_seq):
-                    # 如果alt和前后的参考碱基可以形成长度超过6个单碱基重复序列，那么slippage的概率非常大
-                    if af < 0.05:
-                        passed = False
+            elif mut_type == 'Deletion':
+                # CGG[CG]GGGGGA - > CGG[C]GGGGGA
+                # 情形1：认为删除的碱基是重复单元, 那么考虑参考序列是否为重复串联单元
+                alt = record.ref[1:]
+                if len(alt) > 1:
+                    msi_len = int(record.info['MSILEN'])
+                    if len(alt) % msi_len == 0:
+                        alt = alt[:msi_len]
+                if len(alt) * 4 <= 20:
+                    ref_seq = left[:-len(alt)*4] + record.ref + right[:len(alt)*4]
+                    if re.search(f'({alt})'+'{5,}', ref_seq):
+                        # 参考序列中可以找到以删除序列为基本单元的串联重复
+                        if af < 0.05:
+                            passed = False
+                # 情形2：考虑最多删除2bp后，形成单碱基串联重复，如AAAAGGAA -> AAAAAA
+                if passed:
+                    alt = record.ref[0]
+                    alt_seq = left[:-4] + alt + right[:4]
+                    if len(record.ref) <= 3 and re.search(alt + '{5,}', alt_seq):
+                        if af < 0.05:
+                            passed = False
+            elif mut_type == 'Insertion':
+                # AAAAA -> AAAA[A]A; ATATATAT -> AT[AT]ATATAT
+                # 考虑单碱基或多碱基串联重复, 重复单元的长度不超过4
+                alt = record.alts[0][1:]
+                if len(alt) > 1:
+                    msi_len = int(record.info['MSILEN'])
+                    if len(alt) % msi_len == 0:
+                        alt = alt[:msi_len]
+                if len(alt)*5 <= 20:
+                    # vardict提供的侧翼长度信息为20
+                    alt_seq = left[:-len(alt)*5] + record.alts[0] + right[:len(alt)*5]
+                    if re.search(f'({alt})'+'{6,}', alt_seq):
+                        if af < 0.05:
+                            passed = False
         return passed
 
     def format_txt_output(self, r) -> dict:
