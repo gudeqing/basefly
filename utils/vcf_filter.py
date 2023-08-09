@@ -103,7 +103,7 @@ class ValidateMutationByBam(object):
             tags.append(tag)
         return tags
 
-    def get_snp_support_reads(self, contig, start, alt, min_bq=13, ignore_overlaps=True):
+    def get_snp_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
         pileup_columns = self.bam.pileup(
             contig, start, start + 1,
             stepper='samtools',
@@ -117,17 +117,31 @@ class ValidateMutationByBam(object):
             # flag_filter=4,
         )
         support_reads = set()
+        all_read_tag_dict = dict()
         for col in pileup_columns:
-            for base, read in zip(
-                    # 如不加add_indels参数，那么将无法知晓插入的碱基序列
-                    col.get_query_sequences(),
-                    col.get_query_names(),
-            ):
-                if base.lower() == alt.lower():
-                    support_reads.add(read)
-        return support_reads
+            # for base, read in zip(
+            #         # 如不加add_indels参数，那么将无法知晓插入的碱基序列
+            #         col.get_query_sequences(),
+            #         col.get_query_names(),
+            # ):
+            #     if base.lower() == alt.lower():
+            #         support_reads.add(read)
+            for pileup_read in col.pileups:
+                target_tag_dict = dict()
+                read_name = pileup_read.alignment.query_name
+                query_seq = pileup_read.alignment.query_sequence
+                query_pos = pileup_read.query_position
+                if query_pos is not None:
+                    if query_seq[query_pos].upper() == alt.upper():
+                        support_reads.add(read_name)
+                if read_name not in all_read_tag_dict:
+                    for tag in tag_names:
+                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
+                    # 不关心query_name是否重复，以最后一个为准
+                    all_read_tag_dict[read_name] = target_tag_dict
+        return support_reads, all_read_tag_dict
 
-    def get_insert_support_reads(self, contig, start, alt, min_bq=13, ignore_overlaps=True):
+    def get_insert_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
         cols = self.bam.pileup(
             contig, start, start + 1,
             stepper='samtools',
@@ -142,6 +156,7 @@ class ValidateMutationByBam(object):
             # flag_filter=4,
         )
         support_reads = set()
+        all_read_tag_dict = dict()
         expected_insert = alt.upper()
         for col in cols:
             for base, read in zip(
@@ -157,9 +172,19 @@ class ValidateMutationByBam(object):
                     mismatched_num = sum(x != y for x, y in zip(expected_insert, insertion))
                     if mismatched_num <= mismatch_allowed:
                         support_reads.add(read)
-        return support_reads
 
-    def get_del_support_reads(self, contig, start, del_len, min_bq=13, ignore_overlaps=True):
+            for pileup_read in col.pileups:
+                target_tag_dict = dict()
+                read_name = pileup_read.alignment.query_name
+                if read_name not in all_read_tag_dict:
+                    for tag in tag_names:
+                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
+                    # 不关心query_name是否重复，以最后一个为准
+                    all_read_tag_dict[read_name] = target_tag_dict
+
+        return support_reads, all_read_tag_dict
+
+    def get_del_support_reads(self, contig, start, del_len, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
         cols = self.bam.pileup(
             contig, start, start + 1,
             stepper='samtools',
@@ -173,13 +198,21 @@ class ValidateMutationByBam(object):
             # flag_filter=4,
         )
         support_reads = set()
+        all_read_tag_dict = dict()
         for col in cols:
             for pileup_read in col.pileups:
+                read_name = pileup_read.alignment.query_name
                 if -pileup_read.indel == del_len:
                     support_reads.add(pileup_read.alignment.query_name)
-        return support_reads
+                target_tag_dict = dict()
+                if read_name not in all_read_tag_dict:
+                    for tag in tag_names:
+                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
+                    # 不关心query_name是否重复，以最后一个为准
+                    all_read_tag_dict[read_name] = target_tag_dict
+        return support_reads, all_read_tag_dict
 
-    def get_substitution_support_reads(self, contig, start, alt, min_bq=13, ignore_overlaps=True):
+    def get_substitution_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
         # 该函数可以被get_complex_support_reads替代
         cols = self.bam.pileup(
             contig, start, start + 1,
@@ -195,21 +228,36 @@ class ValidateMutationByBam(object):
         )
         alt = alt.upper()
         support_reads = list()
+        all_read_tag_dict = dict()
         for idx, col in enumerate(cols):
-            for base, read in zip(
-                    # 如不加add_indels参数，那么将无法知晓插入的碱基序列
-                    col.get_query_sequences(add_indels=True),
-                    col.get_query_names(),
-            ):
-                if base.upper() == alt[idx]:
-                    support_reads.append(read)
+            # for base, read in zip(
+            #         # 如不加add_indels参数，那么将无法知晓插入的碱基序列
+            #         col.get_query_sequences(add_indels=True),
+            #         col.get_query_names(),
+            # ):
+            #     if base.upper() == alt[idx]:
+            #         support_reads.append(read)
+            for pileup_read in col.pileups:
+                query_seq = pileup_read.alignment.query_sequence
+                query_pos = pileup_read.query_position
+                read_name = pileup_read.alignment.query_name
+                if query_pos is not None:
+                    if query_seq[query_pos].upper() == alt[idx]:
+                        support_reads.append(read_name)
+                target_tag_dict = dict()
+                if read_name not in all_read_tag_dict:
+                    for tag in tag_names:
+                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
+                    # 不关心query_name是否重复，以最后一个为准
+                    all_read_tag_dict[read_name] = target_tag_dict
+
         # 如果一个read匹配到的次数等于alt的长度，则认为该read支持alt
         count = Counter(support_reads)
         alt_length = len(alt)
         support_reads = set(x for x, y in count.items() if y == alt_length)
-        return support_reads
+        return support_reads, all_read_tag_dict
 
-    def get_complex_support_reads(self, contig, start, ref, alt, min_bq=13, ignore_overlaps=True):
+    def get_complex_support_reads(self, contig, start, ref, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
         """
         思路：分析每条能够比对到突变起始位置的read序列是否支持alt
         1. 假设alt前后的3个碱基一定是和reference匹配的
@@ -232,6 +280,7 @@ class ValidateMutationByBam(object):
             fastafile=self.genome,
         )
         support_reads = set()
+        all_read_tag_dict = dict()
         expected_left = self.genome.fetch(contig, start - 3, start)
         expected_right = self.genome.fetch(contig, start + len(ref), start + len(ref) + 3)
         for col in cols:
@@ -239,6 +288,13 @@ class ValidateMutationByBam(object):
                 query_seq = pileup_read.alignment.query_sequence
                 query_len = pileup_read.alignment.query_length
                 query_pos = pileup_read.query_position
+                read_name = pileup_read.alignment.query_name
+                target_tag_dict = dict()
+                if read_name not in all_read_tag_dict:
+                    for tag in tag_names:
+                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
+                    # 不关心query_name是否重复，以最后一个为准
+                    all_read_tag_dict[read_name] = target_tag_dict
                 if query_pos is not None:
                     # position of the read base at the pileup site, 0-based. None if is_del or is_refskip is set.
                     # 我们期望该位置下一位|mismatch|insertion|deletion|
@@ -260,9 +316,9 @@ class ValidateMutationByBam(object):
                     expected_seq = expected_left[-back_extend:] + alt + expected_right[:forward_extend]
                     # print("xxx", contig, start, real_seq, alt, expected_seq)
                     if real_seq.lower() == expected_seq.lower():
-                        support_reads.add(pileup_read.alignment.query_name)
+                        support_reads.add(read_name)
                         # print(query_seq, query_pos, expected_seq_before, ref+'>'+alt, expected_seq_after)
-        return support_reads
+        return support_reads, all_read_tag_dict
 
     def get_all_read_tag_dict(self, mut, min_bq=13, tag_names=('cD',), ignore_overlaps=True):
         pileup_columns = self.bam.pileup(
@@ -303,23 +359,23 @@ class ValidateMutationByBam(object):
         else:
             return 'complex'
 
-    def get_mut_support_reads(self, mut: VariantRecord):
+    def get_mut_support_reads(self, mut: VariantRecord, tag_names:tuple=tuple()):
         mut_type= self.get_mutation_type(mut)
         if mut_type == 'snp':
-            supports = self.get_snp_support_reads(mut.contig, mut.start, mut.alts[0])
+            supports, tag_dict = self.get_snp_support_reads(mut.contig, mut.start, mut.alts[0], tag_names=tag_names)
         elif mut_type == 'substitution':
             # supports = self.get_substitution_support_reads(mut.contig, mut.start, mut.alts[0])
-            supports = self.get_complex_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0])
+            supports, tag_dict = self.get_complex_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0], tag_names=tag_names)
         elif mut_type == 'deletion':
             del_size = len(mut.ref) - len(mut.alts[0])
-            supports = self.get_del_support_reads(mut.contig, mut.start, del_size)
+            supports, tag_dict = self.get_del_support_reads(mut.contig, mut.start, del_size, tag_names=tag_names)
         elif mut_type == 'insertion':
-            supports = self.get_insert_support_reads(mut.contig, mut.start, mut.alts[0])
+            supports, tag_dict = self.get_insert_support_reads(mut.contig, mut.start, mut.alts[0], tag_names=tag_names)
         elif mut_type == 'complex':
-            supports = self.get_complex_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0])
+            supports, tag_dict = self.get_complex_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0], tag_names=tag_names)
         else:
             raise Exception(f"{mut_type} is unexpected")
-        return supports
+        return supports, tag_dict
 
 
 class VcfFilter(object):
@@ -477,11 +533,11 @@ class VcfFilter(object):
             elif normal_dp >= 15 and normal_af >= 0.07:
                 # 1/15 = 0.0666
                 af = 1.0
-            elif normal_dp >= 300:
-                # 将测序深度超过300的，但又无法判定为germline的突变作为背景噪音，用于后续过滤
+            elif normal_dp >= 300 or normal_ad >= 3:
+                # 无法判定为germline的突变作为背景噪音，用于后续过滤
                 af = normal_af
             else:
-                # 其他 (depth < 5) or (5 <= depth < 300 and af < 0.25)
+                # 其他 (depth < 5) or (depth > 300 and af < 0.25)
                 # 认为统计意义不足，不能用作过滤依据
                 af = None
         return af
@@ -508,22 +564,25 @@ class VcfFilter(object):
 
     def get_raw_error_rate(self, record, min_error_rate=1e-6, read_len=150):
         error_rate = min_error_rate
-        if 'NM' in record.info and type(record.info['NM']) == float:
-            # vardict style, 'NM':"Mean mismatches in reads"
-            # 根据平均错配数量估计测序错误率，考虑真实突变和比对错误的存在，这个错误率肯定偏大
-            # 保守考虑，将这个错误率缩小10倍
-            error_rate = min([record.info['NM'] / read_len * 0.1, error_rate])
+        format_info = record.samples[self.tumor]
+        if 'QUAL' in format_info:
+            error_rate = self.qual_to_error_rate(format_info['QUAL']) * 0.9
         elif 'QUAL' in record.info:
-            error_rate = self.qual_to_error_rate(record.info['qual'])
+            error_rate = self.qual_to_error_rate(record.info['QUAL']) * 0.9
         elif 'MBQ' in record.info:
             # mutect2 style
-            error_rate = self.qual_to_error_rate(record.info['MBQ'])
-        print(f'we guess error rate for {record.start}:{record.ref}>{record.alts[0]}:', error_rate)
-        return error_rate
+            error_rate = self.qual_to_error_rate(record.info['MBQ']) * 0.9
+        elif 'NM' in record.info and type(record.info['NM']) == float:
+            # vardict style, 'NM':"Mean mismatches in reads"
+            # 根据平均错配数量估计测序错误率，考虑真实突变和比对错误的存在，这个错误率可能偏大
+            # 保守考虑，将这个错误率缩小5倍
+            error_rate = record.info['NM'] / read_len * 0.2
+        # print(f'we use QUAL info to infer error rate for {record.contig}:{record.start}:{record.ref}>{record.alts[0]}:', error_rate)
+        return min(error_rate, min_error_rate)
 
     def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, factor=1.0):
         if error_rate == 0:
-            raise Exception(record.__str__())
+            raise Exception("ErrorRate=0? "+record.__str__())
         dp = self.get_depth(record, sample)
         af = self.get_af_value(record, sample)
         # 估计error_rate的置信区间
@@ -979,7 +1038,9 @@ class VcfFilter(object):
             # af cutoff
             af = self.get_af_value(r, self.tumor)
             if af < min_af:
-                reasons.append('LowAF')
+                # reasons.append('LowAF')
+                vcf_discard.write(r)
+                continue
 
             # LOH
             if af <= 0:
@@ -987,61 +1048,61 @@ class VcfFilter(object):
                 vcf_loh.write(r)
                 continue
 
-            # 1.根据测序错误率或germline突变频率过滤
-            ctrl_af_as_error_rate = False
-            # r.pos正好是1-based, r.start 是0-based
-            error_rate = min_error_rate
-            mutation_type = self.get_mutation_type(r)
-            if mutation_type == 'SNV':
-                key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
-                # error_rate = seq_error_dict[key][r.alts[0]]
-                if key in seq_error_dict[r.alts[0]]:
-                    error_rate = seq_error_dict[r.alts[0]][key][r.alts[0]]
-            elif mutation_type == 'Insertion':
-                key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
-                if key in seq_error_dict['I']:
-                    error_rate = seq_error_dict['I'][key]['I']
-                    # if len(r.alts[0])-len(r.ref) >= 3:
-                    #     error_rate = error_rate**2
-            elif mutation_type == 'Deletion':
-                # deletion
-                key = gn.fetch(r.contig, r.pos - key_left, r.pos + 1 + key_right).upper()
-                if 'D' in seq_error_dict['D']:
-                    # error_rate = seq_error_dict[key]['']
-                    if key in seq_error_dict['D']:
-                        error_rate = seq_error_dict['D'][key]['D']
-                        # if len(r.ref) - len(r.alts[0]) >= 3:
-                        #     error_rate = error_rate ** 2
-                # print('del', key, error_rate, r.ref, list(r.alts))
-            elif mutation_type == 'Complex':
-                # 使用第一个碱基的信息，也即类似snp的方式处理
-                key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
-                # print(r.pos, key, r.ref, r.alts)
-                if key in seq_error_dict[r.alts[0][0].upper()]:
-                    error_rate = seq_error_dict[r.alts[0][0].upper()][key][r.alts[0][0].upper()]
-            else:
-                raise Exception(f'mutation type is unknown for {r.__str__()}')
-
             # 4. 根据人群频率过滤
             judge4 = self.pass_population_af(r, cutoff=0.01)
             if not judge4[0]:
-                # 如果人群频率没有通过，为加快速度，跳过后续过滤步骤
+                # 如果人群频率没有通过，为加快速度，跳过后续过滤判定步骤
                 reasons.append('HighPopFreq')
             else:
+                # 1.根据测序错误率或germline突变频率过滤
+                ctrl_af_as_error_rate = False
+                # r.pos正好是1-based, r.start 是0-based
+                error_rate = None
+                if seq_error_dict:
+                    mutation_type = self.get_mutation_type(r)
+                    if mutation_type == 'SNV':
+                        key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
+                        # error_rate = seq_error_dict[key][r.alts[0]]
+                        if key in seq_error_dict[r.alts[0]]:
+                            error_rate = seq_error_dict[r.alts[0]][key][r.alts[0]]
+                    elif mutation_type == 'Insertion':
+                        key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
+                        if key in seq_error_dict['I']:
+                            error_rate = seq_error_dict['I'][key]['I']
+                            # if len(r.alts[0])-len(r.ref) >= 3:
+                            #     error_rate = error_rate**2
+                    elif mutation_type == 'Deletion':
+                        # deletion
+                        key = gn.fetch(r.contig, r.pos - key_left, r.pos + 1 + key_right).upper()
+                        if 'D' in seq_error_dict['D']:
+                            # error_rate = seq_error_dict[key]['']
+                            if key in seq_error_dict['D']:
+                                error_rate = seq_error_dict['D'][key]['D']
+                                # if len(r.ref) - len(r.alts[0]) >= 3:
+                                #     error_rate = error_rate ** 2
+                        # print('del', key, error_rate, r.ref, list(r.alts))
+                    elif mutation_type == 'Complex':
+                        # 使用第一个碱基的信息，也即类似snp的方式处理
+                        key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
+                        # print(r.pos, key, r.ref, r.alts)
+                        if key in seq_error_dict[r.alts[0][0].upper()]:
+                            error_rate = seq_error_dict[r.alts[0][0].upper()][key][r.alts[0][0].upper()]
+                    else:
+                        raise Exception(f'mutation type is unknown for {r.__str__()}')
+
                 if self.normal:
                     # 当存在对照样本时，如果某个位点在对照样本也存在突变，且突变频率大于seq_error时，可以把对照样本中的突变频率作为测序错误率进行过滤
                     # 一开始认为这样可以过滤掉germline突变，如果对照样本测序深度足够，还可以过滤假阳性突变、克隆造血突变
                     # 但是如果对照样本测序深度不够，germline的突变AF可能被低估，而肿瘤样本由于测序深度足够，可以检测到远高于对照样本的AF
                     # 此时如果直接用对照样本的AF作为error_rate, 肿瘤样本有可能通过判定，所以最好的方式是直接扔掉被判定为germline的突变
                     normal_af = self.get_normal_af(r)
-                    if normal_af and (normal_af > error_rate):
+                    if normal_af and (normal_af > (error_rate or 0)):
                         ctrl_af_as_error_rate = True
                         error_rate = normal_af
 
-                if error_rate is None:
+                if (error_rate is None) or (error_rate < min_error_rate):
                     # 没有提取到错误率信息，尝试从record的字段信息提取error_rate的估计值
-                    print(f'No error rate in seq_eror_file found for the following variant', r.__str__())
-                    error_rate = self.get_raw_error_rate(r, read_len=150, min_error_rate=1e-6)
+                    error_rate = self.get_raw_error_rate(r, read_len=150, min_error_rate=min_error_rate)
 
                 # 1.seq error过滤或者germline突变过滤
                 if error_rate > 0.999:
@@ -1059,14 +1120,15 @@ class VcfFilter(object):
                     r.info['LOD'] = tuple(judge[1:])
                     lod_list.append(judge[2])
 
-                # 2.根据strand bias进行过滤，
-                judge2 = self.pass_strand_bias(r, cutoff=0.001, sample=self.tumor)
+                # 2.根据strand bias进行过滤
+                # 当使用链偏倚作为过滤指标时要注意：只有极端链偏倚的SNP才应被视为假阳性候选突变
+                judge2 = self.pass_strand_bias(r, cutoff=1e-6, sample=self.tumor)
                 if not judge2[0]:
                     if 'Bias' not in reasons:
                         reasons.append('Bias')
                         pass
 
-                # 3. position std filtering, 如果突变在reads中出现的位置基本不变,且支持的read<=2，需要过滤掉
+                # 3. position std filtering, 对于使用gene_primer技术的文库，如果突变在reads中出现的位置基本不变,且支持的read<=2，需要过滤掉
                 judge3 = self.pass_pstd(r, cutoff=0.00001, gene_primer_used=self.gene_primer_used)
                 if not judge3[0]:
                     if 'pSTD' not in reasons:
@@ -1080,12 +1142,10 @@ class VcfFilter(object):
                 # 6. 获取突变支持信息
                 if bamer and len(reasons) == 0:
                     # 该步骤比较耗时，为加快速度，仅仅对通过前面全部判定条件的突变进行分析
-                    support_reads = bamer.get_mut_support_reads(r)
-                    tag_dict = bamer.get_all_read_tag_dict(r, tag_names=('cD', 'cE'))
-                    umi_fam_size_of_support_reads = []
+                    support_reads, tag_dict = bamer.get_mut_support_reads(r, tag_names=('cD', 'cE'))
                     fam1_support_num = sum(tag_dict[x]['cD'] == 1 for x in support_reads)
                     fam2_support_num = len(support_reads) - fam1_support_num
-                    fam1_all_num = sum(tag_dict[x] == 1 for x in tag_dict)
+                    fam1_all_num = sum(tag_dict[x]['cD'] == 1 for x in tag_dict)
                     fam2_all_num = len(tag_dict) - fam1_all_num
                     consensus_error = [tag_dict[x]['cE'] for x in tag_dict]
                     # median_error = statistics.median(consensus_error)
@@ -1094,10 +1154,10 @@ class VcfFilter(object):
                     if fam2_support_num == 0:
                         if fam1_support_num < 5:
                             reasons.append('LowUmiReadSupport')
-                        else:
-                            judge = self.pass_seq_error(r, self.tumor, mean_error, alpha=alpha)
-                            if not judge[0]:
-                                reasons.append('BackgroundNoise')
+                    # 根据umi统计得到的mean_error再过滤一次
+                    judge = self.pass_seq_error(r, self.tumor, mean_error, alpha=alpha)
+                    if not judge[0]:
+                        reasons.append('BackgroundNoise')
 
             # 更新filter的内容和输出结果
             if reasons:
