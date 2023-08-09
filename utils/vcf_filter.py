@@ -70,7 +70,11 @@ import pysam
 import scipy.stats as stats
 import statistics
 from collections import Counter
+from pysam import VariantFile, VariantHeader, VariantRecord
+from pysam import FastaFile
+from pysam import AlignmentFile
 from stat_3bases_error import estimate_context_seq_error
+__author__ = 'gdq'
 """
 要求vcf每一行只包含一个突变，这个可以通过bcftools norm 快速实现
 变异类型的分类
@@ -78,6 +82,247 @@ https://www.ebi.ac.uk/training-beta/online/courses/human-genetic-variation-intro
 
 考虑MSI的识别, 这样可以过滤MSI突变
 """
+
+
+class ValidateMutationByBam(object):
+    def __init__(self, bam_file, fasta_file=None):
+        self.bam = AlignmentFile(bam_file)
+        self.genome = FastaFile(fasta_file) if fasta_file else None
+
+    def get_pileup_column_tags(self, pileup_column, tag_name='cD'):
+        tags = []
+        for pileup_read in pileup_column.pileups:
+            tag = pileup_read.alignment.get_tag(tag_name)
+            tags.append(tag)
+        return tags
+
+    def get_pileup_column_cigars(self, pileup_column):
+        tags = []
+        for pileup_read in pileup_column.pileups:
+            tag = pileup_read.alignment.cigarstring
+            tags.append(tag)
+        return tags
+
+    def get_snp_support_reads(self, contig, start, alt, min_bq=10, ignore_overlaps=False):
+        pileup_columns = self.bam.pileup(
+            contig, start, start + 1,
+            stepper='samtools',
+            truncate=True,
+            min_base_quality=min_bq,
+            ignore_orphans=False,
+            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
+            max_depth=300000,
+            fastafile=self.genome,
+            # flag_filter=4,
+        )
+        support_reads = set()
+        for col in pileup_columns:
+            for base, read in zip(
+                    # 如不加add_indels参数，那么将无法知晓插入的碱基序列
+                    col.get_query_sequences(),
+                    col.get_query_names(),
+            ):
+                if base == alt:
+                    support_reads.add(read)
+        return support_reads
+
+    def get_insert_support_reads(self, contig, start, alt, min_bq=10, ignore_overlaps=False):
+        cols = self.bam.pileup(
+            contig, start, start + 1,
+            stepper='samtools',
+            truncate=True,
+            min_base_quality=min_bq,
+            ignore_orphans=False,
+            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
+            max_depth=300000,
+            fastafile=self.genome,
+            # flag_require=read_type,
+            # flag_filter=4,
+        )
+        support_reads = set()
+        expected_insert = alt.upper()
+        for col in cols:
+            for base, read in zip(
+                    # 如不加add_indels参数，那么将无法知晓插入的碱基序列
+                    col.get_query_sequences(add_indels=True),
+                    col.get_query_names(),
+            ):
+                if '+' in base:
+                    # such as 'G+2AT', +号前面是参考序列
+                    insertion = re.sub(r'\+\d+', '', base).upper()
+                    # 暂时几乎不考虑insertion恰巧出现在read的两端且不包含完整的insertion
+                    mismatch_allowed = round(len(expected_insert) * 0.15)
+                    mismatched_num = sum(x != y for x, y in zip(expected_insert, insertion))
+                    if mismatched_num <= mismatch_allowed:
+                        support_reads.add(read)
+        return support_reads
+
+    def get_del_support_reads(self, contig, start, del_len, min_bq=10, ignore_overlaps=False):
+        cols = self.bam.pileup(
+            contig, start, start + 1,
+            stepper='samtools',
+            truncate=True,
+            min_base_quality=min_bq,
+            ignore_orphans=False,
+            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
+            max_depth=300000,
+            fastafile=self.genome,
+            # flag_filter=4,
+        )
+        support_reads = set()
+        for col in cols:
+            for pileup_read in col.pileups:
+                if -pileup_read.indel == del_len:
+                    support_reads.add(pileup_read.alignment.query_name)
+        return support_reads
+
+    def get_substitution_support_reads(self, contig, start, alt, min_bq=10, ignore_overlaps=False):
+        # 该函数可以被get_complex_support_reads替代
+        cols = self.bam.pileup(
+            contig, start, start + 1,
+            stepper='samtools',
+            truncate=True,
+            min_base_quality=min_bq,
+            ignore_orphans=False,
+            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
+            max_depth=300000,
+            fastafile=self.genome,
+            # flag_filter=4,
+        )
+        support_reads = list()
+        for idx, col in enumerate(cols):
+            for base, read in zip(
+                    # 如不加add_indels参数，那么将无法知晓插入的碱基序列
+                    col.get_query_sequences(add_indels=True),
+                    col.get_query_names(),
+            ):
+                if base == alt[idx]:
+                    support_reads.append(read)
+        # 如果一个read匹配到的次数等于alt的长度，则认为该read支持alt
+        count = Counter(support_reads)
+        alt_length = len(alt)
+        support_reads = set(x for x, y in count.items() if y == alt_length)
+        return support_reads
+
+    def get_complex_support_reads(self, mut, min_bq=10, ignore_overlaps=False):
+        """
+        思路：提取vcf中突变起始位置的前一个碱基对应的比对信息，分析每条比对到该位置的read序列是否支持alt
+        当突变是AAA->A这种del形式时，上面的思路不可行, 因为没有突变的read也将符合程序的判定，如下突变就是个典型案例
+        12      49444957        .       ACTGGGGGGACAGGTGTGATTCCTCAGGTTGGGGGGACAAGCATGGCTCCTCAGGCACAGGAGACAGGTGCGGCTCCTCAGT      A
+        当突变时ATC->G或ATC->GC这种complex形式时，上述思路可行。
+        注意：上述思路并非严谨的寻找支持reads，还是以"ATC->G或ATC->GC"为例，容易想到支持”ATC->GC”或“AT->G"的read同样也支持"ATC->G"
+        为增加严谨性：
+        1. 假设alt后的3个碱基一定是和reference匹配的
+        2. 对于complex突变，可以理解为是：删除ref，加入alt, 假设ref是ATC，alt是GT，ref前后是X，那么突变的read应该是XGTX
+        3. 取X的长度为3
+        """
+        contig, start = mut.contig, mut.start
+        ref, alt = mut.ref, mut.alts[0]
+        # mut_type = get_mutation_type(mut)
+        cols = self.bam.pileup(
+            # 提取ref的前一个碱基对应的比对信息
+            contig, start - 1, start,
+            stepper='samtools',
+            truncate=True,
+            min_base_quality=min_bq,
+            ignore_orphans=False,
+            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
+            max_depth=300000,
+            fastafile=self.genome,
+        )
+        support_reads = set()
+        # 提取删除ref后的3个参考碱基, 然后将alt序列与之拼接，得到的应该是突变后的真实read信息
+        # 注意如果遇到串联重复序列，该方法将无效
+        expected_seq_after = self.genome.fetch(contig, start + len(ref), start + len(ref) + 3)
+        expected_seq_before = self.genome.fetch(contig, start - 3, start)
+        #
+        for col in cols:
+            for pileup_read in col.pileups:
+                query_seq = pileup_read.alignment.query_sequence
+                query_pos = pileup_read.query_position
+                if query_pos is not None:
+                    # 我们期望该位置下一位|mismatch|insertion|deletion|
+                    # 提取真实read信息： 期望是（3个和参考一致的碱基+可能的插入序列+3个和参考一致的碱基） | 6个和参考一致的碱基
+                    if query_pos >= 2:
+                        back_extend = 3
+                    elif query_pos == 1:
+                        back_extend = 2
+                    else:
+                        back_extend = 1
+
+                    if query_pos + len(alt) + 4 <= len(query_seq) - 3:
+                        forward_extend = 3
+                    elif query_pos + len(alt) + 4 == len(query_seq) - 2:
+                        forward_extend = 2
+                    elif query_pos + len(alt) + 4 == len(query_seq) - 1:
+                        forward_extend = 1
+                    else:
+                        forward_extend = 0
+
+                    real_seq = query_seq[query_pos + 1 - back_extend:query_pos + 1 + len(alt) + 3]
+                    # print("xxx", contig, start, real_seq, alt, expected_seq)
+                    if real_seq == expected_seq_before.upper()[-back_extend:] + alt + expected_seq_after.upper()[:forward_extend]:
+                        support_reads.add(pileup_read.alignment.query_name)
+                        # print(query_seq, query_pos, expected_seq_before, ref+'>'+alt, expected_seq_after)
+        return support_reads
+
+    def get_all_read_tag_dict(self, mut, min_bq=10, tag_name='cD', ignore_overlaps=False):
+        pileup_columns = self.bam.pileup(
+            mut.contig, mut.start, mut.start + len(mut.alts[0]),
+            stepper='samtools',
+            truncate=True,
+            min_base_quality=min_bq,
+            ignore_orphans=False,
+            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
+            max_depth=300000,
+            fastafile=self.genome,
+            # flag_filter=4,
+        )
+        result = dict()
+        for col in pileup_columns:
+            for pileup_read in col.pileups:
+                result[pileup_read.alignment.query_name] = pileup_read.alignment.get_tag(tag_name)
+        return result
+
+    def get_mutation_type(self, mutation:VariantRecord):
+        if mutation.alts is None:
+            return None
+        if len(mutation.ref) == len(mutation.alts[0]) == 1:
+            return "snp"
+        if len(mutation.ref) == len(mutation.alts[0]) > 1:
+            return "substitution"
+        if len(mutation.ref) > len(mutation.alts[0]) and mutation.ref.startswith(mutation.alts[0]):
+            return 'deletion'
+        elif len(mutation.ref) < len(mutation.alts[0]) and mutation.alts[0].startswith(mutation.ref):
+            return 'insertion'
+        else:
+            return 'complex'
+
+    def get_mut_support_reads(self, mut: VariantRecord):
+        # 提取同时支持2个突变的read信息
+        supports = None
+        mut_type= self.get_mutation_type(mut)
+        if mut_type == 'snp':
+            supports = self.get_snp_support_reads(mut.contig, mut.start, mut.alts[0])
+        elif mut_type == 'substitution':
+            supports = self.get_substitution_support_reads(mut.contig, mut.start, mut.alts[0])
+            # supports = get_complex_support_reads(bam, mut, fasta_file=fasta)
+        elif mut_type == 'deletion':
+            del_size = len(mut.ref) - len(mut.alts[0])
+            supports = self.get_del_support_reads(mut.contig, mut.start, del_size)
+        elif mut_type == 'insertion':
+            supports = self.get_insert_support_reads(mut.contig, mut.start, mut.alts[0])
+        elif mut_type == 'complex':
+            supports = self.get_complex_support_reads(mut)
+        else:
+            raise Exception(f"{mut_type} is unexpected")
+        return supports
 
 
 class VcfFilter(object):
@@ -645,7 +890,7 @@ class VcfFilter(object):
         df.to_csv(out, sep='\t', index=False)
         df.to_excel(out[:-4]+'.xlsx', index=False)
 
-    def filtering(self, genome, ref_dict=None, out_prefix=None, min_error_rate=None, error_rate_file=None, min_af=0.001, min_depth=5, alpha=0.05):
+    def filtering(self, genome, bam=None, ref_dict=None, out_prefix=None, min_error_rate=None, error_rate_file=None, min_af=0.001, min_depth=5, alpha=0.05):
         # 先给vcf的header添加新字段定义才能往添加新的字段信息
         self.vcf.header.info.add(
             'LOD', number=5, type='Float',
@@ -660,6 +905,7 @@ class VcfFilter(object):
         self.vcf.header.filters.add('HighPopFreq', number=None, type=None, description='Population frequency')
         self.vcf.header.filters.add('LowAF', number=None, type=None, description=f'AF smaller than {min_af}')
         self.vcf.header.filters.add('MSIFilter', number=None, type=None, description=f'likely PCR Slippage in MSI region')
+        self.vcf.header.filters.add('LowUmiReadSupport', number=None, type=None, description=f'low UMI read supporting')
         if 'Bias' not in self.vcf.header.filters:
             self.vcf.header.filters.add('Bias', number=None, type=None, description="severe strand bias")
         if self.vcf.header.contigs.__len__() < 1:
@@ -670,6 +916,12 @@ class VcfFilter(object):
         out_vcf_name = out_prefix+'.final.vcf'
         vcf_out = pysam.VariantFile(out_vcf_name, "w", header=self.vcf.header.copy())
         vcf_discard = pysam.VariantFile(out_prefix+'.discarded.vcf', "w", header=self.vcf.header.copy())
+
+        # 读取bam信息
+        if bam:
+            bamer = ValidateMutationByBam(bam_file=bam, fasta_file=genome)
+        else:
+            bamer = None
 
         # 如果仅仅提供了一个全局的最低错误率信息
         key_left = key_right = 0
@@ -702,14 +954,22 @@ class VcfFilter(object):
             if '<' in r.alts[0]:
                 # 跳过vardict中输出的特殊突变
                 print('skip special variant:', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
+                vcf_discard.write(r)
                 continue
 
             if 'N' in r.alts[0]:
                 print('skip "N" containing variant:', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
+                vcf_discard.write(r)
                 continue
 
             if r.info['DP'] < min_depth:
                 print(f'skip variant in shallow depth({r.info["DP"]}):', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
+                vcf_discard.write(r)
+                continue
+
+            if len(r.ref) > 51 or len(r.alts[0]) > 51:
+                print(f'skip long mutation ({r.info["DP"]}):', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
+                vcf_discard.write(r)
                 continue
 
             # 过滤VCF中原本没有被判定通过的突变
@@ -816,6 +1076,18 @@ class VcfFilter(object):
             if not judge5:
                 reasons.append('MSIFilter')
 
+            # 6. 获取突变支持信息
+            if bamer and not reasons:
+                support_reads = bamer.get_mut_support_reads(r)
+                tag_dict = bamer.get_all_read_tag_dict(r, tag_name='cD')
+                umi_fam_size_of_support_reads = []
+                fam1_support_num = sum(tag_dict[x] == 1 for x in support_reads)
+                fam2_support_num = len(support_reads) - fam1_support_num
+                fam1_all_num = sum(tag_dict[x] == 1 for x in tag_dict)
+                fam2_all_num = len(tag_dict) - fam1_all_num
+                if fam2_support_num == 0 and fam1_support_num < 5:
+                    reasons.append('LowUmiReadSupport')
+
             # 更新filter的内容和输出结果
             if reasons:
                 filter_reasons.append(tuple(reasons))
@@ -830,6 +1102,7 @@ class VcfFilter(object):
         vcf_discard.close()
         vcf_loh.close()
         gn.close()
+        bamer.bam.close()
         self.write_out_txt(out_vcf_name, out_prefix+'.final.txt')
         print('median LOD:', statistics.median(lod_list), file=log_file)
         print('min LOD:', min(lod_list), file=log_file)
@@ -850,6 +1123,7 @@ def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, 
     vcf = VcfFilter(vcf_path=vcf, tumor=tumor_name, normal_vcf=normal_vcf, gene_primer_used=False)
     vcf.filtering(
         genome=genome,
+        bam=bam,
         ref_dict=ref_dict,
         out_prefix=out_prefix,
         min_error_rate=min_error_rate,
