@@ -545,7 +545,7 @@ def Mutect2(prefix):
     cmd.args['base-quality-score-threshold'] = Argument(prefix='--base-quality-score-threshold ', default=15, desc='Base qualities below this threshold will be reduced to the minimum (6)')
     cmd.args['pruning-lod-threshold'] = Argument(prefix='--pruning-lod-threshold ', default=1.3, desc='Ln likelihood ratio threshold for adaptive pruning algorithm')
     cmd.args['disable-read-filter'] = Argument(prefix='--disable-read-filter ', default=['GoodCigarReadFilter', 'MappingQualityReadFilter', 'NonChimericOriginalAlignmentReadFilter'], multi_times=True, desc='Read filters to be disabled before analysis')
-    cmd.args['disable-tool-default-read-filters'] = Argument(prefix='--disable-tool-default-read-filters ', default='true', desc='Disable all tool default read filters (WARNING: many tools will not function correctlywithout their default read filters on)')
+    cmd.args['disable-tool-default-read-filters'] = Argument(prefix='--disable-tool-default-read-filters ', default='false', desc='Disable all tool default read filters (WARNING: many tools will not function correctlywithout their default read filters on)')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.vcf.gz', desc='output vcf')
     cmd.args['bam-output'] = Argument(prefix='--bam-output ', level='optional', desc='output bam file')
     cmd.args['f1r2-tar-gz'] = Argument(prefix='--f1r2-tar-gz ', type='infile', default=f'{prefix}.f1r2.tar.gz', desc='If specified, collect F1R2 counts and output files into this tar.gz file')
@@ -647,7 +647,7 @@ def stat_context_seq_error():
     cmd.args['center_size'] = Argument(prefix='-center_size ', default=(1, 1), array=True, desc='extending size around ref base during background noise estimating')
     cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', desc='output file prefix')
     cmd.outputs['stat_per_site'] = Output(value='{out_prefix}.each_site.txt', report=True)
-    cmd.outputs['context_error_rate'] = Output(value='{out_prefix}.centered11_site.json', report=True)
+    cmd.outputs['context_error_rate'] = Output(value='{out_prefix}.centered*_site.json', report=True)
     return cmd
 
 
@@ -793,6 +793,27 @@ def VarNet():
     return cmd
 
 
+def mutscan():
+    cmd = Command()
+    cmd.meta.name = 'mutscan'
+    cmd.meta.source = 'https://github.com/OpenGene/MutScan'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'mutscan'
+    cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 file name')
+    cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 file name')
+    cmd.args['mutation'] = Argument(prefix='-m ', type='infile', desc='mutation file name, can be a CSV format or a VCF format')
+    cmd.args['ref'] = Argument(prefix='--ref ', type='infile', desc='reference fasta file name (only needed when mutation file is a VCF)')
+    cmd.args['html'] = Argument(prefix='--html ', default='mutscan.html', desc='filename of html report')
+    cmd.args['json'] = Argument(prefix='--json ', default='mutscan.json', desc='filename of JSON report')
+    cmd.args['threads'] = Argument(prefix='--thread ', default=4, desc='worker thread number')
+    cmd.args['support'] = Argument(prefix='--support ', default=2, desc='min read support for reporting a mutation')
+    cmd.outputs['json'] = Output(value='{json}')
+    cmd.outputs['html'] = Output(value='{html}')
+    return cmd
+
+
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'ctDNA'
@@ -834,7 +855,10 @@ def pipeline():
     以上参数，目前的得到的结果是1%以下的突变都没有检测出来
     根据参考文献考虑调整参数 disable-read-filter MateOnSameContigOrNoMappedMateReadFilter （https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9705725/）
     max_alt_alleles_in_normal_count max_alt_allele_in_normal_fraction	https://best-practices-for-processing-hts-data.readthedocs.io/en/latest/mutect2_pitfalls.html
+    以上参数的调整，没有达到预期效果
     vardict 过滤: https://github.com/LeiHaoa/DeepFilter： 
+    
+    
     """
     wf.meta.version = "1.0"
 
@@ -935,6 +959,7 @@ def pipeline():
     bam_task_dict = dict()
     bamdst_task_dict = dict()
     error_stat_task_dict = dict()
+    sam2fastq_task_dict = dict()
     for sample, reads in fastq_info.items():
         # 跳过不需要分析的样本
         if sample in wf.args.exclude_samples:
@@ -1015,6 +1040,7 @@ def pipeline():
         args['read2'].value = sample + '.consensus.R2.fq.gz'
         # 带信息到read header
         args['tags'].value = ['cD', 'cE', 'cM']
+        sam2fastq_task_dict[sample] = sam2fastq_task
 
         map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag=sample, depends=[sam2fastq_task])
         args['read1'].value = sam2fastq_task.outputs['read1']
@@ -1189,6 +1215,14 @@ def pipeline():
         args['out_prefix'].value = tumor
         args['tumor_name'].value = tumor
         vardict_filter_task_ids.append(filter_task.task_id)
+
+        mutscan_task, args = wf.add_task(mutscan(), tag='vardict-'+tumor, depends=[filter_task])
+        args['read1'].value = sam2fastq_task_dict[tumor].outputs['read1']
+        args['read2'].value = sam2fastq_task_dict[tumor].outputs['read2']
+        args['ref'].value = wf.topvars['ref']
+        args['mutation'].value = filter_task.outputs['final_vcf']
+        args['html'].value = tumor + '.mutscan.html'
+        args['json'].value = tumor + '.mutscan.json'
         # ----end of varidict-----------------------
 
         # ---VarNet----
