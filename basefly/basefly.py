@@ -708,7 +708,9 @@ class Workflow:
                         src_dir = os.path.join(self.tasks[out.task_id].wkdir, out.value)
                     else:
                         continue
-                src_dir = glob.glob(src_dir)[0]
+                scan_dir = glob.glob(src_dir)
+                if scan_dir:
+                    src_dir = scan_dir[0]
                 if os.path.exists(src_dir):
                     targets = [src_dir]
                     parent_dir = self.tasks[out.task_id].wkdir
