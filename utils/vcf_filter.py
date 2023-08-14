@@ -62,17 +62,18 @@ N = ( ( Z/(1/P/(1-P))**0.5 + Z/(1/L/(1-L))**0.5 ) / (L-P) )**2 = 1412.53
 3. 根据error_rate_upper 和 min_alt_depth同时进行突变过滤
 
 """
+import math
 import os
 import re
 import json
+import logging
 import pandas as pd
-import pysam
 import scipy.stats as stats
 import statistics
 from collections import Counter
-from pysam import VariantFile, VariantHeader, VariantRecord
-from pysam import FastaFile
-from pysam import AlignmentFile
+import pysam
+from pysam import FastaFile, VariantFile, AlignmentFile, VariantHeader, VariantRecord
+from Bio import Align
 from stat_3bases_error import estimate_context_seq_error
 __author__ = 'gdq'
 """
@@ -84,10 +85,77 @@ https://www.ebi.ac.uk/training-beta/online/courses/human-genetic-variation-intro
 """
 
 
+def set_logger(name='log.info', logger_id='x'):
+    logger = logging.getLogger(logger_id)
+    fh = logging.FileHandler(name, mode='w+')
+    logger.addHandler(fh)
+    logger.setLevel(logging.INFO)
+    return logger
+
+
+def global_pair_seq_align(target_pos=55242465, target='GGAATTAAGAGAAG', query='GGAAC'):
+    """
+    EGFR突变的例子：
+    #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+    7	55242465	.	GGAATTAAGA	G	.	.	.
+    7	55242478	.	G	C	.	.	.
+    上述等同下面的突变
+    #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
+    7	55242469	.	TTAAGAGAAG	C	.	.	.
+    ---------------------------------
+    Score = 7.5:
+    target            0 GGAA-TTAAGAGAAG 14
+                      0 ||||----------- 15
+    query             0 GGAAC----------  5
+    """
+    aligner = Align.PairwiseAligner()
+    # aligner.mode = 'global'
+    # aligner.match_score = 2  # 2
+    # aligner.mismatch_score = -1  # -3
+    # aligner.open_gap_score = -0.5  # -5
+    # aligner.extend_gap_score = -0.1  # -2
+    # aligner.target_end_gap_score = 0.0
+    # aligner.query_end_gap_score = 0.0
+    alignments = aligner.align(target.upper(), query.upper())
+    # for alignment in alignments:
+    #     print("Score = %.1f:" % alignment.score)
+    #     print(alignment)
+    # 仅仅取第一个比对结果进行判断
+    alignment = alignments[0]
+    # print(alignment)
+    target_aligned_idx, query_aligned_idx = alignment.aligned
+    map_start_from_0 = (target_aligned_idx[0][0] == 0) and (query_aligned_idx[0][0] == 0)
+    aligned_section_number = len(target_aligned_idx)
+    second_align_is_1bp = False
+    if aligned_section_number == 2:
+        target_align_2_len = target_aligned_idx[1][1] - target_aligned_idx[1][0]
+        query_align_2_len = query_aligned_idx[1][1] - query_aligned_idx[1][0]
+        second_align_is_1bp = target_align_2_len + query_align_2_len <= 2
+
+    if (aligned_section_number == 1 and map_start_from_0) or (aligned_section_number == 2 and map_start_from_0 and second_align_is_1bp):
+        # alt和ref对比，从最左边开始计算，有且仅有一段完全匹配的区域
+        ref = alignment.target[target_aligned_idx[0][1]:]
+        alt = alignment.query[query_aligned_idx[0][1]:]
+        new_pos = target_pos + target_aligned_idx[0][1]
+        # print(target_aligned_idx)
+        # print(query_aligned_idx)
+        if alt == "" or ref == "":
+            # print(alignment)
+            # print("说明两个突变可以合并为一个缺失或插入的突变，此时需修改ref和alt")
+            ref = alignment.target[target_aligned_idx[0][1] - 1:]
+            alt = alignment.query[query_aligned_idx[0][1] - 1:]
+            new_pos = target_pos + target_aligned_idx[0][1] - 1
+        return new_pos, ref, alt, alignment
+    else:
+        # print(alignment)
+        # print('比对结果存在超过2段以上的匹配，因此不建议合并突变')
+        return None, None, None, alignment
+
+
 class ValidateMutationByBam(object):
-    def __init__(self, bam_file, fasta_file=None):
+    def __init__(self, bam_file, genome_file):
         self.bam = AlignmentFile(bam_file)
-        self.genome = FastaFile(fasta_file) if fasta_file else None
+        self.genome = FastaFile(genome_file)
 
     def get_pileup_column_tags(self, pileup_column, tag_name='cD'):
         tags = []
@@ -103,61 +171,223 @@ class ValidateMutationByBam(object):
             tags.append(tag)
         return tags
 
-    def get_snp_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
+    @staticmethod
+    def qual_diff_test(alt_reads:set, qual_dict:dict, qual_dict2:dict=None):
+        if qual_dict2 is None:
+            alt_quals = [qual_dict[r] for r in alt_reads if r in qual_dict]
+            ref_quals = [qual_dict[r] for r in (qual_dict.keys() - alt_reads)]
+        else:
+            # qual_dict2是旁边位置信息，因此需要取交集，进行碱基质量配对比较分析
+            alt_reads = alt_reads & qual_dict.keys() & qual_dict2.keys()
+            alt_reads = list(alt_reads)
+            alt_quals = [qual_dict[r] for r in alt_reads]
+            ref_quals = [qual_dict2[r] for r in alt_reads]
+
+        alt_quals = [x for x in alt_quals if x is not None]
+        ref_quals = [x for x in ref_quals if x is not None]
+        if len(alt_quals) > 8 and len(ref_quals) > 8:
+            # u, pvalue = stats.mannwhitneyu(alt_quals, ref_quals, alternative='less')
+            u, pvalue = stats.ranksums(alt_quals, ref_quals)
+            # u, pvalue = stats.ttest_ind(alt_quals, ref_quals)
+        elif len(alt_quals) >= 3 and len(alt_quals) >= 3:
+            if qual_dict2:
+                # 配对检验
+                s, pvalue = stats.ttest_rel(alt_quals, ref_quals)
+            else:
+                # 非配对检验
+                s, pvalue = stats.ttest_ind(alt_quals, ref_quals)
+        else:
+            # 统计意义不足
+            pvalue = 1.0
+        # 对为nan的pvalue值进行转换
+        if pvalue != pvalue:
+            pvalue = 1.0
+        return pvalue, alt_quals, ref_quals
+
+    @staticmethod
+    def consensus_seqs(seqs):
+        # 对支持突变的reads的突变中心进行consensus
+        if len(seqs) == 1:
+            return seqs[0]
+        else:
+            # ''.join(Counter(bases).most_common(1)[0][0] for bases in zip(*seqs))
+            # 考虑多个分支
+            total = len(seqs)
+            consensus = ['']
+            for bases in zip(*seqs):
+                two_bases = Counter(bases).most_common()
+                base1, freq1 = two_bases[0]
+                if len(two_bases) > 1:
+                    base2, freq2 = two_bases[1]
+                else:
+                    base2, freq2 = '', 0
+                tmp_consensus = []
+                for each in consensus:
+                    tmp_consensus.append(each + base1)
+                    if freq2 / total >= 0.4:
+                        tmp_consensus.append(each+base2)
+                consensus = tmp_consensus
+            return consensus
+
+    def get_snp_support_reads(self, contig, start, ref, alt, tag_names:tuple=tuple(), min_bq=13, logger=None):
         pileup_columns = self.bam.pileup(
-            contig, start, start + 1,
+            contig, start-1, start + 2,  # 提取左右碱基，方便后续突变碱基与左右碱基质量的比较
             stepper='samtools',
             truncate=True,
             min_base_quality=min_bq,
             ignore_orphans=False,
-            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            ignore_overlaps=True,  # set 为True则意味着取质量高的base作为代表
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
             fastafile=self.genome,
-            # flag_filter=4,
+            # flag_filter: The default is BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP.
         )
         support_reads = set()
         all_read_tag_dict = dict()
-        for col in pileup_columns:
-            # for base, read in zip(
-            #         # 如不加add_indels参数，那么将无法知晓插入的碱基序列
-            #         col.get_query_sequences(),
-            #         col.get_query_names(),
-            # ):
-            #     if base.lower() == alt.lower():
-            #         support_reads.add(read)
-            for pileup_read in col.pileups:
-                target_tag_dict = dict()
-                read_name = pileup_read.alignment.query_name
-                query_seq = pileup_read.alignment.query_sequence
-                query_pos = pileup_read.query_position
-                if query_pos is not None:
-                    if query_seq[query_pos].upper() == alt.upper():
-                        support_reads.add(read_name)
-                if read_name not in all_read_tag_dict:
-                    for tag in tag_names:
-                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
-                    # 不关心query_name是否重复，以最后一个为准
-                    all_read_tag_dict[read_name] = target_tag_dict
-        return support_reads, all_read_tag_dict
+        support_read_seqs = []
+        base_qual_dict = dict()
+        left_base_qual_dict = dict()
+        mid_base_qual_dict = dict()
+        right_base_qual_dict = dict()
+        query_pos_dict = dict()
+        map_qual_dict = dict()
+        # init value
+        mean_alt_bq = None
+        mean_left_bq = None
+        mean_right_bq = None
+        mean_alt_pos = None
+        alt_pos_pstd = None
+        ref_pos_std = None,
+        mean_alt_mq = None,
+        bq_pvalue = None
+        left_bq_pvalue = None
+        right_bq_pvalue = None
+        mq_pvalue = None
+        pos_pvalue = None
+        mean_ref_bq = None
+        mean_ref_mq = None
+        mean_ref_pos = None
+        # init value end
+        for idx, col in enumerate(pileup_columns):
+            base_quals = col.get_query_qualities()
+            query_names = col.get_query_names()
+            base_qual_dict = dict(zip(query_names, base_quals))
+            if idx == 0:
+                left_base_qual_dict = base_qual_dict
+            elif idx == 2:
+                right_base_qual_dict = base_qual_dict
+            else:
+                map_quals = col.get_mapping_qualities()
+                map_qual_dict = dict(zip(query_names, map_quals))
+                mid_base_qual_dict = base_qual_dict
+                # 获取支持变异的reads/序列/所有read的相关tag信息
+                for pileup_read in col.pileups:
+                    read_name = pileup_read.alignment.query_name
+                    query_seq = pileup_read.alignment.query_sequence
+                    query_pos = pileup_read.query_position
+                    query_len = pileup_read.alignment.query_length
+                    if query_pos is not None:
+                        query_pos_dict[read_name] = min(query_pos, query_len - query_pos)
+                        if query_seq[query_pos].upper() == alt:
+                            # 由于未知原因，这里找到的read_name不一定在前面的query_names中
+                            support_reads.add(read_name)
+                            # 提取围绕SNV位点前后5个碱基，用于检查支持突变的read之间的一致性
+                            if (query_pos >= 5) and (query_len > query_pos+5):
+                                support_read_seqs.append(query_seq[query_pos-5:query_pos+5])
+                    # 由于要获取下面的tag，才不得不对pileups进行循环
+                    if read_name not in all_read_tag_dict:
+                        target_tag_dict = dict()
+                        for tag in tag_names:
+                            target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
+                        all_read_tag_dict[read_name] = target_tag_dict
+        # 开始统计分析
+        if support_reads:
+            # try:
+            # 检验支持alt的碱基质量和不支持alt的碱基质量差异
+            bq_pvalue, alt_bqs, ref_bqs = self.qual_diff_test(support_reads, mid_base_qual_dict)
+            # 检验支持alt的read质量和不支持alt的read的比对质量差异
+            mq_pvalue, alt_mqs, ref_mqs = self.qual_diff_test(support_reads, map_qual_dict)
+            # 检验支持alt的碱基位置和不支持alt的碱基位置的差异
+            pos_pvalue, alt_pos, ref_pos = self.qual_diff_test(support_reads, query_pos_dict)
+            mean_alt_bq = statistics.mean(alt_bqs) if alt_mqs else None
+            mean_ref_bq = statistics.mean(ref_bqs) if ref_bqs else None
+            mean_alt_mq = statistics.mean(alt_mqs) if alt_mqs else None
+            mean_ref_mq = statistics.mean(ref_mqs) if ref_mqs else None
+            mean_alt_pos = statistics.median(alt_pos) if alt_pos else None
+            mean_ref_pos = statistics.median(ref_pos) if ref_pos else None
+            alt_pos_pstd = statistics.pstdev(alt_pos) if alt_pos else None
+            ref_pos_std = statistics.pstdev(ref_pos) if ref_pos else None
+            # except Exception as e:
+            #     print(e)
+            #     raise Exception(len(alt_bqs), len(alt_mqs), len(alt_pos), len(ref_bqs),
+            #                     len(ref_mqs), len(ref_pos), len(base_qual_dict),
+            #                     len(map_qual_dict), len(query_pos_dict))
 
-    def get_insert_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
+        if left_base_qual_dict and support_reads:
+            left_bq_pvalue, _, left_bqs = self.qual_diff_test(support_reads, mid_base_qual_dict, left_base_qual_dict)
+            mean_left_bq = statistics.mean(left_bqs)
+
+        if right_base_qual_dict and support_reads:
+            right_bq_pvalue, _, right_bqs = self.qual_diff_test(support_reads, mid_base_qual_dict, right_base_qual_dict)
+            mean_right_bq = statistics.mean(right_bqs)
+        # 判断snv的质量
+        good_snp = True
+        if bq_pvalue and left_bq_pvalue and right_bq_pvalue:
+            reasonable_pos = mean_alt_pos >= 5
+            small_bq_diff = (bq_pvalue > 0.001) and (left_bq_pvalue > 0.05) and (right_bq_pvalue > 0.05)
+            small_mq_diff = (mq_pvalue > 0.001) if mq_pvalue else True
+            good_alt_bq = mean_alt_bq > 28
+            if not (reasonable_pos and small_bq_diff and small_mq_diff and good_alt_bq):
+                good_snp = False
+        all_read_tag_dict['snp_is_good'] = good_snp
+        if logger:
+            info = dict(
+                contig=contig,
+                start=start+1,
+                ref=ref,
+                alt=alt,
+                alt_dp=len(support_reads),
+                total_dp=len(base_qual_dict),
+                mean_left_bq=mean_left_bq,
+                mean_alt_bq=mean_alt_bq,
+                mean_right_bq=mean_right_bq,
+                mean_ref_bq=mean_ref_bq,
+                mean_alt_pos=mean_alt_pos,
+                mean_ref_pos=mean_ref_pos,
+                alt_pos_pstd=alt_pos_pstd,
+                ref_pos_std=ref_pos_std,
+                mean_alt_mq=mean_alt_mq,
+                mean_ref_mq=mean_ref_mq,
+                bq_pvalue=bq_pvalue,
+                left_bq_pvalue=left_bq_pvalue,
+                right_bq_pvalue=right_bq_pvalue,
+                mq_pvalue=mq_pvalue,
+                pos_pvalue=pos_pvalue,
+                good_snp=good_snp,
+            )
+            logger.info(str(info))
+        return support_reads, all_read_tag_dict, support_read_seqs
+
+    def get_insert_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, logger=None):
         cols = self.bam.pileup(
             contig, start, start + 1,
             stepper='samtools',
             truncate=True,
             min_base_quality=min_bq,
             ignore_orphans=False,
-            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            ignore_overlaps=True,  # set 为True则意味着取质量高的base作为代表
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
             fastafile=self.genome,
             # flag_require=read_type,
             # flag_filter=4,
         )
+        # 对于处于重复区域的插入，可能有多种比对形式的记录，因此我们找的证据可能偏少
         support_reads = set()
         all_read_tag_dict = dict()
         expected_insert = alt.upper()
+        alt_len = len(alt)
+        support_read_seqs = []
         for col in cols:
             for base, read in zip(
                     # 如不加add_indels参数，那么将无法知晓插入的碱基序列
@@ -176,15 +406,127 @@ class ValidateMutationByBam(object):
             for pileup_read in col.pileups:
                 target_tag_dict = dict()
                 read_name = pileup_read.alignment.query_name
+                query_seq = pileup_read.alignment.query_sequence
+                query_pos = pileup_read.query_position
+                # clip的base或许是插入的序列
+                if alt_len > 2:
+                    cigar = pileup_read.alignment.cigarstring
+                    if cigar.endswith('S'):
+                        # read右端clip的序列是insertion的起始
+                        query_alignment_end = pileup_read.alignment.query_alignment_end
+                        if expected_insert[1:].startswith(query_seq[query_alignment_end:].upper()):
+                            support_reads.add(read_name)
+                    if pileup_read.alignment.cigartuples[0][0] == 4:
+                        # read左端clip掉的序列是insertion尾部
+                        query_alignment_start = pileup_read.alignment.query_alignment_start
+                        if expected_insert.endswith(query_seq[:query_alignment_start]):
+                            support_reads.add(read_name)
                 if read_name not in all_read_tag_dict:
                     for tag in tag_names:
                         target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
                     # 不关心query_name是否重复，以最后一个为准
                     all_read_tag_dict[read_name] = target_tag_dict
+                # 提取支持突变的read的序列信息，围绕突变周围展开
+                if (query_pos is not None) and (read_name in support_reads):
+                    if (query_pos >= 4) and (len(query_seq) > query_pos+alt_len+4):
+                            target = query_seq[query_pos-4: query_pos] + query_seq[query_pos+alt_len:query_pos+alt_len+4]
+                            support_read_seqs.append(target)
 
-        return support_reads, all_read_tag_dict
+        return support_reads, all_read_tag_dict, support_read_seqs
 
-    def get_del_support_reads(self, contig, start, del_len, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
+    def get_insert_support_reads_v2(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, logger=None):
+        cols = self.bam.pileup(
+            contig, start, start + 1,
+            stepper='samtools',
+            truncate=True,
+            min_base_quality=min_bq,
+            ignore_orphans=False,
+            ignore_overlaps=True,  # set 为True则意味着取质量高的base作为代表
+            # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
+            max_depth=300000,
+            fastafile=self.genome,
+            # flag_require=read_type,
+            # flag_filter=4,
+        )
+        # 对于处于重复区域的插入，可能有多种比对形式的记录，因此我们找的证据可能偏少
+        # 我们围绕插入序列，提取出50bp，根据已经获得的证据进行consensus，作为alt参考序列
+        # 对插入位点前后50bp的区域进行read检查，如果read包含alt参考序列，则判定为突变证据
+        support_reads = set()
+        all_read_tag_dict = dict()
+        expected_insert = alt.upper()
+        alt_len = len(alt)
+        alt_centered_seqs = []
+        alt_flank_seqs = []
+        all_read_names = set()
+        for col in cols:
+            for base, read in zip(
+                    # 如不加add_indels参数，那么将无法知晓插入的碱基序列
+                    col.get_query_sequences(add_indels=True),
+                    col.get_query_names(),
+            ):
+                if '+' in base:
+                    # such as 'G+2AT', +号前面是参考序列
+                    insertion = re.sub(r'\+\d+', '', base).upper()
+                    # 暂时几乎不考虑insertion恰巧出现在read的两端且不包含完整的insertion
+                    mismatch_allowed = round(len(expected_insert) * 0.15)
+                    mismatched_num = sum(x != y for x, y in zip(expected_insert, insertion))
+                    if mismatched_num <= mismatch_allowed:
+                        support_reads.add(read)
+
+            for pileup_read in col.pileups:
+                read_name = pileup_read.alignment.query_name
+                query_seq = pileup_read.alignment.query_sequence.upper()
+                query_pos = pileup_read.query_position
+                all_read_names.add(read_name)
+                # 进一步提取可能的证据，clip的base或许是插入的序列
+                if alt_len >= 2:
+                    cigar = pileup_read.alignment.cigarstring
+                    if cigar.endswith('S'):
+                        # read右端clip的序列是insertion的起始
+                        query_alignment_end = pileup_read.alignment.query_alignment_end
+                        if expected_insert[1:].startswith(query_seq[query_alignment_end:]):
+                            support_reads.add(read_name)
+                    if pileup_read.alignment.cigartuples[0][0] == 4:
+                        # read左端clip掉的序列是insertion尾部
+                        query_alignment_start = pileup_read.alignment.query_alignment_start
+                        if expected_insert.endswith(query_seq[:query_alignment_start]):
+                            support_reads.add(read_name)
+
+                # 提取支持突变的read的序列信息，围绕突变周围展开
+                if (query_pos is not None) and (read_name in support_reads):
+                    if (query_pos >= 22) and (len(query_seq) > query_pos+alt_len+22):
+                            alt_centered_seqs.append(query_seq[query_pos-22:query_pos+alt_len+22])
+                    if (query_pos >= 5) and (len(query_seq) > query_pos+alt_len+5):
+                            flank5 = query_seq[query_pos-5: query_pos] + query_seq[query_pos+alt_len:query_pos+alt_len+5]
+                            alt_flank_seqs.append(flank5)
+
+        # 进一步捞回其他表达形式的insertion证据
+        if alt_centered_seqs:
+            # 如果插入位点附近还有1个或多个杂合碱基，那么consensus序列将只能代表其中一个
+            consenus_alt_seqs = self.consensus_seqs(alt_centered_seqs)
+            for each in self.bam.fetch(contig, start-50, start+51):
+                read_name = each.query_name
+                if read_name in support_reads:
+                    continue
+                read_seq = each.query_sequence.upper()
+                # 查看read是否包含目标序列
+                for each in consenus_alt_seqs:
+                    if each in read_seq:
+                        support_reads.add(read_name)
+                        break
+                # 提取tag信息
+                if (read_name in all_read_names) or (read_name in support_reads):
+                    target_tag_dict = dict()
+                    if read_name not in all_read_tag_dict:
+                        for tag in tag_names:
+                            target_tag_dict[tag] = each.get_tag(tag)
+                        # 不关心query_name是否重复，以最后一个为准
+                        all_read_tag_dict[read_name] = target_tag_dict
+        # 将consensus_alt_seq和参考基因组序列进行比对，能找到
+
+        return support_reads, all_read_tag_dict, alt_flank_seqs
+
+    def get_del_support_reads(self, contig, start, del_len, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True, logger=None):
         cols = self.bam.pileup(
             contig, start, start + 1,
             stepper='samtools',
@@ -197,22 +539,32 @@ class ValidateMutationByBam(object):
             fastafile=self.genome,
             # flag_filter=4,
         )
+        # 对于一个del，比对方式多种多样
+        # ref: ACCTTTATGCTG
+        # alt: ACCTTT---CTG (中间删除3个碱基）
+        # alt: ACCTTTCTG    (中间是2个替换）
+        # 不能alt的形式如何变幻，终究表示的是一个突变，也就是本质包含同一个突变的reads序列应该一致
         support_reads = set()
         all_read_tag_dict = dict()
+        support_read_seqs = []
         for col in cols:
             for pileup_read in col.pileups:
                 read_name = pileup_read.alignment.query_name
+                query_seq = pileup_read.alignment.query_sequence
+                query_pos = pileup_read.query_position_or_next
                 if -pileup_read.indel == del_len:
+                    # 由于indel的比对方式有多种，这种方法找到的del证据偏少，需要进行重新比对才能找到足够的证据，目前为未实现
                     support_reads.add(pileup_read.alignment.query_name)
+                    if (query_pos >= 4) and (len(query_seq) > query_pos + 4):
+                        support_read_seqs.append(query_seq[query_pos - 4:query_pos + 4])
                 target_tag_dict = dict()
                 if read_name not in all_read_tag_dict:
                     for tag in tag_names:
                         target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
-                    # 不关心query_name是否重复，以最后一个为准
                     all_read_tag_dict[read_name] = target_tag_dict
-        return support_reads, all_read_tag_dict
+        return support_reads, all_read_tag_dict, support_read_seqs
 
-    def get_substitution_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
+    def get_substitution_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True, logger=None):
         # 该函数可以被get_complex_support_reads替代
         cols = self.bam.pileup(
             contig, start, start + 1,
@@ -257,7 +609,7 @@ class ValidateMutationByBam(object):
         support_reads = set(x for x, y in count.items() if y == alt_length)
         return support_reads, all_read_tag_dict
 
-    def get_complex_support_reads(self, contig, start, ref, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True):
+    def get_complex_support_reads(self, contig, start, ref, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True, logger=None):
         """
         思路：分析每条能够比对到突变起始位置的read序列是否支持alt
         1. 假设alt前后的3个碱基一定是和reference匹配的
@@ -283,6 +635,8 @@ class ValidateMutationByBam(object):
         all_read_tag_dict = dict()
         expected_left = self.genome.fetch(contig, start - 3, start)
         expected_right = self.genome.fetch(contig, start + len(ref), start + len(ref) + 3)
+        alt_len = len(alt)
+        support_read_seqs = []
         for col in cols:
             for pileup_read in col.pileups:
                 query_seq = pileup_read.alignment.query_sequence
@@ -317,8 +671,13 @@ class ValidateMutationByBam(object):
                     # print("xxx", contig, start, real_seq, alt, expected_seq)
                     if real_seq.lower() == expected_seq.lower():
                         support_reads.add(read_name)
+                        # 提取支持突变的read的序列信息，围绕突变周围展开
+                        if (query_pos >= 4) and (len(query_seq) > query_pos + alt_len + 4):
+                            target = query_seq[query_pos - 4: query_pos] + query_seq[query_pos + alt_len:query_pos + alt_len + 4]
+                            support_read_seqs.append(target)
+
                         # print(query_seq, query_pos, expected_seq_before, ref+'>'+alt, expected_seq_after)
-        return support_reads, all_read_tag_dict
+        return support_reads, all_read_tag_dict, support_read_seqs
 
     def get_all_read_tag_dict(self, mut, min_bq=13, tag_names=('cD',), ignore_overlaps=True):
         pileup_columns = self.bam.pileup(
@@ -345,7 +704,7 @@ class ValidateMutationByBam(object):
                     result[read_name] = target_tag_dict
         return result
 
-    def get_mutation_type(self, mutation:VariantRecord):
+    def _get_mutation_type(self, mutation:VariantRecord):
         if mutation.alts is None:
             return None
         if len(mutation.ref) == len(mutation.alts[0]) == 1:
@@ -359,28 +718,275 @@ class ValidateMutationByBam(object):
         else:
             return 'complex'
 
-    def get_mut_support_reads(self, mut: VariantRecord, tag_names:tuple=tuple()):
-        mut_type= self.get_mutation_type(mut)
+    def get_mut_support_reads(self, mut: VariantRecord, tag_names:tuple=tuple(), logger=None):
+        mut_type= self._get_mutation_type(mut)
         if mut_type == 'snp':
-            supports, tag_dict = self.get_snp_support_reads(mut.contig, mut.start, mut.alts[0], tag_names=tag_names)
+            supports, tag_dict, support_seqs = self.get_snp_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0], tag_names=tag_names, logger=logger)
         elif mut_type == 'substitution':
             # supports = self.get_substitution_support_reads(mut.contig, mut.start, mut.alts[0])
-            supports, tag_dict = self.get_complex_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0], tag_names=tag_names)
+            supports, tag_dict, support_seqs = self.get_complex_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0], tag_names=tag_names, logger=logger)
         elif mut_type == 'deletion':
             del_size = len(mut.ref) - len(mut.alts[0])
-            supports, tag_dict = self.get_del_support_reads(mut.contig, mut.start, del_size, tag_names=tag_names)
+            supports, tag_dict, support_seqs = self.get_del_support_reads(mut.contig, mut.start, del_size, tag_names=tag_names, logger=logger)
         elif mut_type == 'insertion':
-            supports, tag_dict = self.get_insert_support_reads(mut.contig, mut.start, mut.alts[0], tag_names=tag_names)
+            supports, tag_dict, support_seqs = self.get_insert_support_reads(mut.contig, mut.start, mut.alts[0], tag_names=tag_names, logger=logger)
         elif mut_type == 'complex':
-            supports, tag_dict = self.get_complex_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0], tag_names=tag_names)
+            supports, tag_dict, support_seqs = self.get_complex_support_reads(mut.contig, mut.start, mut.ref, mut.alts[0], tag_names=tag_names, logger=logger)
         else:
             raise Exception(f"{mut_type} is unexpected")
-        return supports, tag_dict
+        return supports, tag_dict, support_seqs
+
+    def check_support_consistency(self, read_seq_lst, max_disagree=2):
+        # 检查支持同一个突变的reads的一致性
+        # 假设这些证据都是指向同一个突变的可靠证据，那么这些reads在突变周围的碱基一致性应该非常高
+        # 当某个突变附近存在一个杂合的突变，而当前的突变是纯合突变时，那么理论上支持纯合突变的reads的包含了附近的杂合突变
+        # 这些reads在附近杂合突变位置的一致性则只有50%
+        dis_agree = 0
+        total = len(read_seq_lst)
+        if total == 1:
+            return True
+        for bases in zip(*read_seq_lst):
+            # 确保碱基大小写一致
+            bases = [x.upper() for x in bases]
+            freq = Counter(bases).most_common(1)[0][1]
+            if freq/total < 0.75:
+                dis_agree += 1
+            if dis_agree >= max_disagree:
+                return False
+        return dis_agree <= max_disagree
+
+    def detect_snp(self, contig, start, min_bq=13, ignore_overlaps=False):
+        cols = self.bam.pileup(
+            contig, start, start + 1,
+            stepper='samtools',
+            truncate=True,
+            min_base_quality=min_bq,
+            ignore_orphans=False,
+            ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
+            # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
+            max_depth=300000,
+            fastafile=None,
+            # flag_filter=4,
+        )
+        alt, freq, depth = '', 0, 0
+        for col in cols:
+            bases = col.get_query_sequences()
+            bases = [x.upper() for x in bases]
+            base_dict = Counter(bases)
+            depth = col.get_num_aligned()
+            alt, freq = base_dict.most_common(1)
+        return alt, freq, depth
 
 
-class VcfFilter(object):
-    def __init__(self, vcf_path, tumor=None, normal=None, normal_vcf=None, gene_primer_used=False):
-        self.vcf = pysam.VariantFile(vcf_path)
+class FindComplexVariant(ValidateMutationByBam):
+    def __init__(self, vcf_file, bam_file, genome_file, tumor_sample, out_prefix=None):
+        super().__init__(bam_file, genome_file)
+        self.vcf_path = vcf_file
+        if out_prefix is None:
+            if self.vcf_path.endswith('vcf.gz'):
+                out_prefix = self.vcf_path[:-6]
+            else:
+                out_prefix = self.vcf_path[:-4]
+        self.out_prefix = out_prefix
+        self.logger = set_logger(f'{self.out_prefix}.log', 'find_complex_variants')
+        self.with_added_complex_vcf = self.out_prefix + '.AddComplex.vcf'
+        self.with_only_complex_vcf = self.out_prefix + '.OnlyComplex.vcf'
+
+    def read_vcf(self, only_pass=True, new_info:dict=None):
+        with VariantFile(self.vcf_path) as temp:
+            vcf_header = temp.header
+            if new_info:
+                vcf_header.info.add(
+                    id = new_info['name'],
+                    number=new_info['number'],
+                    type=new_info['type'],
+                    description=new_info['desc']
+                )
+            for r in temp:
+                if r.alts is not None:
+                    if only_pass:
+                        if list(r.filter)[0] == "PASS":
+                            yield r
+                    else:
+                        if r.alts is not None:
+                            yield r
+
+    def find_complex_variant(self, only_pass=True):
+        """
+        1. 要求vcf是按照坐标排序好的，经过normalization
+        2. 检查相邻的SNP突变的距离是否在2个碱基以内，如果是，将尝试合并突变
+        3. 检查非snp突变的距离是否在50bp以内，如果是，将尝试合并突变
+        """
+        with VariantFile(self.vcf_path) as fr:
+            header = fr.header
+            if 'MergeFrom' not in header.info:
+                header.info.add('MergeFrom', number=1, type='String', description='Merged Variant Support Number | VariantPos | VariantPos')
+            samples = list(header.samples)
+            # 假设最后一个样本是目标样本
+            target_idx = len(samples) - 1
+
+        variants = read_vcf(self.vcf_path)
+
+        with VariantFile(out, 'w', header=header) as fw, VariantFile(out2, 'w', header=header) as fw2:
+            mut_a = next(variants, None)
+            if mut_a is None:
+                print('! No variant found')
+                return
+            mut_a_supports = None
+            while True:
+                merged = False
+                # 保证下一次复用的信息是对的
+                mut_b_supports = None
+                mut_b = next(variants, None)
+                if mut_b is None:
+                    break
+                dis = self.get_mut_distance(mut_a, mut_b)
+                mut_a_type = self._get_mutation_type(mut_a)
+                mut_b_type = self._get_mutation_type(mut_b)
+                mut_a_is_s = mut_a_type in ['snp', 'substitution']
+                mut_b_is_s = mut_b_type in ['snp', 'substitution']
+                a_alt_depth = self.get_depth(mut_a, self.tumor)
+                b_alt_depth = self.get_depth(mut_b, self.tumor)
+                # depth_ratio = a_alt_depth / b_alt_depth
+                if dis <= 2 and mut_a_is_s and mut_b_is_s:
+                    logger.info(f">>>Try to merge mutations at {mut_a.contig}:{mut_a.pos}|{mut_b.pos}")
+                    logger.info(mut_a.__str__())
+                    logger.info(mut_b.__str__())
+                    if mut_a_supports is None:
+                        mut_a_supports, *_ = self.get_mut_support_reads(mut_a)
+                        mut_b_supports, *_ = self.get_mut_support_reads(mut_b)
+                    intersection = mut_a_supports & mut_b_supports
+                    if len(intersection) >= 3:
+                        # 这里仅仅合并距离在2bp以内的SNP或等长替换(substitution)
+                        ref = self.genome.fetch(mut_a.contig, mut_a.start, mut_b.stop)
+                        in_low_complex_region = not ref.isupper()
+                        ref = ref.upper()
+                        alt = mut_a.alts[0] + self.genome.fetch(mut_a.contig, mut_a.stop, mut_b.start) + mut_b.alts[0]
+                        # 参考基因组的序列中可能存在小写
+                        alt = alt.upper()
+                        # record = mut_a.copy() if mut_a.info['DP'] <= mut_b.info['DP'] else mut_b.copy()
+                        record = mut_a.copy() if a_alt_depth < b_alt_depth else mut_b.copy()
+                        record.pos = mut_a.pos
+                        record.ref = ref
+                        record.alts = [alt]
+                        merged = True
+
+                        if in_low_complex_region:
+                            logger.info("warn: this mutation is likely in repeating region")
+                        logger.info(f"--Vcf reported supporting read number:{a_alt_depth} vs {b_alt_depth}")
+                        logger.info(f"--The program saw supporting read number:{len(mut_a_supports)} vs {len(mut_b_supports)}")
+                        logger.info(f"--Both variant supporting read number:{len(intersection)}, they are {intersection}")
+
+                        # 搜索支持merge突变的reads
+                        mut_c_supports, *_ = self.get_mut_support_reads(record)
+                        logger.info(f'--Merged variant supporting read number:{len(mut_c_supports)}, they are {mut_c_supports}')
+                        if len(mut_c_supports) < 2 and len(alt) >= 3:
+                            logger.info('支持合并后的突变的reads少于2个，说明2个snp中间也是snp，但原vcf中没有')
+                            mid_alt, mid_req, mid_depth = self.detect_snp(mut_a.contig, mut_a.start + 1)
+                            record.alts = [alt[0] + mid_alt + alt[2]]
+                            logger.info(f'现在根据bam将中间的snp报告出来:{alt[1]}>{mid_alt}, {mid_req}/{mid_depth}')
+                            mut_c_supports = self.get_mut_support_reads(record)
+                            logger.info(f'New Merged variant supporting read number:{len(mut_c_supports)}, they are {mut_c_supports}')
+
+                        if 'MergeFrom' in mut_a.info:
+                            logger.info('Super merging found!')
+                            record.info['MergeFrom'] = mut_a.info['MergeFrom'] + '|' + str(mut_b.pos)
+                        else:
+                            record.info['MergeFrom'] = '|'.join([str(len(mut_c_supports)), str(mut_a.pos), str(mut_b.pos)])
+                        fw2.write(record)
+                        logger.info("Suggested Complex/Simple formation as follow:")
+                        logger.info(record.__str__())
+                        logger.info('------------------------------------------------------------------')
+                        # 思考：如果这里不直接将合并结果写出，而是把record作为mut_b传递，是否就可以实现滚动合并2个以上的突变？
+                        # merge得到的record会进入到下一轮作为mut_a与新读取的mut_b进一步比较是否可以合并
+                        mut_b = record
+                    else:
+                        logger.info(f"Give up merging for few supporting read {intersection}")
+                        logger.info("--------------------------------------------------------------")
+
+                elif dis <= 50 and not (mut_a_is_s and mut_b_is_s):
+                    # 对于距离超过2且突变类型都是snp或等长替换的，均不考虑合并突变
+                    logger.info(f">>>Try to merge mutations at {mut_a.contig}:{mut_a.pos}|{mut_b.pos}")
+                    logger.info(mut_a.__str__())
+                    logger.info(mut_b.__str__())
+                    ref = self.genome.fetch(mut_a.contig, mut_a.start, mut_b.stop)
+                    in_low_complex_region = not ref.isupper()
+                    ref = ref.upper()
+                    if dis > 0:
+                        alt = mut_a.alts[0] + self.genome.fetch(mut_a.contig, mut_a.stop, mut_b.start) + mut_b.alts[0]
+                        alt = alt.upper()
+                    else:
+                        logger.info('The above two deletion variants are part overlapped')
+                        alt = mut_a.alts[0]
+                    new_pos, new_ref, new_alt, alignment = global_pair_seq_align(mut_a.pos, ref, alt)
+                    logger.info(alignment.__str__())
+                    if new_pos is not None:
+                        if mut_a_supports is None:
+                            mut_a_supports, *_ = self.get_mut_support_reads(mut_a)
+                        mut_b_supports, *_ = self.get_mut_support_reads(mut_b)
+                        intersection = mut_a_supports & mut_b_supports
+                        record = mut_a.copy() if a_alt_depth < b_alt_depth else mut_b.copy()
+                        record.pos = new_pos
+                        # print(record.ref, pair_align)
+                        record.ref = new_ref
+                        record.alts = [new_alt]
+                        # 搜索支持merge突变的reads
+                        mut_c_supports, *_ = self.get_mut_support_reads(record)
+                        if 'MergeFrom' in mut_a.info:
+                            logger.info('Super merging found!')
+                            record.info['MergeFrom'] = mut_a.info['MergeFrom'] + '|' + str(mut_b.pos)
+                        else:
+                            record.info['MergeFrom'] = '|'.join(
+                                [str(len(mut_c_supports)), str(mut_a.pos), str(mut_b.pos)])
+
+                        if in_low_complex_region:
+                            logger.info("warn: this mutation is likely in repeating region")
+                        logger.info(f"--Vcf reported supporting read number:{a_alt_depth} vs {b_alt_depth}")
+                        logger.info(f"--The program saw supporting read number:{len(mut_a_supports)} vs {len(mut_b_supports)}")
+                        logger.info(f"--Both variant supporting read number:{len(intersection)}, they are {intersection}")
+                        logger.info(f'--Merged variant supporting read number:{len(mut_c_supports)}, they are {mut_c_supports}')
+                        if (len(intersection) >= 3 and len(mut_c_supports) >= 1) or (len(mut_c_supports) >= 20):
+                            merged = True
+                            fw2.write(record)
+                            logger.info("Suggested Complex/Simple formation as follow:")
+                            logger.info(record.__str__())
+                            logger.info("--------------------------------------------------------------")
+                            # merge得到的record会进入到下一轮作为mut_a与新读取的mut_b进一步比较是否可以合并
+                            mut_b = record
+                        else:
+                            logger.info(f"Give up merging for few supporting read {intersection} and {mut_c_supports}")
+                            logger.info(f'Possible merged formation as follow:\n{record.__str__()}')
+                            logger.info("--------------------------------------------------------------")
+                    else:
+                        logger.info('Based on alignment result, give up merging!')
+                        logger.info("--------------------------------------------------------------")
+
+                if not merged:
+                    # 写入没有被合并的突变mut_a, 他可能是之前成功合并得到的record，也可能是原始record
+                    fw.write(mut_a)
+
+                # 把mut_b替换为mut_a,用于下一轮比较
+                mut_a = mut_b
+
+                # 下面的操作是为了复用mut_b_supports
+                if not merged:
+                    mut_a_supports = mut_b_supports
+                else:
+                    # 发生了merge，则不能复用mut_b_supports
+                    mut_a_supports = None
+
+            # 循环结束, 如果最后一轮如果没有merge发生，需要把最后读取的一个突变写入
+            if not merged and (mut_a is not None):
+                fw.write(mut_a)
+            self.bam.close()
+
+        return out, out2
+
+
+class VcfFilter(ValidateMutationByBam):
+    def __init__(self, vcf_path, bam_file, genome_file, tumor=None, normal=None, normal_vcf=None, gene_primer_used=False):
+        super().__init__(bam_file, genome_file)
+        self.vcf = VariantFile(vcf_path)
         self.vcf_path = vcf_path
         self.tumor = tumor
         self.normal = normal
@@ -405,7 +1011,7 @@ class VcfFilter(object):
         if normal_vcf:
             # 如果单独提供normal vcf时做如下处理
             normal_af_dict = dict()
-            ctrl_vcf = pysam.VariantFile(normal_vcf)
+            ctrl_vcf = VariantFile(normal_vcf)
             self.normal = list(ctrl_vcf.header.samples)[0]
             for r in ctrl_vcf:
                 # if list(r.filter)[0] != "PASS":
@@ -489,6 +1095,41 @@ class VcfFilter(object):
         # Phred = -10 * log(error_p)
         error_prob = 10**(base_qual*(-0.1))
         return error_prob
+
+    def get_mut_distance(self, mut_a, mut_b):
+        """
+        必须按顺序输入，要求mut_a的坐标小于mut_b的坐标
+        """
+        # 跳过alt为”."的记录
+        if (mut_a.alts is None) or (mut_b.alts is None):
+            return 10000
+        if mut_a.contig != mut_b.contig:
+            return 10000
+        if mut_a.pos > mut_b.pos:
+            print('第二个突变的起始坐标居然小于第一个突变的起始坐标:')
+            print(mut_a.__str__())
+            print(mut_b.__str__())
+            return 10000
+        if mut_a.pos == mut_b.pos:
+            # 对于同一个位点的不同突变，跳过合并
+            return 10000
+        mut_a_type = self.get_mutation_type(mut_a)
+        mut_b_type = self.get_mutation_type(mut_b)
+        if (mut_b.start < mut_a.stop < mut_b.stop) and (mut_a_type == mut_b_type == 'Deletion'):
+            # 针对2个同时为del的突变进行处理
+            # 两个突变区域首尾部分重叠
+            # 如果重叠区域分别对应的突变序列也一致，则考虑合并的可能
+            overlap_len = mut_b.start - mut_a.stop
+            if mut_a.alts[0][-overlap_len:] == mut_b.alts[0][:overlap_len]:
+                return mut_b.start - mut_a.stop
+            else:
+                return 10000
+        if mut_b.start < mut_a.stop:
+            # 这种情况常见于MSI
+            print(f'忽略特殊突变：后一个突变{mut_b.pos} 在前一个突变的坐标范围内{mut_a.pos}-{mut_a.stop}')
+            return 10000
+        dis = mut_b.pos - mut_a.pos
+        return dis
 
     def get_af_value(self, record, sample):
         if 'HIAF' in record.info and 'AF' in record.info:
@@ -761,16 +1402,32 @@ class VcfFilter(object):
                 # CGG[CG]GGGGGA - > CGG[C]GGGGGA
                 # 情形1：认为删除的碱基是重复单元, 那么考虑参考序列是否为重复串联单元
                 alt = record.ref[1:]
-                if len(alt) > 1:
-                    msi_len = int(record.info['MSILEN'])
-                    if len(alt) % msi_len == 0:
-                        alt = alt[:msi_len]
-                if len(alt) * 4 <= 20:
-                    ref_seq = left[:-len(alt)*4] + record.ref + right[:len(alt)*4]
-                    if re.search(f'({alt})'+'{5,}', ref_seq):
+                if len(alt) >= 3:
+                    min_repeat = 4
+                else:
+                    min_repeat = 5
+                if len(alt) * (min_repeat-1) <= 20:
+                    ref_seq = left[:-len(alt)*(min_repeat-1)] + record.ref + right[:len(alt)*(min_repeat-1)]
+                    if re.search(f'({alt})'+'{' + str(min_repeat) + ',}', ref_seq):
                         # 参考序列中可以找到以删除序列为基本单元的串联重复
                         if af < 0.05:
                             passed = False
+                if passed:
+                    # 再次检查，考虑删除的序列是重复单元的整数倍
+                    if len(alt) > 1:
+                        msi_len = int(record.info['MSILEN'])
+                        if len(alt) % msi_len == 0:
+                            alt = alt[:msi_len]
+                            if len(alt) >= 3:
+                                min_repeat = 4
+                            else:
+                                min_repeat = 5
+                            if len(alt) * (min_repeat - 1) <= 20:
+                                ref_seq = left[:-len(alt) * (min_repeat-1)] + record.ref + right[:len(alt) * (min_repeat-1)]
+                                if re.search(f'({alt})' + '{' + str(min_repeat) + ',}', ref_seq):
+                                    # 参考序列中可以找到以删除序列为基本单元的串联重复
+                                    if af < 0.05:
+                                        passed = False
                 # 情形2：考虑最多删除2bp后，形成单碱基串联重复，如AAAAGGAA -> AAAAAA
                 if passed:
                     alt = record.ref[0]
@@ -792,6 +1449,18 @@ class VcfFilter(object):
                     if re.search(f'({alt})'+'{6,}', alt_seq):
                         if af < 0.05:
                             passed = False
+            elif mut_type == 'Complex':
+                # LSEQ=TTATATATATATATATATAT;RSEQ=TTTTTTTTTTCTGCAGCTGC；ATA>TTT
+                if int(record.info['MSI']) >= 5:
+                    # 假设alt是重复单元
+                    alt = record.alts[0]
+                    if len(alt) * 3 <= 20:
+                        # vardict提供的侧翼长度信息为20
+                        alt_seq = left[:-len(alt) * 3] + alt + right[:len(alt) * 3]
+                        if re.search(f'({alt})' + '{4,}', alt_seq):
+                            if af < 0.05:
+                                passed = False
+
         return passed
 
     def format_txt_output(self, r) -> dict:
@@ -939,14 +1608,15 @@ class VcfFilter(object):
 
     def write_out_txt(self, vcf, out):
         result = []
-        with pysam.VariantFile(vcf) as fr:
+        with VariantFile(vcf) as fr:
             for r in fr:
                 result.append(self.format_txt_output(r))
         df = pd.DataFrame(result)
         df.to_csv(out, sep='\t', index=False)
         df.to_excel(out[:-4]+'.xlsx', index=False)
 
-    def filtering(self, genome, bam=None, ref_dict=None, out_prefix=None, min_error_rate=None, error_rate_file=None, min_af=0.001, min_depth=5, alpha=0.05):
+    def filtering(self, genome, bam=None, ref_dict=None, out_prefix=None, min_error_rate=None,
+                  error_rate_file=None, min_af=0.001, min_depth=5, alpha=0.05):
         # 先给vcf的header添加新字段定义才能往添加新的字段信息
         self.vcf.header.info.add(
             'LOD', number=5, type='Float',
@@ -958,13 +1628,15 @@ class VcfFilter(object):
         self.vcf.header.info.add(
             'ConsInfo', number=5, type='Float', description='consensus status of reads'
         )
-        self.vcf.header.filters.add('NoiseFromNormal', number=None, type=None, description='noise from normal sample')
-        self.vcf.header.filters.add('BackgroundNoise', number=None, type=None, description='noise from background')
-        self.vcf.header.filters.add('FromGermline', number=None, type=None, description='considered as germline variant found in normal vcf')
+        self.vcf.header.filters.add('NoiseFromNormal', number=None, type=None, description='Noise from normal sample')
+        self.vcf.header.filters.add('BackgroundNoise', number=None, type=None, description='Noise from background')
+        self.vcf.header.filters.add('FromGermline', number=None, type=None, description='Considered as germline variant found in normal vcf')
         self.vcf.header.filters.add('HighPopFreq', number=None, type=None, description='Population frequency')
-        self.vcf.header.filters.add('LowAF', number=None, type=None, description=f'AF smaller than {min_af}')
-        self.vcf.header.filters.add('MSIFilter', number=None, type=None, description=f'likely PCR Slippage in MSI region')
-        self.vcf.header.filters.add('LowUmiReadSupport', number=None, type=None, description=f'low UMI read supporting')
+        # self.vcf.header.filters.add('LowAF', number=None, type=None, description=f'AF smaller than {min_af}')
+        self.vcf.header.filters.add('MSIFilter', number=None, type=None, description=f'Likely PCR Slippage in MSI region')
+        self.vcf.header.filters.add('LowUmiReadSupport', number=None, type=None, description=f'Low UMI read supporting')
+        self.vcf.header.filters.add('BadSnpQual', number=None, type=None, description=f'Base qual of SNV is not good')
+        self.vcf.header.filters.add('InconsistentSupports', number=None, type=None, description=f'Variant supporting reads are not concordant on other bases')
         if 'Bias' not in self.vcf.header.filters:
             self.vcf.header.filters.add('Bias', number=None, type=None, description="severe strand bias")
         if self.vcf.header.contigs.__len__() < 1:
@@ -973,12 +1645,12 @@ class VcfFilter(object):
         if out_prefix is None:
             out_prefix = self.vcf_path.rsplit('.', 1)[0]
         out_vcf_name = out_prefix+'.final.vcf'
-        vcf_out = pysam.VariantFile(out_vcf_name, "w", header=self.vcf.header.copy())
-        vcf_discard = pysam.VariantFile(out_prefix+'.discarded.vcf', "w", header=self.vcf.header.copy())
+        vcf_out = VariantFile(out_vcf_name, "w", header=self.vcf.header.copy())
+        vcf_discard = VariantFile(out_prefix+'.discarded.vcf', "w", header=self.vcf.header.copy())
 
         # 读取bam信息
         if bam:
-            bamer = ValidateMutationByBam(bam_file=bam, fasta_file=genome)
+            bamer = ValidateMutationByBam(bam_file=bam, genome_file=genome)
         else:
             bamer = None
 
@@ -999,14 +1671,15 @@ class VcfFilter(object):
                 seq_error_dict = dict()
 
         # 读取参考基因组信息
-        gn = pysam.FastaFile(genome)
+        gn = FastaFile(genome)
         # print(seq_error_dict.keys())
         lod_list = []
         keep = 0
         total = 0
         filter_reasons = []
         log_file = open(out_prefix + '.filtering.log', 'w')
-        vcf_loh = pysam.VariantFile(out_prefix+'.LOH.vcf', "w", header=self.vcf.header.copy())
+        vcf_loh = VariantFile(out_prefix+'.LOH.vcf', "w", header=self.vcf.header.copy())
+        logger = set_logger(out_prefix+'.SNV.metrics.txt', 'var_metrics')
         for r in self.vcf:
             total += 1
             reasons = []
@@ -1035,21 +1708,22 @@ class VcfFilter(object):
             if list(r.filter)[0] != "PASS":
                 reasons = list(r.filter)
 
-            # af cutoff
-            af = self.get_af_value(r, self.tumor)
-            if af < min_af:
-                # reasons.append('LowAF')
-                vcf_discard.write(r)
-                continue
-
             # LOH
+            af = self.get_af_value(r, self.tumor)
             if af <= 0:
                 # print('discard AF=0 variant as following, maybe it called as LOH site', file=log_file)
                 vcf_loh.write(r)
                 continue
 
+            # af cutoff
+            if af < min_af:
+                # reasons.append('LowAF')
+                vcf_discard.write(r)
+                continue
+
             # 4. 根据人群频率过滤
             judge4 = self.pass_population_af(r, cutoff=0.01)
+            mutation_type = self.get_mutation_type(r)
             if not judge4[0]:
                 # 如果人群频率没有通过，为加快速度，跳过后续过滤判定步骤
                 reasons.append('HighPopFreq')
@@ -1059,7 +1733,6 @@ class VcfFilter(object):
                 # r.pos正好是1-based, r.start 是0-based
                 error_rate = None
                 if seq_error_dict:
-                    mutation_type = self.get_mutation_type(r)
                     if mutation_type == 'SNV':
                         key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
                         # error_rate = seq_error_dict[key][r.alts[0]]
@@ -1142,7 +1815,11 @@ class VcfFilter(object):
                 # 6. 获取突变支持信息
                 if bamer and len(reasons) == 0:
                     # 该步骤比较耗时，为加快速度，仅仅对通过前面全部判定条件的突变进行分析
-                    support_reads, tag_dict = bamer.get_mut_support_reads(r, tag_names=('cD', 'cE'))
+                    support_reads, tag_dict, support_seqs = bamer.get_mut_support_reads(r, tag_names=('cD', 'cE'), logger=logger)
+                    if 'snp_is_good' in tag_dict:
+                        snp_good = tag_dict.pop('snp_is_good')
+                        if not snp_good:
+                            reasons.append('BadSnpQual')
                     fam1_support_num = sum(tag_dict[x]['cD'] == 1 for x in support_reads)
                     fam2_support_num = len(support_reads) - fam1_support_num
                     fam1_all_num = sum(tag_dict[x]['cD'] == 1 for x in tag_dict)
@@ -1151,9 +1828,18 @@ class VcfFilter(object):
                     # median_error = statistics.median(consensus_error)
                     mean_error = statistics.mean(consensus_error)
                     r.info['ConsInfo'] = (fam1_support_num, fam2_support_num, fam1_all_num, fam2_all_num, mean_error)
-                    if fam2_support_num == 0:
-                        if fam1_support_num < 5:
+                    # 检查证据reads的一致性
+                    consistency = bamer.check_support_consistency(support_seqs, max_disagree=2)
+                    if not consistency:
+                        reasons.append('InconsistentSupports')
+                    if fam2_support_num == 0 and mutation_type == 'SNV':
+                        if fam1_support_num < 5 or fam2_support_num < 2:
                             reasons.append('LowUmiReadSupport')
+                    else:
+                        # 针对较大的deletion或insertion,本程序找到的证据可能偏低，因为没有局部组装和重比对的功能
+                        if mutation_type == 'SNV' and fam2_support_num < int(fam2_all_num * af * 0.9):
+                            reasons.append('LowUmiReadSupport')
+
                     # 根据umi统计得到的mean_error再过滤一次
                     judge = self.pass_seq_error(r, self.tumor, mean_error, alpha=alpha)
                     if not judge[0]:
@@ -1191,7 +1877,7 @@ def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, 
             bed, bam, prefix=out_prefix, center_size=center_size,
             genome=genome, exclude_from=exclude_from
         )
-    vcf = VcfFilter(vcf_path=vcf, tumor=tumor_name, normal_vcf=normal_vcf, gene_primer_used=False)
+    vcf = VcfFilter(vcf_path=vcf, bam_file=bam, genome_file=genome, tumor=tumor_name, normal_vcf=normal_vcf, gene_primer_used=False)
     vcf.filtering(
         genome=genome,
         bam=bam,
