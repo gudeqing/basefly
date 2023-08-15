@@ -161,7 +161,7 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
         for line in bed_file:
             if line.startswith('track') or line.startswith('#'):
                 continue
-            r, s, t = line.strip().split()
+            r, s, t = line.strip().split()[:3]
             s, t = int(s), int(t)
             seq_quals = get_seq_and_qual(r, s, t, bam)
             target_info_lst = []
