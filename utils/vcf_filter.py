@@ -1212,7 +1212,10 @@ class VcfFilter(ValidateMutationByBam):
             error_rate = self.qual_to_error_rate(record.info['QUAL']) * 0.9
         elif 'MBQ' in record.info:
             # mutect2 style
-            error_rate = self.qual_to_error_rate(record.info['MBQ']) * 0.9
+            base_qual = record.info['MBQ']
+            if type(base_qual) == tuple:
+                base_qual = record.info['MBQ'][1]
+            error_rate = self.qual_to_error_rate(base_qual) * 0.9
         elif 'NM' in record.info and type(record.info['NM']) == float:
             # vardict style, 'NM':"Mean mismatches in reads"
             # 根据平均错配数量估计测序错误率，考虑真实突变和比对错误的存在，这个错误率可能偏大
@@ -1233,8 +1236,12 @@ class VcfFilter(ValidateMutationByBam):
         af_lower, af_upper = self.poll_error_binomial_conf(error_rate=af, depth=dp, confidence=confidence)
         # 根据二型分布估计突变完全来自背景噪音或测序错误的概率值
         pvalue = self.get_alt_binomial_pvalue(alt_depth=round(dp*af), depth=dp, error_rate=error_rate)
-        min_depth = self.estimate_min_required_depth(error_rate, af, confidence)
-        min_depth = int(min_depth * 0.9)
+        # error rate不能为0，af不能为1，否则会报错
+        if af <= 0.99:
+            min_depth = self.estimate_min_required_depth(error_rate, af, confidence)
+            min_depth = int(min_depth * 0.9)
+        else:
+            min_depth = 5
         # print(dp, r.qual, error_rate, lower, upper)
         # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
         if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth) and (af_lower >= error_rate):
@@ -1778,7 +1785,7 @@ class VcfFilter(ValidateMutationByBam):
                     error_rate = self.get_raw_error_rate(r, read_len=150, min_error_rate=min_error_rate)
 
                 # 1.seq error过滤或者germline突变过滤
-                if error_rate > 0.999:
+                if error_rate > 0.999 or af > 0.999:
                     reasons.append('FromGermline')
                 else:
                     judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
@@ -1820,30 +1827,32 @@ class VcfFilter(ValidateMutationByBam):
                         snp_good = tag_dict.pop('snp_is_good')
                         if not snp_good:
                             reasons.append('BadSnpQual')
-                    fam1_support_num = sum(tag_dict[x]['cD'] == 1 for x in support_reads)
-                    fam2_support_num = len(support_reads) - fam1_support_num
-                    fam1_all_num = sum(tag_dict[x]['cD'] == 1 for x in tag_dict)
-                    fam2_all_num = len(tag_dict) - fam1_all_num
-                    consensus_error = [tag_dict[x]['cE'] for x in tag_dict]
-                    # median_error = statistics.median(consensus_error)
-                    mean_error = statistics.mean(consensus_error)
-                    r.info['ConsInfo'] = (fam1_support_num, fam2_support_num, fam1_all_num, fam2_all_num, mean_error)
-                    # 检查证据reads的一致性
-                    consistency = bamer.check_support_consistency(support_seqs, max_disagree=2)
-                    if not consistency:
-                        reasons.append('InconsistentSupports')
-                    if fam2_support_num == 0 and mutation_type == 'SNV':
-                        if fam1_support_num < 5 or fam2_support_num < 2:
-                            reasons.append('LowUmiReadSupport')
-                    else:
-                        # 针对较大的deletion或insertion,本程序找到的证据可能偏低，因为没有局部组装和重比对的功能
-                        if mutation_type == 'SNV' and fam2_support_num < int(fam2_all_num * af * 0.9):
-                            reasons.append('LowUmiReadSupport')
+                    if support_reads:
+                        fam1_support_num = sum(tag_dict[x]['cD'] == 1 for x in support_reads)
+                        fam2_support_num = len(support_reads) - fam1_support_num
+                        fam1_all_num = sum(tag_dict[x]['cD'] == 1 for x in tag_dict)
+                        fam2_all_num = len(tag_dict) - fam1_all_num
+                        consensus_error = [tag_dict[x]['cE'] for x in tag_dict]
+                        # median_error = statistics.median(consensus_error)
+                        mean_error = statistics.mean(consensus_error)
+                        r.info['ConsInfo'] = (fam1_support_num, fam2_support_num, fam1_all_num, fam2_all_num, mean_error)
+                        # 检查证据reads的一致性
+                        consistency = bamer.check_support_consistency(support_seqs, max_disagree=2)
+                        if not consistency:
+                            reasons.append('InconsistentSupports')
+                        if fam2_support_num == 0 and mutation_type == 'SNV':
+                            if fam1_support_num < 5 or fam2_support_num < 2:
+                                reasons.append('LowUmiReadSupport')
+                        else:
+                            # 针对较大的deletion或insertion,本程序找到的证据可能偏低，因为没有局部组装和重比对的功能
+                            if mutation_type == 'SNV' and fam2_support_num < int(fam2_all_num * af * 0.9):
+                                reasons.append('LowUmiReadSupport')
 
-                    # 根据umi统计得到的mean_error再过滤一次
-                    judge = self.pass_seq_error(r, self.tumor, mean_error, alpha=alpha)
-                    if not judge[0]:
-                        reasons.append('BackgroundNoise')
+                        # 根据umi统计得到的mean_error再过滤一次
+                        if mean_error > 0:
+                            judge = self.pass_seq_error(r, self.tumor, mean_error, alpha=alpha)
+                            if not judge[0]:
+                                reasons.append('BackgroundNoise')
 
             # 更新filter的内容和输出结果
             if reasons:

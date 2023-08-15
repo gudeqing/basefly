@@ -682,7 +682,13 @@ class Workflow:
             os.makedirs(outdir, exist_ok=True)
             self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
             with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
-                f.write('python ' + ' '.join(sys.argv) + '\n')
+                args = []
+                for each in sys.argv:
+                    if {'(', '{', ';'} & set(each):
+                        args.append('"' + each + '"')
+                    else:
+                        args.append(each)
+                f.write('python ' + ' '.join(args) + '\n')
                 # print(sys.argv)
                 f.write('>>>Argument Detail\n')
                 f.write('{}\n'.format(dict(parameters.__dict__.items())))
