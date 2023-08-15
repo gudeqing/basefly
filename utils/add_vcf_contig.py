@@ -55,13 +55,13 @@ def add_contig_header(vcf, out, ref_dict=None, header_txt=None):
         ]
 
     # 读取vcf
-    vcf = pysam.VariantFile(vcf)
-    header = vcf.header.copy()
+    vcf_obj = pysam.VariantFile(vcf)
+    header = vcf_obj.header.copy()
     # 检查是否存在contig信息
     if header.contigs.__len__() >= 1:
         raise Exception('contig info is not empty!')
     # 读取一个记录判断染色体序号是否为数字
-    record = next(vcf)
+    record = next(vcf_obj)
     if str(record.contig).isnumeric() and not ref_dict:
         contig_info = [x.replace('=chr', '=') for x in contig_info]
     # update header
@@ -71,11 +71,11 @@ def add_contig_header(vcf, out, ref_dict=None, header_txt=None):
         else:
             header.add_line(line)
     # 输出新的vcf
-    vcf_out = pysam.VariantFile(out, "w", header=header)
-    vcf_out.write(record)
-    for r in vcf:
-        vcf_out.write(r)
-    vcf_out.close()
+    with open(out, 'w') as fw, open(vcf, 'r') as fr:
+        fw.write(header.__str__())
+        for line in fr:
+            if not line.startswith('#'):
+                fw.write(line)
     return out
 
 
