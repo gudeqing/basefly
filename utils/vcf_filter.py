@@ -317,26 +317,29 @@ class ValidateMutationByBam(object):
             mean_ref_pos = statistics.median(ref_pos) if ref_pos else None
             alt_pos_pstd = statistics.pstdev(alt_pos) if alt_pos else None
             ref_pos_std = statistics.pstdev(ref_pos) if ref_pos else None
-            # except Exception as e:
-            #     print(e)
-            #     raise Exception(len(alt_bqs), len(alt_mqs), len(alt_pos), len(ref_bqs),
-            #                     len(ref_mqs), len(ref_pos), len(base_qual_dict),
-            #                     len(map_qual_dict), len(query_pos_dict))
 
         if left_base_qual_dict and support_reads:
             left_bq_pvalue, _, left_bqs = self.qual_diff_test(support_reads, mid_base_qual_dict, left_base_qual_dict)
-            mean_left_bq = statistics.mean(left_bqs)
+            if left_bqs:
+                mean_left_bq = statistics.mean(left_bqs)
+            else:
+                print('Left base info lost', [query_pos_dict[x] for x in support_reads])
+                print(contig, start, ref, alt, support_reads)
 
         if right_base_qual_dict and support_reads:
             right_bq_pvalue, _, right_bqs = self.qual_diff_test(support_reads, mid_base_qual_dict, right_base_qual_dict)
-            mean_right_bq = statistics.mean(right_bqs)
+            if right_bqs:
+                mean_right_bq = statistics.mean(right_bqs)
+            else:
+                print('Right base info lost', [query_pos_dict[x] for x in support_reads])
+                print(contig, start, ref, alt, support_reads)
         # 判断snv的质量
         good_snp = True
         if bq_pvalue and left_bq_pvalue and right_bq_pvalue:
             reasonable_pos = mean_alt_pos >= 5
             small_bq_diff = (bq_pvalue > 0.001) and (left_bq_pvalue > 0.05) and (right_bq_pvalue > 0.05)
             small_mq_diff = (mq_pvalue > 0.001) if mq_pvalue else True
-            good_alt_bq = mean_alt_bq > 28
+            good_alt_bq = mean_alt_bq >= 30
             if not (reasonable_pos and small_bq_diff and small_mq_diff and good_alt_bq):
                 good_snp = False
         all_read_tag_dict['snp_is_good'] = good_snp
@@ -1080,7 +1083,7 @@ class VcfFilter(ValidateMutationByBam):
         P = error_rate
         L = af
         Z = stats.norm.interval(confidence)[1]
-        if L - P > 0.0001:
+        if L - P > 0.00001:
             N = ((Z / (1 / P / (1 - P)) ** 0.5 + Z / (1 / L / (1 - L)) ** 0.5) / (L - P)) ** 2
         else:
             N = 1000000
@@ -1623,7 +1626,7 @@ class VcfFilter(ValidateMutationByBam):
         df.to_excel(out[:-4]+'.xlsx', index=False)
 
     def filtering(self, genome, bam=None, ref_dict=None, out_prefix=None, min_error_rate=None,
-                  error_rate_file=None, min_af=0.001, min_depth=5, alpha=0.05):
+                  error_rate_file=None, min_af=0.0001, min_depth=5, alpha=0.05, disable_bg_model=False):
         # 先给vcf的header添加新字段定义才能往添加新的字段信息
         self.vcf.header.info.add(
             'LOD', number=5, type='Float',
@@ -1788,17 +1791,18 @@ class VcfFilter(ValidateMutationByBam):
                 if error_rate > 0.999 or af > 0.999:
                     reasons.append('FromGermline')
                 else:
-                    judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
-                    if not judge[0]:
-                        if ctrl_af_as_error_rate:
-                            reasons.append('NoiseFromNormal')
-                        else:
-                            # print(key, error_rate, r.ref, list(r.alts))
-                            reasons.append('BackgroundNoise')
-                        pass
-                    # error_rate, error_upper, af_lower, pvalue, min_depth
-                    r.info['LOD'] = tuple(judge[1:])
-                    lod_list.append(judge[2])
+                    if not disable_bg_model:
+                        judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
+                        if not judge[0]:
+                            if ctrl_af_as_error_rate:
+                                reasons.append('NoiseFromNormal')
+                            else:
+                                # print(key, error_rate, r.ref, list(r.alts))
+                                reasons.append('BackgroundNoise')
+                            pass
+                        # error_rate, error_upper, af_lower, pvalue, min_depth
+                        r.info['LOD'] = tuple(judge[1:])
+                        lod_list.append(judge[2])
 
                 # 2.根据strand bias进行过滤
                 # 当使用链偏倚作为过滤指标时要注意：只有极端链偏倚的SNP才应被视为假阳性候选突变
@@ -1847,12 +1851,12 @@ class VcfFilter(ValidateMutationByBam):
                             # 针对较大的deletion或insertion,本程序找到的证据可能偏低，因为没有局部组装和重比对的功能
                             if mutation_type == 'SNV' and fam2_support_num < int(fam2_all_num * af * 0.9):
                                 reasons.append('LowUmiReadSupport')
-
-                        # 根据umi统计得到的mean_error再过滤一次
-                        if mean_error > 0:
-                            judge = self.pass_seq_error(r, self.tumor, mean_error, alpha=alpha)
-                            if not judge[0]:
-                                reasons.append('BackgroundNoise')
+                        if not disable_bg_model:
+                            # 根据umi统计得到的mean_error再过滤一次
+                            if mean_error > 0:
+                                judge = self.pass_seq_error(r, self.tumor, mean_error, alpha=alpha)
+                                if not judge[0]:
+                                    reasons.append('BackgroundNoise')
 
             # 更新filter的内容和输出结果
             if reasons:
@@ -1870,22 +1874,23 @@ class VcfFilter(ValidateMutationByBam):
         gn.close()
         bamer.bam.close()
         self.write_out_txt(out_vcf_name, out_prefix+'.final.txt')
-        print('median LOD:', statistics.median(lod_list), file=log_file)
-        print('min LOD:', min(lod_list), file=log_file)
-        print('max LOD:', max(lod_list), file=log_file)
+        if lod_list:
+            print('median LOD:', statistics.median(lod_list), file=log_file)
+            print('min LOD:', min(lod_list), file=log_file)
+            print('max LOD:', max(lod_list), file=log_file)
         print(f'discard {total - keep} variants while keep {keep} ones!', file=log_file)
         reason_couts = Counter(filter_reasons).most_common()
         for k, v in reason_couts:
             print(f'{v} variants are filtered out because of {k}', file=log_file)
 
 
-def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, normal_vcf=None, alpha=0.01, min_af=0.001,
-              exclude_from=None, out_prefix=None, min_error_rate=None, error_rate_file=None, center_size:tuple=(1, 1)):
-    if bam and bed and (not error_rate_file):
-        error_rate_file = estimate_context_seq_error(
-            bed, bam, prefix=out_prefix, center_size=center_size,
-            genome=genome, exclude_from=exclude_from
-        )
+def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, normal_vcf=None, alpha=0.01, min_af=0.0001,
+              exclude_from=None, out_prefix=None, min_error_rate=None, error_rate_file=None, disable_bg_model=False, center_size:tuple=(1, 1)):
+    # if bam and bed and (not error_rate_file):
+    #     error_rate_file = estimate_context_seq_error(
+    #         bed, bam, prefix=out_prefix, center_size=center_size,
+    #         genome=genome, exclude_from=exclude_from
+    #     )
     vcf = VcfFilter(vcf_path=vcf, bam_file=bam, genome_file=genome, tumor=tumor_name, normal_vcf=normal_vcf, gene_primer_used=False)
     vcf.filtering(
         genome=genome,
@@ -1895,7 +1900,8 @@ def filter_vcf(vcf, genome, ref_dict=None, tumor_name=None, bam=None, bed=None, 
         min_error_rate=min_error_rate,
         error_rate_file=error_rate_file,
         alpha=alpha,
-        min_af=min_af
+        min_af=min_af,
+        disable_bg_model=disable_bg_model
     )
 
 
@@ -1917,7 +1923,8 @@ if __name__ == '__main__':
     parser.add_argument('-error_rate_file', type=Path, required=False, help='Estimated background noise file, if not provided, bam file will be used to generate one')
     parser.add_argument('-min_error_rate', type=float, default=1e-6, help='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
     parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model. The pvalue represents the probability of variants come from background noise')
-    parser.add_argument('-min_af', type=float, default=0.001, help='hard cutoff of AF')
+    parser.add_argument('-min_af', type=float, default=0.0001, help='hard cutoff of AF')
+    parser.add_argument('--disable_bg_model', default=False, action='store_true', help='disable background noise model filter')
     parser.add_argument('-out_prefix', help='output file prefix')
     args = parser.parse_args()
     filter_vcf(
@@ -1933,5 +1940,7 @@ if __name__ == '__main__':
         error_rate_file=args.error_rate_file,
         min_error_rate=args.min_error_rate,
         alpha=args.alpha,
-        out_prefix=args.out_prefix
+        out_prefix=args.out_prefix,
+        min_af=args.min_af,
+        disable_bg_model=args.disable_bg_model
     )
