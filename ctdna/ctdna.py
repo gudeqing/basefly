@@ -1215,12 +1215,13 @@ def pipeline():
         bamdst_task_dict[sample] = bamdst_task
 
         # 自研脚本估计错误率
-        error_stat_task, args = wf.add_task(stat_context_seq_error(), tag=sample)
-        args['bam'].value = sort_bam_task.outputs['output']
-        args['genome'].value = wf.topvars['ref']
-        args['bed'].value = wf.topvars['bed']
-        args['out_prefix'].value = sample
-        error_stat_task_dict[sample] = error_stat_task
+        if 'StatSeqError' not in wf.args.skip:
+            error_stat_task, args = wf.add_task(stat_context_seq_error(), tag=sample)
+            args['bam'].value = sort_bam_task.outputs['output']
+            args['genome'].value = wf.topvars['ref']
+            args['bed'].value = wf.topvars['bed']
+            args['out_prefix'].value = sample
+            error_stat_task_dict[sample] = error_stat_task
 
     vardict_filter_task_ids = []
     mutect2_filter_task_ids = []
@@ -1302,7 +1303,8 @@ def pipeline():
         # mutect2结果最终过滤和整理
         filter_task, args = wf.add_task(VcfFilter(), tag='mutect2-' + tumor)
         args['vcf'].value = mutect2_vep_task.outputs['out_vcf']
-        args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
+        if error_stat_task_dict:
+            args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
         args['bam'].value = tumor_bam_task.outputs['output']
         args['bed'].value = wf.topvars['bed']
@@ -1349,7 +1351,8 @@ def pipeline():
 
         filter_task, args = wf.add_task(VcfFilter(), tag='vardict-'+tumor)
         args['vcf'].value = vardict_vep_task.outputs['out_vcf']
-        args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
+        if error_stat_task_dict:
+            args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
         args['bam'].value = tumor_bam_task.outputs['output']
         args['bed'].value = wf.topvars['bed']
