@@ -714,6 +714,8 @@ class Workflow:
                 else:
                     if out.task_id in self.tasks:
                         src_dir = os.path.join(self.tasks[out.task_id].wkdir, out.value)
+                        if src_dir.endswith('/.'):
+                            src_dir = src_dir[:-1]
                     else:
                         continue
                 scan_dir = glob.glob(src_dir)
