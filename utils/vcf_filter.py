@@ -1558,6 +1558,9 @@ class VcfFilter(ValidateMutationByBam):
 
         if 'LOD' in r.info:
             target_info['LOD(error_rate,error_upper,af_lower,pvalue,min_depth)'] = r.info['LOD']
+        if 'ConsInfo' in r.info:
+            # consensus depth information
+            target_info['(Alt_cD1, Alt_cD2+, cD1, cD2+, MeanError)'] = r.info['ConsInfo']
         # 根据注释结果判断是否报告，增加报告字段
         consequences = set(csq_dict['Consequence'].split('&'))
         if (consequences - {
