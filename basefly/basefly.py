@@ -736,17 +736,21 @@ class Workflow:
                         dst_path = os.path.join(final_out_dir, os.path.basename(src_dir))
                         if dst_path.endswith('/.'):
                             dst_path = dst_path[:-1]
+                        dst_path = dst_path.rstrip('/')
                         # 删除已经存在的结果
                         if os.path.exists(dst_path):
                             if os.path.isfile(dst_path):
                                 os.remove(dst_path)
                             else:
-                                shutil.rmtree(dst_path)
+                                if not os.path.islink(dst_path):
+                                    shutil.rmtree(dst_path)
+                                else:
+                                    os.remove(dst_path)
                         # 如果输出结果是文件，则创建硬链接，否则软连接
                         if os.path.isfile(src_dir):
                             os.link(src_dir, dst_path)
                         else:
-                            os.symlink(src_dir, dst_path)
+                            os.symlink(src_dir.rstrip('/'), dst_path)
                 else:
                     print('Failed to found expected output: ', src_dir)
 

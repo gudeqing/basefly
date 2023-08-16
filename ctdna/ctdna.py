@@ -1402,14 +1402,15 @@ def pipeline():
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
         df.to_excel(out_file, index=False)
 
-        xls_lst = []
-        for tid in mutect2_filter_task_ids:
-            xls_file = wf.tasks[tid].outputs['final_xls'].value
-            xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
-            xls_lst.append(xls_file)
-        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
-        df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
-        df.to_excel(out_file, index=False)
+        if 'Mutect2' not in wf.args.skip:
+            xls_lst = []
+            for tid in mutect2_filter_task_ids:
+                xls_file = wf.tasks[tid].outputs['final_xls'].value
+                xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
+                xls_lst.append(xls_file)
+            out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
+            df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
+            df.to_excel(out_file, index=False)
 
 
 if __name__ == '__main__':
