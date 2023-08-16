@@ -229,6 +229,21 @@ class ValidateMutationByBam(object):
                 consensus = tmp_consensus
             return consensus
 
+    @staticmethod
+    def foxog_calc(ref, F1R2, F2R1):
+        """
+        C>A|G>T variants can be oxidation artifacts introduced during library preparation (Costello et al, 2013).
+        These "OxoG" artifacts have a telltale read orientation, with the majority of ALT reads in the artifact orientation.
+        """
+        FoxoG = None
+        if (F1R2 + F2R1) > 6:
+            if ref == "C" or ref == "A":
+                FoxoG = F2R1 / (F1R2 + F2R1)
+            elif ref == "G" or ref == "T":
+                FoxoG = F1R2 / (F1R2 + F2R1)
+            FoxoG = round(FoxoG, 3)
+        return FoxoG
+
     def get_snp_support_reads(self, contig, start, ref, alt, tag_names:tuple=tuple(), min_bq=13, logger=None):
         pileup_columns = self.bam.pileup(
             contig, start-1, start + 2,  # 提取左右碱基，方便后续突变碱基与左右碱基质量的比较
@@ -267,6 +282,11 @@ class ValidateMutationByBam(object):
         mean_ref_bq = None
         mean_ref_mq = None
         mean_ref_pos = None
+        max_alt_pos_diff = None
+        # F=foward strand, R=reverse strand, 1:read1, 2:read2
+        F2R1 = 0
+        F1R2 = 0
+        FoxoG = None
         # init value end
         for idx, col in enumerate(pileup_columns):
             base_quals = col.get_query_qualities()
@@ -282,10 +302,11 @@ class ValidateMutationByBam(object):
                 mid_base_qual_dict = base_qual_dict
                 # 获取支持变异的reads/序列/所有read的相关tag信息
                 for pileup_read in col.pileups:
-                    read_name = pileup_read.alignment.query_name
-                    query_seq = pileup_read.alignment.query_sequence
-                    query_pos = pileup_read.query_position
-                    query_len = pileup_read.alignment.query_length
+                    alignment = pileup_read.alignment
+                    read_name = alignment.query_name
+                    query_seq = alignment.query_sequence
+                    query_pos = alignment.query_position
+                    query_len = alignment.query_length
                     if query_pos is not None:
                         query_pos_dict[read_name] = min(query_pos, query_len - query_pos)
                         if query_seq[query_pos].upper() == alt:
@@ -294,6 +315,18 @@ class ValidateMutationByBam(object):
                             # 提取围绕SNV位点前后5个碱基，用于检查支持突变的read之间的一致性
                             if (query_pos >= 5) and (query_len > query_pos+5):
                                 support_read_seqs.append(query_seq[query_pos-5:query_pos+5])
+                            # Counters for FoxoG calculations
+                            if alignment.is_proper_pair:
+                                if alignment.is_read1:
+                                    if alignment.is_reverse:
+                                        F2R1 += 1
+                                    else:
+                                        F1R2 += 1
+                                elif alignment.is_read2:
+                                    if alignment.is_reverse:
+                                        F1R2 += 1
+                                    else:
+                                        F2R1 += 1
                     # 由于要获取下面的tag，才不得不对pileups进行循环
                     if read_name not in all_read_tag_dict:
                         target_tag_dict = dict()
@@ -316,7 +349,9 @@ class ValidateMutationByBam(object):
             mean_alt_pos = statistics.median(alt_pos) if alt_pos else None
             mean_ref_pos = statistics.median(ref_pos) if ref_pos else None
             alt_pos_pstd = statistics.pstdev(alt_pos) if alt_pos else None
+            max_alt_pos_diff = max(alt_pos) - min(alt_pos)
             ref_pos_std = statistics.pstdev(ref_pos) if ref_pos else None
+            FoxoG = self.foxog_calc(ref, F1R2, F2R1)
 
         if left_base_qual_dict and support_reads:
             left_bq_pvalue, _, left_bqs = self.qual_diff_test(support_reads, mid_base_qual_dict, left_base_qual_dict)
@@ -336,11 +371,12 @@ class ValidateMutationByBam(object):
         # 判断snv的质量
         good_snp = True
         if bq_pvalue and left_bq_pvalue and right_bq_pvalue:
-            reasonable_pos = mean_alt_pos >= 5
+            reasonable_pos = mean_alt_pos >= 5 and max_alt_pos_diff > 1
             small_bq_diff = (bq_pvalue > 0.001) and (left_bq_pvalue > 0.05) and (right_bq_pvalue > 0.05)
             small_mq_diff = (mq_pvalue > 0.001) if mq_pvalue else True
             good_alt_bq = mean_alt_bq >= 30
-            if not (reasonable_pos and small_bq_diff and small_mq_diff and good_alt_bq):
+            OxoG = FoxoG < 0.9 if FoxoG else False
+            if not (reasonable_pos and small_bq_diff and small_mq_diff and good_alt_bq and OxoG):
                 good_snp = False
         all_read_tag_dict['snp_is_good'] = good_snp
         if logger:
@@ -356,6 +392,8 @@ class ValidateMutationByBam(object):
                 mean_right_bq=mean_right_bq,
                 mean_ref_bq=mean_ref_bq,
                 mean_alt_pos=mean_alt_pos,
+                max_alt_pos_diff=max_alt_pos_diff,
+                FoxoG=FoxoG,
                 mean_ref_pos=mean_ref_pos,
                 alt_pos_pstd=alt_pos_pstd,
                 ref_pos_std=ref_pos_std,
