@@ -1187,6 +1187,8 @@ def pipeline():
             args['bed'].value = wf.topvars['bed']
             args['ref'].value = wf.topvars['ref']
             args['out-bam'].value = sample+'.realigned.bam'
+            bam_task_dict[sample] = realign_task
+            sort_bam_task = realign_task
 
         if 'Gencore' not in wf.args.skip:
             if realign_task:
