@@ -542,7 +542,7 @@ def Mutect2(prefix):
     cmd.args['alleles'] = Argument(prefix='--alleles ', type='infile', level='optional', desc='The set of alleles to force-call regardless of evidence')
     cmd.args['initial-tumor-lod'] = Argument(prefix='--initial-tumor-lod ', default=3.0, desc='Log 10 odds threshold to consider pileup active.')
     cmd.args['normal-lod'] = Argument(prefix='--normal-lod ', default=2.2, desc='Log 10 odds threshold for calling normal variant non-germline. ')
-    cmd.args['tumor-lod-to-emit'] = Argument(prefix='--tumor-lod-to-emit ', default=3.5, desc='Log 10 odds threshold to emit variant to VCF')
+    cmd.args['tumor-lod-to-emit'] = Argument(prefix='--tumor-lod-to-emit ', default=3.0, desc='Log 10 odds threshold to emit variant to VCF')
     cmd.args['active-probability-threshold'] = Argument(prefix='--active-probability-threshold ', default=0.001, desc='Minimum probability for a locus to be considered active')
     cmd.args['disable-adaptive-pruning'] = Argument(prefix='--disable-adaptive-pruning ', default='false', desc='Disable the adaptive algorithm for pruning paths in the graph')
     cmd.args['base-quality-score-threshold'] = Argument(prefix='--base-quality-score-threshold ', default=13, desc='Base qualities below this threshold will be reduced to the minimum (6)')
@@ -841,11 +841,13 @@ def multi_qc():
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'multiqc'
+    # 由于权限问题，更改docker_cmd_prefix
+    cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
     cmd.args['force'] = Argument(prefix='--force', type='bool', default=True, desc='read1 file name')
     cmd.args['outdir'] = Argument(prefix='--outdir ', default='.', desc='Create report in the specified output directory')
     cmd.args['report_name'] = Argument(prefix='--filename ', default='MultiQC', desc='Report filename')
     cmd.args['indirs'] = Argument(prefix='', type='indir', array=True, desc='supply with one or more directory to scan for analysis results')
-    cmd.outputs['outdir'] = Output(value='{outdir}', type='outdir')
+    cmd.outputs['outdir'] = Output(value='{outdir}', type='outdir', report=True)
     return cmd
 
 
@@ -1377,6 +1379,7 @@ def pipeline():
         # ----end of VarNet----
 
     multiqc_task, args = wf.add_task(multi_qc())
+    multiqc_task.depends = fastp_tasks + list(groupumi_task_dict.values())
     input_dirs = [x.wkdir for x in groupumi_task_dict.values()]
     input_dirs += [x.wkdir for x in fastp_tasks]
     args['indirs'].value = input_dirs
