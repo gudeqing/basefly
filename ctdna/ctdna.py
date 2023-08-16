@@ -3,7 +3,7 @@ import math
 import pandas as pd
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
-from basefly.basefly import Argument, Output, Command, Workflow, TopVar, ToWdlTask
+from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
@@ -128,7 +128,7 @@ def ExtractUmisFromBam():
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fgbio ExtractUmisFromBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='Input BAM file')
-    cmd.args['read-structure'] = Argument(prefix='-r ', array=True, default=['3M2S146T', '3M2S146T'], desc='The read structure, one per read in a template.')
+    cmd.args['read-structure'] = Argument(prefix='-r ', array=True, default=['3M2S+T', '3M2S+T'], desc='The read structure, one per read in a template.')
     cmd.args['molecular-index-tags'] = Argument(prefix='-t ', array=True, default=['ZA', 'ZB'], desc='SAM tag(s) in which to store the molecular indices.')
     cmd.args['annotate-read-names'] = Argument(prefix='-a ', default='false', desc='Annotate the read names with the molecular indices.')
     cmd.args['single-tag'] = Argument(prefix='-s ', default='RX', desc="Single tag into which to concatenate all molecular indices.")
@@ -280,7 +280,7 @@ def CallDuplexConsensusReads():
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
     cmd.args['error-rate-pre-umi'] = Argument(prefix='-1 ', default=45, desc='The Phred-scaled error rate for an error prior to the UMIs being integrated.')
     cmd.args['error-rate-post-umi'] = Argument(prefix='-2 ', default=30, desc='The Phred-scaled error rate for an error post the UMIs have been integrated.')
-    cmd.args['min-input-base-quality'] = Argument(prefix='-m ', default=30, desc='Ignore bases in raw reads that have Q below this value.')
+    cmd.args['min-input-base-quality'] = Argument(prefix='-m ', default=20, desc='Ignore bases in raw reads that have Q below this value.')
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='The number of threads to use while consensus calling')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
@@ -380,7 +380,9 @@ def SortAndIndexBam():
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='Number of additional threads to use')
     cmd.args['output-fmt'] = Argument(prefix='--output-fmt ', default='BAM', desc='output format')
     cmd.args['input'] = Argument(prefix='', type='infile', desc='input bam file')
-    cmd.args['_fix'] = Argument(type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
+    cmd.args['_index_bam'] = Argument(type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
+    cmd.args['_flagstat'] = Argument(type='fix', value=f'&& samtools flagstat -@ {cmd.runtime.cpu} *.bam')
+    cmd.args['flagstat_name'] = Argument(prefix ='> ', default='bam.flagstat.txt', desc='flagstat output file name')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
 
@@ -431,6 +433,7 @@ def Bamdst():
     cmd.args['cutoffdepth'] = Argument(prefix='--cutoffdepth ', default=500, desc='the specified coverage')
     cmd.args['input'] = Argument(prefix='', type='infile', desc='input bam file')
     cmd.outputs['outdir'] = Output(value='{outdir}')
+    cmd.outputs['coverage_report'] = Output(value='{outdir}/coverage.report')
     return cmd
 
 
@@ -489,12 +492,12 @@ def VardictPaired():
     cmd.args['fisher'] = Argument(prefix='--fisher', type='bool', default=True, desc='Fisher exact test.')
     cmd.args['mfreq'] = Argument(prefix='-mfreq ', default=0.25, desc="The variant frequency threshold to determine variant as good in case of monomer MSI. Default: 0.25")
     cmd.args['nmfreq'] = Argument(prefix='-nmfreq ', default=0.1, desc='The variant frequency threshold to determine variant as good in case of non-monomer MSI')
-    cmd.args['read_position_filter'] = Argument(prefix='-P ', default=3, desc="If the mean variants position is less that specified, it's considered false")
+    cmd.args['read_position_filter'] = Argument(prefix='-P ', default=5, desc="If the mean variants position is less that specified, it's considered false")
     cmd.args['min-reads'] = Argument(prefix='-r ', default=2, desc='The minimum # of variant reads')
     cmd.args['nosv'] = Argument(prefix='--nosv', type='bool', default=True,)
     cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
-    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 3 -q 15 -d 3 -v 1 -f 0.0001 ', desc='pipe to another script')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 5 -q 25 -d 5 -v 1 -f 0.0001 ', desc='pipe to another script')
     cmd.args['names'] = Argument(prefix='-N "{}"', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['output'] = Output(value='{output}')
@@ -539,11 +542,13 @@ def Mutect2(prefix):
     cmd.args['alleles'] = Argument(prefix='--alleles ', type='infile', level='optional', desc='The set of alleles to force-call regardless of evidence')
     cmd.args['initial-tumor-lod'] = Argument(prefix='--initial-tumor-lod ', default=3.0, desc='Log 10 odds threshold to consider pileup active.')
     cmd.args['normal-lod'] = Argument(prefix='--normal-lod ', default=2.2, desc='Log 10 odds threshold for calling normal variant non-germline. ')
-    cmd.args['tumor-lod-to-emit'] = Argument(prefix='--tumor-lod-to-emit ', default=3.0, desc='Log 10 odds threshold to emit variant to VCF')
+    cmd.args['tumor-lod-to-emit'] = Argument(prefix='--tumor-lod-to-emit ', default=3.5, desc='Log 10 odds threshold to emit variant to VCF')
     cmd.args['active-probability-threshold'] = Argument(prefix='--active-probability-threshold ', default=0.001, desc='Minimum probability for a locus to be considered active')
     cmd.args['disable-adaptive-pruning'] = Argument(prefix='--disable-adaptive-pruning ', default='false', desc='Disable the adaptive algorithm for pruning paths in the graph')
-    cmd.args['base-quality-score-threshold'] = Argument(prefix='--base-quality-score-threshold ', default=15, desc='Base qualities below this threshold will be reduced to the minimum (6)')
-    cmd.args['pruning-lod-threshold'] = Argument(prefix='--pruning-lod-threshold ', default=1.3, desc='Ln likelihood ratio threshold for adaptive pruning algorithm')
+    cmd.args['base-quality-score-threshold'] = Argument(prefix='--base-quality-score-threshold ', default=13, desc='Base qualities below this threshold will be reduced to the minimum (6)')
+    cmd.args['pruning-lod-threshold'] = Argument(prefix='--pruning-lod-threshold ', default=2.3, desc='Ln likelihood ratio threshold for adaptive pruning algorithm')
+    cmd.args['adaptive-pruning-initial-error-rate'] = Argument(prefix='--adaptive-pruning-initial-error-rate ', default=0.0003, desc='Initial base error rate estimate for adaptive pruning')
+    cmd.args['pileup-detection'] = Argument(prefix='--pileup-detection ', default='false', desc='If enabled, the variant caller will create pileup-based haplotypes in addition to the assembly-based haplotype generation')
     cmd.args['disable-read-filter'] = Argument(prefix='--disable-read-filter ', default=['GoodCigarReadFilter', 'MappingQualityReadFilter', 'NonChimericOriginalAlignmentReadFilter'], multi_times=True, desc='Read filters to be disabled before analysis')
     cmd.args['disable-tool-default-read-filters'] = Argument(prefix='--disable-tool-default-read-filters ', default='false', desc='Disable all tool default read filters (WARNING: many tools will not function correctlywithout their default read filters on)')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.vcf.gz', desc='output vcf')
@@ -570,6 +575,7 @@ def bcftools_norm():
     cmd.args['out'] = Argument(prefix='-o ', desc='Write output to a file [standard output]')
     cmd.args['output-type'] = Argument(prefix='--output-type ', default='v', desc="'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]")
     cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc="Use multithreading with <int> worker threads")
+    cmd.args['check_ref'] = Argument(prefix='-c ', default='e', desc='Check REF alleles and exit (e), warn (w), exclude (x), or set (s) bad sites')
     cmd.args['vcf'] = Argument(type='infile', desc='input vcf file')
     cmd.outputs['out'] = Output(value='{out}')
     return cmd
@@ -673,6 +679,7 @@ def VcfFilter():
     cmd.args['min_error_rate'] = Argument(prefix='-min_error_rate ', level='optional', desc='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
     cmd.args['alpha'] = Argument(prefix='-alpha ', default=0.05, desc='cutoff of pvalue from background noise model. higher value means stricter condition')
     cmd.args['min_af'] = Argument(prefix='-min_af ', default=0.001, desc='Variant AF hard cutoff')
+    cmd.args['disable_bg_model'] = Argument(prefix='--disable_bg_model', type='bool', default=True, desc='disable background noise modeling filter')
     cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', desc='output file prefix')
     cmd.outputs['final_vcf'] = Output(value='{out_prefix}.final.vcf', report=True)
     cmd.outputs['final_txt'] = Output(value='{out_prefix}.final.txt', report=True)
@@ -795,7 +802,7 @@ def VarNet():
 
 def mutscan():
     cmd = Command()
-    cmd.meta.name = 'mutscan'
+    cmd.meta.name = 'Mutscan'
     cmd.meta.source = 'https://github.com/OpenGene/MutScan'
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
     cmd.runtime.memory = 5 * 1024 ** 3
@@ -811,6 +818,90 @@ def mutscan():
     cmd.args['support'] = Argument(prefix='--support ', default=2, desc='min read support for reporting a mutation')
     cmd.outputs['json'] = Output(value='{json}')
     cmd.outputs['html'] = Output(value='{html}')
+    return cmd
+
+
+def FiNGS():
+    cmd = Command()
+    cmd.meta.name = 'FiNGS'
+    cmd.meta.source = 'https://github.com/cpwardell/FiNGS'
+    cmd.runtime.image = 'cpwardell/fings:latest' #镜像中脚本有问题，可以pip3 install fings=1.7.1
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'mutscan'
+    # 发现不适合ctDNA
+    pass
+
+
+def multi_qc():
+    cmd = Command()
+    cmd.meta.name = 'MultiQC'
+    cmd.meta.source = 'https://multiqc.info/'
+    cmd.runtime.image = 'ewels/multiqc:latest'
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'multiqc'
+    cmd.args['force'] = Argument(prefix='--force', type='bool', default=True, desc='read1 file name')
+    cmd.args['outdir'] = Argument(prefix='--outdir ', default='.', desc='Create report in the specified output directory')
+    cmd.args['report_name'] = Argument(prefix='--filename ', default='MultiQC', desc='Report filename')
+    cmd.args['indirs'] = Argument(prefix='', type='indir', array=True, desc='supply with one or more directory to scan for analysis results')
+    cmd.outputs['outdir'] = Output(value='{outdir}', type='outdir')
+    return cmd
+
+
+def fastp():
+    cmd = Command()
+    cmd.meta.name = 'Fastp'
+    cmd.meta.source = 'https://github.com/OpenGene/fastp'
+    cmd.meta.version = '0.23.4'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'fastp'
+    cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
+    cmd.args['read2'] = Argument(prefix='-I ', type='infile', level='optional', desc='read2 fastq file')
+    cmd.args['threads'] = Argument(prefix='-w ', default=4, desc='thread number')
+    cmd.args['out1'] = Argument(prefix='-o ', type='str', desc='clean read1 output fastq file')
+    cmd.args['out2'] = Argument(prefix='-O ', level='optional', type='str', desc='clean read2 output fastq file')
+    cmd.args['html'] = Argument(prefix='-h ', type='str', desc='html report file')
+    cmd.args['json'] = Argument(prefix='-j ', type='str', desc='json report file')
+    cmd.outputs['out1'] = Output(value="{out1}")
+    cmd.outputs['out2'] = Output(value="{out2}")
+    cmd.outputs['html'] = Output(value="{html}")
+    cmd.outputs['json'] = Output(value="{json}")
+    return cmd
+
+
+def ABRA2():
+    cmd = Command()
+    cmd.meta.name = 'ABRA2'
+    cmd.meta.source = 'https://github.com/mozack/abra2'
+    cmd.meta.version = 'v2.20'
+    cmd.runtime.image = 'goalconsortium/abra2:latest'
+    cmd.runtime.memory = 12 * 1024 ** 3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'java -Xmx16G -jar /opt/bin/abra2-2.20.jar'
+    cmd.args['contigs'] = Argument(prefix='--contigs ', level='optional', desc='Optional file to which assembled contigs are written')
+    cmd.args['max_dist'] = Argument(prefix='--dist ', default=1000, desc='Max read move distance')
+    cmd.args['gtf'] = Argument(prefix='--gtf ', level='optional', type='infile', desc='GTF file defining exons and transcripts')
+    cmd.args['in-bam'] = Argument(prefix='--in ', type='infile', desc='input sam')
+    cmd.args['in-vcf'] = Argument(prefix='--in-vcf', type='infile', level='optional', desc='VCF containing known (or suspected) variant sites.  Very large files should be avoided.')
+    cmd.args['index'] = Argument(prefix='--index', type='bool', default=True, desc='Enable BAM index generation when outputting sorted alignments (may require additonal memory)')
+    cmd.args['junctions'] = Argument(prefix='--junctions ', type='infile', level='optional', desc='Splice junctions definition file')
+    cmd.args['kmer'] = Argument(prefix='--kmer ', type='int', level='optional', array=True, delimiter=',', desc='Optional assembly kmer size(delimit with commas if multiple sizes specified)')
+    cmd.args['mac'] = Argument(prefix='--mac ', default=64, desc='Max assembled contigs')
+    cmd.args['mad'] = Argument(prefix='--mad ', default=8000, desc='Regions with average depth exceeding this value will be downsampled')
+    cmd.args['mapq'] = Argument(prefix='--mapq ', default=20, desc='Minimum mapping quality for a read to be used in assembly and be eligible for realignment')
+    cmd.args['mrr'] = Argument(prefix='--mrr ', default=-1, desc='Regions containing more reads than; this value are not processed.  Use -1 to disable. (default: 1000000)')
+    cmd.args['out-bam'] = Argument(prefix='--out ', desc='output bam file')
+    cmd.args['ref'] = Argument(prefix='--ref ', type='infile', desc='Genome reference location')
+    cmd.args['sa'] = Argument(prefix='--sa', type='bool', default=False, desc='Skip assembly')
+    cmd.args['sc'] = Argument(prefix='--sc ', default=[16,13,80,10], array=True, delimiter=',', desc='Soft clip contig args [max_contigs; min_base_qual,frac_high_qual_bases,; min_soft_clip_len] (default: 16,13,80,15)')
+    cmd.args['bed'] = Argument(prefix='--targets ', type='infile', level='optional', desc='BED file containing target regions')
+    cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc='Number of threads')
+    cmd.args['tmpdir'] = Argument(prefix='--tmpdir ', default='.', desc='Set the temp directory (overrides java.io.tmpdir)')
+    cmd.args['ws'] = Argument(prefix='--ws ', default=[400, 200], array=True, delimiter=',', desc='Processing window size and qoverlap')
+    cmd.outputs['output'] = Output(value='{out-bam}')
     return cmd
 
 
@@ -858,6 +949,16 @@ def pipeline():
     以上参数的调整，没有达到预期效果
     vardict 过滤: https://github.com/LeiHaoa/DeepFilter： 
     
+    根据mutscan的扫描结果，学习发现假阳性突变的特征，提出需要改进的filter：
+    1. MSIfilter的改进：
+        a. 针对4个3碱基串联重复，容易出现缺失一个单元
+        b. complex突变后，也可能还是串联重复
+    2. 增加碱基质量过滤filter：
+        a. snp, 平均碱基质量>=30, 这样，当只有2个read时，碱基质量需要都大于30才算真阳性
+        b. snp, alt的碱基质量不能显著低于左右2边的碱基质量，如果观察到此现象，往往还伴随明显的链偏向性
+    
+    自己写脚本通过bam找证据支持的时候，发现对于indel，往往找到的证据偏少，因此考虑加入realignment步骤
+    https://github.com/mozack/abra2
     
     """
     wf.meta.version = "1.0"
@@ -875,7 +976,9 @@ def pipeline():
     wf.add_argument('-bed', help="bed file for target region")
     wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
     wf.add_argument('-umi', required=True, help='A string describes the read structural. Such as “1S3M3S143T,1S3M3S143T” denotes UMIs locate at 2-4bp of read1 and read2')
+    wf.add_argument('--call_duplex', default=False, action='store_true', help='Calls duplex consensus sequences from reads generated from the same double-stranded source molecule.')
     wf.add_argument('-scatter', default=10, help='scatter number used for interval splitting of mutect2 variant calling steps')
+    wf.add_argument('-min_af', default=0.001, help='Minimum Variant Frequency Cutoff')
 
     # 参考数据库参数
     wf.add_argument('-ref', default='/home/hxbio04/dbs/hg19/hs37d5.fa', help='reference fasta file')
@@ -904,7 +1007,7 @@ def pipeline():
         raise Exception('No fastq file found !')
 
     # 处理配对信息
-    if wf.topvars['pair_info']:
+    if wf.topvars['pair_info'].value:
         # 如果没有对照，对照样本名可以用"None"替代
         pairs = [x.strip().split('\t')[:2] for x in open(wf.topvars['pair_info'].value)]
     else:
@@ -960,6 +1063,8 @@ def pipeline():
     bamdst_task_dict = dict()
     error_stat_task_dict = dict()
     sam2fastq_task_dict = dict()
+    fastp_tasks = []
+    groupumi_task_dict = dict()
     for sample, reads in fastq_info.items():
         # 跳过不需要分析的样本
         if sample in wf.args.exclude_samples:
@@ -977,6 +1082,17 @@ def pipeline():
         merge_bam_tasks = []
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
             uniq_tag = f'{sample}-{ind}' if len(r1s) > 1 else sample
+            # fastp QC
+            fastp_task, args = wf.add_task(fastp(), tag=uniq_tag)
+            args['read1'].value = r1
+            args['out1'].value = f'{sample}.clean.R1.fq.gz'
+            if r2 is not None:
+                args['read2'].value = r2
+                args['out2'].value = f'{sample}.clean.R2.fq.gz'
+            args['html'].value = f'{sample}.fastp.html'
+            args['json'].value = f'{sample}.fastp.json'
+            fastp_tasks.append(fastp_task)
+
             # fastq2sam
             fastq2sam_task, args = wf.add_task(FastqToSam(sample), tag=uniq_tag)
             args['read1'].value = r1
@@ -1022,10 +1138,13 @@ def pipeline():
 
         group_umi_task, args = wf.add_task(GroupReadsByUmi(sample), tag=sample, depends=[merge_bam_task])
         args['input'].value = merge_bam_task.outputs['out']
-        # args['strategy'].value = 'paired'
+        groupumi_task_dict[sample] = group_umi_task
 
-        # consensus_task, args = wf.add_task(CallDuplexConsensusReads(), tag=sample, depends=[group_umi_task])
-        consensus_task, args = wf.add_task(CallMolecularConsensusReads(), tag=sample, depends=[group_umi_task])
+        if wf.args.call_duplex:
+            args['strategy'].value = 'paired'
+            consensus_task, args = wf.add_task(CallDuplexConsensusReads(), tag=sample, depends=[group_umi_task])
+        else:
+            consensus_task, args = wf.add_task(CallMolecularConsensusReads(), tag=sample, depends=[group_umi_task])
         args['input'].value = group_umi_task.outputs['output']
         args['output'].value = sample + '.consensus.bam'
 
@@ -1056,20 +1175,35 @@ def pipeline():
         sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
         args['input'].value = filter_bam_task.outputs['output']
         args['output'].value = sample + '.sorted.bam'
+        args['flagstat_name'].value = sample + '.flagstat.txt'
         bam_task_dict[sample] = sort_bam_task
 
-        gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[sort_bam_task])
-        args['bam'].value = sort_bam_task.outputs['output']
-        args['bed'].value = wf.topvars['bed']
-        args['ref'].value = wf.topvars['ref']
-        args['out'].value = sample + '.gencore.unsorted.bam'
-        args['json'].value = sample + '.gencore.json'
-        args['html'].value = sample + '.gencore.html'
+        realign_task = None
+        if 'ABRA2' not in wf.args.skip:
+            realign_task, args = wf.add_task(ABRA2(), tag=sample, depends=[sort_bam_task])
+            args['in-bam'].value = sort_bam_task.outputs['output']
+            args['bed'].value = wf.topvars['bed']
+            args['ref'].value = wf.topvars['ref']
+            args['out-bam'].value = sample+'.realigned.bam'
 
-        sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample+'-re', depends=[gencore_task])
-        args['input'].value = gencore_task.outputs['out']
-        args['output'].value = sample + '.sorted.bam'
-        bam_task_dict[sample] = sort_bam_task
+        if 'Gencore' not in wf.args.skip:
+            if realign_task:
+                gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[realign_task])
+                args['bam'].value = realign_task.outputs['output']
+            else:
+                gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[sort_bam_task])
+                args['bam'].value = sort_bam_task.outputs['output']
+            args['bed'].value = wf.topvars['bed']
+            args['ref'].value = wf.topvars['ref']
+            args['out'].value = sample + '.gencore.unsorted.bam'
+            args['json'].value = sample + '.gencore.json'
+            args['html'].value = sample + '.gencore.html'
+
+            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample+'-re', depends=[gencore_task])
+            args['input'].value = gencore_task.outputs['out']
+            args['output'].value = sample + '.sorted.bam'
+            args['flagstat_name'].value = sample + '.flagstat.txt'
+            bam_task_dict[sample] = sort_bam_task
 
         bamdst_task, args = wf.add_task(Bamdst(), tag=sample, depends=[sort_bam_task])
         args['input'].value = sort_bam_task.outputs['output']
@@ -1166,9 +1300,11 @@ def pipeline():
         args['vcf'].value = mutect2_vep_task.outputs['out_vcf']
         args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
+        args['bam'].value = tumor_bam_task.outputs['output']
         args['bed'].value = wf.topvars['bed']
         args['tumor_name'].value = tumor
         args['out_prefix'].value = tumor
+        args['min_af'].value = wf.args.min_af
         mutect2_filter_task_ids.append(filter_task.task_id)
         # ----end mutect2---------------------------------------------------
 
@@ -1211,9 +1347,11 @@ def pipeline():
         args['vcf'].value = vardict_vep_task.outputs['out_vcf']
         args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
+        args['bam'].value = tumor_bam_task.outputs['output']
         args['bed'].value = wf.topvars['bed']
         args['out_prefix'].value = tumor
         args['tumor_name'].value = tumor
+        args['min_af'].value = wf.args.min_af
         vardict_filter_task_ids.append(filter_task.task_id)
 
         mutscan_task, args = wf.add_task(mutscan(), tag='vardict-'+tumor, depends=[filter_task])
@@ -1226,18 +1364,24 @@ def pipeline():
         # ----end of varidict-----------------------
 
         # ---VarNet----
-        varnet_task, args = wf.add_task(VarNet(), tag=tumor)
-        args['sample_name'].value = tumor
-        args['normal_bam'].value = normal_bam_task.outputs['output']
-        args['tumor_bam'].value = tumor_bam_task.outputs['output']
-        args['reference'].value = wf.topvars['ref']
-        args['region_bed'].value = wf.topvars['bed']
-        args['sample_name_'].value = tumor
-        args['normal_bam_'].value = normal_bam_task.outputs['output']
-        args['tumor_bam_'].value = tumor_bam_task.outputs['output']
-        args['reference_'].value = wf.topvars['ref']
+        # varnet_task, args = wf.add_task(VarNet(), tag=tumor)
+        # args['sample_name'].value = tumor
+        # args['normal_bam'].value = normal_bam_task.outputs['output']
+        # args['tumor_bam'].value = tumor_bam_task.outputs['output']
+        # args['reference'].value = wf.topvars['ref']
+        # args['region_bed'].value = wf.topvars['bed']
+        # args['sample_name_'].value = tumor
+        # args['normal_bam_'].value = normal_bam_task.outputs['output']
+        # args['tumor_bam_'].value = tumor_bam_task.outputs['output']
+        # args['reference_'].value = wf.topvars['ref']
         # ----end of VarNet----
+
+    multiqc_task, args = wf.add_task(multi_qc())
+    input_dirs = [x.wkdir for x in groupumi_task_dict.values()]
+    input_dirs += [x.wkdir for x in fastp_tasks]
+    args['indirs'].value = input_dirs
     # end
+
     wf.run()
     # tidy
     if wf.success:
