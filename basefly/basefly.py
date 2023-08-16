@@ -455,6 +455,8 @@ class Workflow:
         existed_names = {x.name for x in self.tasks.values()}
         if task.name in existed_names:
             raise Exception(f'{task.name} duplicated, please rename it')
+        # 更新工作目录
+        task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
@@ -899,6 +901,7 @@ class Workflow:
         if self.argparser is None:
             self.init_argparser()
         self.args = self.argparser.parse_args()
+        self.wkdir = self.args.outdir
 
     def finalize(self):
         for task_id, task in self.tasks.items():
