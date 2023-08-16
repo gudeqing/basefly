@@ -732,6 +732,8 @@ class Workflow:
                         final_out_dir = os.path.join(outdir, 'Outputs', self.tasks[out.task_id].name)
                         os.makedirs(final_out_dir, exist_ok=True)
                         dst_path = os.path.join(final_out_dir, os.path.basename(src_dir))
+                        if dst_path.endswith('/.'):
+                            dst_path = dst_path[:-1]
                         # 删除已经存在的结果
                         if os.path.exists(dst_path):
                             if os.path.isfile(dst_path):
