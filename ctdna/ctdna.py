@@ -210,9 +210,10 @@ def MergeBamAlignment(sample):
     cmd.args['ATTRIBUTES_TO_RETAIN'] = Argument(prefix='--ATTRIBUTES_TO_RETAIN ', default='X0')
     cmd.args['ALIGNED_BAM'] = Argument(prefix='--ALIGNED_BAM ', type='infile', desc='SAM or BAM file')
     cmd.args['UNMAPPED_BAM'] = Argument(prefix='--UNMAPPED_BAM ', type='infile', desc='unmapped bam file')
-    cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', default=f'{sample}.merged.unsorted.bam', desc='output bam file')
+    cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', default=f'{sample}.merged.bam', desc='output bam file')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='--REFERENCE_SEQUENCE ', type='infile', desc='reference fasta file')
-    cmd.args['SORT_ORDER'] = Argument(prefix='--SORT_ORDER ', default='"unsorted"')
+    cmd.args['SORT_ORDER'] = Argument(prefix='--SORT_ORDER ', default='coordinate', desc='The order in which the merged reads should be output.  Default value: coordinate. Possible values: {unsorted, queryname, coordinate, duplicate, unknown}')
+    cmd.args['CREATE_INDEX'] = Argument(prefix='--CREATE_INDEX ', default='true', desc='Whether to create a BAM index when writing a coordinate-sorted BAM file')
     cmd.args['CLIP_ADAPTERS'] = Argument(prefix='--CLIP_ADAPTERS ', default='false', desc='Whether to clip adapters where identified.')
     cmd.args['MAX_RECORDS_IN_RAM'] = Argument(prefix='--MAX_RECORDS_IN_RAM ', default=2000000, desc='When writing files that need to be sorted, this will specify the number of records stored in RAM before spilling to disk. Increasing this number reduces the number of file handles needed to sort the file, and increases the amount of RAM needed.')
     cmd.args['MAX_INSERTIONS_OR_DELETIONS'] = Argument(prefix='--MAX_INSERTIONS_OR_DELETIONS ', default=-1, desc='The maximum number of insertions or deletions permitted for an alignment to be included.')
@@ -319,9 +320,13 @@ def FilterConsensusReads():
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
-    cmd.args['min-reads'] = Argument(prefix='-M ', default='1 1 1', desc='The minimum number of reads supporting a consensus base/read.')
-    cmd.args['PhredScore'] = Argument(prefix='-N ', default=20, desc="Mask (make 'N') consensus bases with quality less than this threshold")
-    cmd.args['require-single-strand-agreement'] = Argument(prefix='-s ', default='true', desc='Mask (make N) consensus bases where the AB and BA consensus reads disagree (for duplex-sequencing only).')
+    cmd.args['min-reads'] = Argument(prefix='-M ', default='2 1 1', desc='The minimum number of reads supporting a consensus base/read. The first value applies to the final consensus read, the second value to one single-strand consensus, and the last value to the other single-strand consensus')
+    cmd.args['min-base-quality'] = Argument(prefix='-N ', default=20, desc="Mask (make 'N') consensus bases with quality less than this threshold")
+    cmd.args['require-single-strand-agreement'] = Argument(prefix='-s ', default='false', desc='Mask (make N) consensus bases where the AB and BA consensus reads disagree (for duplex-sequencing only).')
+    cmd.args['max-read-error-rate'] = Argument(prefix='-E ', default=0.05, desc='The maximum raw-read error rate across the entire consensus read.')
+    cmd.args['max-base-error-rate'] = Argument(prefix='-e ', default=0.1, desc='The maximum error rate for a single consensus base.')
+    cmd.args['min-mean-base-quality'] = Argument(prefix='-q ', default=25, desc='The minimum mean base quality across the consensus read.')
+    cmd.args['max-no-call-fraction'] = Argument(prefix='-n ', default=0.05, desc='Maximum fraction of no-calls in the read after filtering.')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
 
@@ -427,10 +432,12 @@ def Bamdst():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'bamdst'
+    cmd.args['cutoffdepth'] = Argument(prefix='--cutoffdepth ', default=500, desc='coverage of above the specified depth will be reported')
+    cmd.args['min_map_qual'] = Argument(prefix='-q ', default=20, desc='mapping quality threshold for rmdup depth calculation')
+    cmd.args['maxdepth'] = Argument(prefix='--maxdepth ', default=50000, desc='set the max depth to stat the cumu distribution')
     cmd.args['bed'] = Argument(prefix='-p ', type='infile', desc='probe bed file')
     cmd.args['outdir'] = Argument(prefix='-o ', default='.', desc='output directory')
     cmd.args['flank'] = Argument(prefix='-f ', default=200, desc='calculate the coverage of flank region')
-    cmd.args['cutoffdepth'] = Argument(prefix='--cutoffdepth ', default=500, desc='the specified coverage')
     cmd.args['input'] = Argument(prefix='', type='infile', desc='input bam file')
     cmd.outputs['outdir'] = Output(value='{outdir}')
     cmd.outputs['coverage_report'] = Output(value='{outdir}/coverage.report')
@@ -962,6 +969,26 @@ def pipeline():
     自己写脚本通过bam找证据支持的时候，发现对于indel，往往找到的证据偏少，因此考虑加入realignment步骤
     https://github.com/mozack/abra2
     
+    position filter设计：最大pos和最小pos的差距
+    链方向性filter设计：https://github.com/mikdio/SOBDetector
+    也可参考：https://github.com/cpwardell/FiNGS/blob/master/fings/primary.py
+    # Calculation of FoxoG - only necessary if C>A|G>T SNV
+    ## Equation is: ALT_F1R2/(ALT_F1R2 + ALT_F2R1) or ALT_F2R1/(ALT_F1R2 + ALT_F2R1)
+    ## C>anything or A>anything:    numerator is ALT_F2R1
+    ## G>anything or T>anything:    numerator is ALT_F1R2
+    ## If sum of F1R2 and F2R1 is zero, all reads have an indel in them, so it should be removed
+    def foxogcalc(REF,F1R2,F2R1):
+        FoxoG="NA"
+        try:
+            if((F1R2 + F2R1)!=0):
+                if(REF=="C" or REF=="A"):
+                    FoxoG = F2R1/(F1R2 + F2R1)
+                if(REF=="G" or REF=="T"):
+                    FoxoG = F1R2/(F1R2 + F2R1)
+                FoxoG=round(FoxoG,3)
+        except:
+            FoxoG="NA"
+        return(FoxoG)
     """
     wf.meta.version = "1.0"
 
@@ -1060,7 +1087,7 @@ def pipeline():
     args['outdir'].value = '.'
     interval_files = [split_task.outputs[f'out{i}'] for i in range(int(wf.args.scatter))]
 
-    # 开始处理
+    # 开始处理 fastq->bam
     bam_task_dict = dict()
     bamdst_task_dict = dict()
     error_stat_task_dict = dict()
@@ -1138,6 +1165,13 @@ def pipeline():
             args['SORT_ORDER'].value = 'unsorted'
             args['OUTPUT'].value = sample + '.merged.bam'
 
+        # bamdst first
+        bamdst_task, args = wf.add_task(Bamdst(), tag='preUMI-'+sample, depends=[merge_bam_task])
+        args['input'].value = merge_bam_task.outputs['out']
+        args['cutoffdepth'].value = 10000
+        args['bed'].value = wf.topvars['bed']
+        bamdst_task_dict['preUMI-'+sample] = bamdst_task
+
         group_umi_task, args = wf.add_task(GroupReadsByUmi(sample), tag=sample, depends=[merge_bam_task])
         args['input'].value = merge_bam_task.outputs['out']
         groupumi_task_dict[sample] = group_umi_task
@@ -1160,7 +1194,10 @@ def pipeline():
         args['read1'].value = sample + '.consensus.R1.fq.gz'
         args['read2'].value = sample + '.consensus.R2.fq.gz'
         # 带信息到read header
-        args['tags'].value = ['cD', 'cE', 'cM']
+        if wf.args.call_duplex:
+            args['tags'].value = ['cD', 'cE', 'cM', 'aD', 'aE', 'aM', 'bD', 'bE', 'bM',]
+        else:
+            args['tags'].value = ['cD', 'cE', 'cM']
         sam2fastq_task_dict[sample] = sam2fastq_task
 
         map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag=sample, depends=[sam2fastq_task])
@@ -1209,8 +1246,9 @@ def pipeline():
             args['flagstat_name'].value = sample + '.flagstat.txt'
             bam_task_dict[sample] = sort_bam_task
 
-        bamdst_task, args = wf.add_task(Bamdst(), tag=sample, depends=[sort_bam_task])
+        bamdst_task, args = wf.add_task(Bamdst(), tag='final-'+sample, depends=[sort_bam_task])
         args['input'].value = sort_bam_task.outputs['output']
+        args['cutoffdepth'].value = 5000
         args['bed'].value = wf.topvars['bed']
         bamdst_task_dict[sample] = bamdst_task
 
@@ -1223,6 +1261,7 @@ def pipeline():
             args['out_prefix'].value = sample
             error_stat_task_dict[sample] = error_stat_task
 
+    # call 变异： bam -> vcf
     vardict_filter_task_ids = []
     mutect2_filter_task_ids = []
     for tumor, normal in pairs:
