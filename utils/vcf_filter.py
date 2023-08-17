@@ -305,7 +305,7 @@ class ValidateMutationByBam(object):
                     alignment = pileup_read.alignment
                     read_name = alignment.query_name
                     query_seq = alignment.query_sequence
-                    query_pos = alignment.query_position
+                    query_pos = pileup_read.query_position
                     query_len = alignment.query_length
                     if query_pos is not None:
                         query_pos_dict[read_name] = min(query_pos, query_len - query_pos)
