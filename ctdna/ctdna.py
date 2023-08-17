@@ -473,7 +473,7 @@ def VardictSingle():
     cmd.args['nosv'] = Argument(prefix='--nosv', type='bool', default=True,)
     cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
-    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 2 -q 15 -d 3 -v 1 -f 0.0001 ', desc='pipe to another script')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 5 -q 22.5 -d 3 -v 1 -f 0.00001 ', desc='pipe to another script')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['output'] = Output(value='{output}')
     return cmd
@@ -506,7 +506,7 @@ def VardictPaired():
     cmd.args['nosv'] = Argument(prefix='--nosv', type='bool', default=True,)
     cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
-    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 5 -q 25 -d 5 -v 1 -f 0.0001 ', desc='pipe to another script')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 5 -q 22.5 -d 5 -v 1 -f 0.00001 ', desc='pipe to another script')
     cmd.args['names'] = Argument(prefix='-N "{}"', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['output'] = Output(value='{output}')
@@ -1162,6 +1162,7 @@ def pipeline():
             r2s = [None]*len(r1s)
 
         merge_bam_tasks = []
+        # 如果一个样本有多组fastq，将分别处理，最后合并bam
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
             uniq_tag = f'{sample}-{ind}' if len(r1s) > 1 else sample
             # fastp QC
@@ -1180,7 +1181,7 @@ def pipeline():
             if 'S' in umi_len:
                 umi_len = sum(int(x) for x in umi_len.split('S'))
             umi_skip = read_structures[0].split('M')[1].split('S', 1)[0]
-            args['other_args'].value = f'--umi --umi_loc {umi_loc} --umi_len {umi_len} --umi_skip {umi_skip}'
+            args['other_args'].value = f'-Q --umi --umi_loc {umi_loc} --umi_len {umi_len} --umi_skip {umi_skip}'
             fastp_task_dict[uniq_tag] = fastp_task
 
             # fastq2sam
@@ -1268,12 +1269,19 @@ def pipeline():
         # header 信息带到bam
         args['include_read_header'].value = True
 
-        filter_bam_task, args = wf.add_task(FilterBam(), tag=sample, depends=[map_task])
-        args['input'].value = map_task.outputs['out']
-        args['output'].value = sample + '.filtered.bam'
+        if 'FilterBam' in wf.args.skip:
+            filter_bam_task = None
+        else:
+            filter_bam_task, args = wf.add_task(FilterBam(), tag=sample, depends=[map_task])
+            args['input'].value = map_task.outputs['out']
+            args['output'].value = sample + '.filtered.bam'
 
-        sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
-        args['input'].value = filter_bam_task.outputs['output']
+        if filter_bam_task:
+            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
+            args['input'].value = filter_bam_task.outputs['output']
+        else:
+            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[map_task])
+            args['input'].value = map_task.outputs['out']
         args['output'].value = sample + '.sorted.bam'
         args['flagstat_name'].value = sample + '.flagstat.txt'
         bam_task_dict[sample] = sort_bam_task
@@ -1484,9 +1492,10 @@ def pipeline():
         # ----end of VarNet----
 
     multiqc_task, args = wf.add_task(multi_qc())
-    multiqc_task.depends = list(fastp_task_dict.values()) + list(groupumi_task_dict.values())
-    input_dirs = [x.wkdir for x in groupumi_task_dict.values()]
-    input_dirs += [x.wkdir for x in fastp_task_dict.values()]
+    multiqc_task.depends = list(fastp_task_dict.values())
+    multiqc_task.depends += list(groupumi_task_dict.values())
+    multiqc_task.depends += list(bam_task_dict.values())
+    input_dirs = [x.wkdir for x in multiqc_task.depends]
     args['indirs'].value = input_dirs
     # end
 
@@ -1499,24 +1508,25 @@ def pipeline():
         # merge variant report
         xls_lst = []
         for tid in vardict_filter_task_ids:
-            xls_file = wf.tasks[tid].outputs['final_xls'].value
-            xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
-            xls_lst.append(xls_file)
-        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
-        df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
-        df.to_excel(out_file, index=False)
-
-        if 'Mutect2' not in wf.args.skip:
-            xls_lst = []
-            for tid in mutect2_filter_task_ids:
+            if tid in wf.tasks:
                 xls_file = wf.tasks[tid].outputs['final_xls'].value
                 xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
                 xls_lst.append(xls_file)
-            out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
+        if xls_lst:
+            out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
             df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
             df.to_excel(out_file, index=False)
 
-
+        xls_lst = []
+        for tid in mutect2_filter_task_ids:
+            if tid in wf.tasks:
+                xls_file = wf.tasks[tid].outputs['final_xls'].value
+                xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
+                xls_lst.append(xls_file)
+        if xls_lst:
+            out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
+            df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
+            df.to_excel(out_file, index=False)
 
 
 if __name__ == '__main__':
