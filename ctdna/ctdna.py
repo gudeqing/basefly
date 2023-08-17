@@ -1,3 +1,4 @@
+import json
 import os
 import math
 import pandas as pd
@@ -263,6 +264,7 @@ def GroupReadsByUmi(sample):
     cmd.args['assign-tag'] = Argument(prefix='-T ', default='MI', desc='The output tag for UMI grouping.')
     cmd.args['min-map-q'] = Argument(prefix='-m ', default=1, desc='Minimum mapping quality for mapped reads.')
     cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['family_size'] = Output(value=f'{sample}.family.size.txt')
     return cmd
 
 
@@ -914,6 +916,57 @@ def ABRA2():
     return cmd
 
 
+def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dict, outdir='.'):
+    result = dict()
+    for sample, task in fastp_task_dict.items():
+        stat_file = os.path.join(task.wkdir, task.outputs['json'].value)
+        json_dict = json.load(open(stat_file))
+        target_info = dict()
+        target_info['sequencing'] = json_dict['summary']['sequencing']
+        target_info['total_raw_reads'] = json_dict['summary']['before_filtering']['total_reads']
+        target_info['total_raw_bases'] = json_dict['summary']['before_filtering']['total_bases']
+        target_info['q20_rate'] = json_dict['summary']['before_filtering']['q20_rate']
+        target_info['q30_rate'] = json_dict['summary']['before_filtering']['q30_rate']
+        target_info['gc_content'] = json_dict['summary']['before_filtering']['gc_content']
+        target_info['duplication(seq based, not alignment)'] = json_dict['duplication']['rate']
+        target_info['insert_size_peak'] = json_dict['insert_size']['peak']
+        result[sample] = target_info
+
+    for sample, task in bamdst_task_dict.items():
+        stat_file = os.path.join(task.wkdir, task.outputs['coverage_report'].value)
+        with open(stat_file) as f:
+            target_info = dict()
+            for line in f:
+                if line.startswith('#'):
+                    continue
+                name, value = line.strip().split('\t')
+                target_info[name] = value
+        if sample in result:
+            result[sample].update(target_info)
+        else:
+            result[sample] = target_info
+
+    for sample, task in groupumi_task_dict.items():
+        stat_file = os.path.join(task.wkdir, task.outputs['family_size'].value)
+        with open(stat_file) as f:
+            target_info = dict()
+            header = f.readline()
+            for line in f:
+                size, count, fraction, ratio = line.strip().split()
+                target_info[f'FamSize{size}:count'] = count
+                target_info[f'FamSize{size}:fraction'] = fraction
+                target_info[f'FamSize>={size}:fraction'] = ratio
+            if sample in result:
+                result[sample].update(target_info)
+            else:
+                result[sample] = target_info
+
+    table = pd.DataFrame(result)
+    table.index.name = 'Metrics'
+    table.to_csv(os.path.join(outdir, 'All.metrics.csv'), sep='\t')
+    table.to_excel(os.path.join(outdir, 'All.metrics.xlsx'))
+
+
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'ctDNA'
@@ -1092,7 +1145,7 @@ def pipeline():
     bamdst_task_dict = dict()
     error_stat_task_dict = dict()
     sam2fastq_task_dict = dict()
-    fastp_tasks = []
+    fastp_task_dict = dict()
     groupumi_task_dict = dict()
     for sample, reads in fastq_info.items():
         # 跳过不需要分析的样本
@@ -1120,7 +1173,15 @@ def pipeline():
                 args['out2'].value = f'{sample}.clean.R2.fq.gz'
             args['html'].value = f'{sample}.fastp.html'
             args['json'].value = f'{sample}.fastp.json'
-            fastp_tasks.append(fastp_task)
+            read_structures = wf.args.umi.split(',')
+            umi_loc = 'read1' if len(read_structures) == 1 else 'per_read'
+            # 如果UMI前面还有需要跳过的碱基，将一并提取出来成为UMI的一部分
+            umi_len = read_structures[0].split('M')[0]
+            if 'S' in umi_len:
+                umi_len = sum(int(x) for x in umi_len.split('S'))
+            umi_skip = read_structures[0].split('M')[1].split('S', 1)[0]
+            args['other_args'].value = f'--umi --umi_loc {umi_loc} --umi_len {umi_len} --umi_skip {umi_skip}'
+            fastp_task_dict[uniq_tag] = fastp_task
 
             # fastq2sam
             fastq2sam_task, args = wf.add_task(FastqToSam(sample), tag=uniq_tag)
@@ -1423,15 +1484,19 @@ def pipeline():
         # ----end of VarNet----
 
     multiqc_task, args = wf.add_task(multi_qc())
-    multiqc_task.depends = fastp_tasks + list(groupumi_task_dict.values())
+    multiqc_task.depends = list(fastp_task_dict.values()) + list(groupumi_task_dict.values())
     input_dirs = [x.wkdir for x in groupumi_task_dict.values()]
-    input_dirs += [x.wkdir for x in fastp_tasks]
+    input_dirs += [x.wkdir for x in fastp_task_dict.values()]
     args['indirs'].value = input_dirs
     # end
 
     wf.run()
     # tidy
     if wf.success:
+        # merge qc report
+        merge_qc(fastp_task_dict, bamdst_task_dict, groupumi_task_dict, outdir=os.path.join(wf.wkdir, 'Outputs'))
+
+        # merge variant report
         xls_lst = []
         for tid in vardict_filter_task_ids:
             xls_file = wf.tasks[tid].outputs['final_xls'].value
@@ -1450,6 +1515,8 @@ def pipeline():
             out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
             df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
             df.to_excel(out_file, index=False)
+
+
 
 
 if __name__ == '__main__':
