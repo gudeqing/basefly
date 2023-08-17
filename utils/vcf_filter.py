@@ -375,7 +375,8 @@ class ValidateMutationByBam(object):
             small_bq_diff = (bq_pvalue > 0.001) and (left_bq_pvalue > 0.05) and (right_bq_pvalue > 0.05)
             small_mq_diff = (mq_pvalue > 0.001) if mq_pvalue else True
             good_alt_bq = mean_alt_bq >= 30
-            OxoG = FoxoG < 0.9 if FoxoG else True
+            # 6/7 = 0.857
+            OxoG = FoxoG < 0.85 if FoxoG else True
             if not (reasonable_pos and small_bq_diff and small_mq_diff and good_alt_bq and OxoG):
                 good_snp = False
         all_read_tag_dict['snp_is_good'] = good_snp
