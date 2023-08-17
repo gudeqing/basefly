@@ -724,11 +724,12 @@ class Workflow:
                 if os.path.exists(src_dir):
                     targets = [src_dir]
                     parent_dir = self.tasks[out.task_id].wkdir
-                    tmp_lst = os.listdir(parent_dir)
-                    if 'cmd.sh' in tmp_lst:
-                        targets.append(os.path.join(parent_dir, 'cmd.sh'))
-                    if 'docker.cmd.sh' in tmp_lst:
-                        targets.append(os.path.join(parent_dir, 'docker.cmd.sh'))
+                    if os.path.isfile(src_dir):
+                        tmp_lst = os.listdir(parent_dir)
+                        if 'cmd.sh' in tmp_lst:
+                            targets.append(os.path.join(parent_dir, 'cmd.sh'))
+                        if 'docker.cmd.sh' in tmp_lst:
+                            targets.append(os.path.join(parent_dir, 'docker.cmd.sh'))
                     for src_dir in targets:
                         # print('Found expected output: ', src_dir)
                         final_out_dir = os.path.join(outdir, 'Outputs', self.tasks[out.task_id].name)
