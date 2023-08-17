@@ -1231,6 +1231,12 @@ class VcfFilter(ValidateMutationByBam):
             dp = sum(dp)
         return dp
 
+    def get_alt_depth(self, record, sample=None):
+        ad = record.samples[sample or self.tumor]['AD']
+        if type(ad) == tuple:
+            ad = ad[1]
+        return ad
+
     def get_mutation_type(self, record):
         if record.alts is None:
             return None
@@ -1581,6 +1587,7 @@ class VcfFilter(ValidateMutationByBam):
             "Exon": csq_dict['EXON'],  # Affected Exon(s)
             "Strand": csq_dict['STRAND'],
             "VariantClass": csq_dict['VARIANT_CLASS'],
+            "AltDepth": self.get_alt_depth(r),
             "Depth": self.get_depth(r, self.tumor),  # Depth
             "ExistingVariation": csq_dict['Existing_variation'],
             "MAX_AF": csq_dict['MAX_AF'],
