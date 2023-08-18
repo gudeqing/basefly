@@ -135,7 +135,7 @@ def ExtractUmisFromBam():
     cmd.args['single-tag'] = Argument(prefix='-s ', default='RX', desc="Single tag into which to concatenate all molecular indices.")
     cmd.args['output'] = Argument(prefix='-o ', desc='Output BAM file')
     # 定义输出
-    cmd.outputs['output'] = Output(value="{output}")
+    cmd.outputs['out'] = Output(value="{output}")
     return cmd
 
 
@@ -149,7 +149,7 @@ def MarkIlluminaAdapters():
     cmd.args['input'] = Argument(prefix='--INPUT ', type='infile', desc='Input BAM file')
     cmd.args['metrics'] = Argument(prefix='--METRICS ', default='metrics.txt', desc='Histogram showing counts of bases_clipped in how many reads Required')
     cmd.args['output'] = Argument(prefix='--OUTPUT ', desc='Output BAM file')
-    cmd.outputs['output'] = Output(value="{output}")
+    cmd.outputs['out'] = Output(value="{output}")
     cmd.outputs['metrics'] = Output(value="{metrics}")
     return cmd
 
@@ -263,7 +263,7 @@ def GroupReadsByUmi(sample):
     cmd.args['raw-tag'] = Argument(prefix='-t ', default='RX', desc='The tag containing the raw UMI.')
     cmd.args['assign-tag'] = Argument(prefix='-T ', default='MI', desc='The output tag for UMI grouping.')
     cmd.args['min-map-q'] = Argument(prefix='-m ', default=1, desc='Minimum mapping quality for mapped reads.')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     cmd.outputs['family_size'] = Output(value=f'{sample}.family.size.txt')
     return cmd
 
@@ -285,7 +285,7 @@ def CallDuplexConsensusReads():
     cmd.args['error-rate-post-umi'] = Argument(prefix='-2 ', default=30, desc='The Phred-scaled error rate for an error post the UMIs have been integrated.')
     cmd.args['min-input-base-quality'] = Argument(prefix='-m ', default=20, desc='Ignore bases in raw reads that have Q below this value.')
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='The number of threads to use while consensus calling')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
 
@@ -306,7 +306,7 @@ def CallMolecularConsensusReads():
     cmd.args['error-rate-post-umi'] = Argument(prefix='-2 ', default=30, desc='The Phred-scaled error rate for an error post the UMIs have been integrated.')
     cmd.args['min-input-base-quality'] = Argument(prefix='-m ', default=20, desc='Ignore bases in raw reads that have Q below this value.')
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='The number of threads to use while consensus calling')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
 
@@ -329,7 +329,7 @@ def FilterConsensusReads():
     cmd.args['max-base-error-rate'] = Argument(prefix='-e ', default=0.1, desc='The maximum error rate for a single consensus base.')
     cmd.args['min-mean-base-quality'] = Argument(prefix='-q ', default=25, desc='The minimum mean base quality across the consensus read.')
     cmd.args['max-no-call-fraction'] = Argument(prefix='-n ', default=0.05, desc='Maximum fraction of no-calls in the read after filtering.')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
 
@@ -346,7 +346,7 @@ def ClipBam():
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
     cmd.args['ref'] = Argument(prefix='-r ', desc='Reference fasta file.')
     cmd.args['clipping-mode'] = Argument(prefix='-c ', default='Hard', range=['Hard', 'Soft', 'SoftWithMask'], desc='The type of clipping to perform.')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
 
@@ -370,7 +370,7 @@ def FilterBam():
     cmd.args['min-map-q'] = Argument(prefix='-M ', default=1, desc='Remove all mapped reads with MAPQ lower than this number.')
     cmd.args['remove-single-end-mappings'] = Argument(prefix='-P ', default='false', desc='Removes non-PE reads and any read whose mate pair is unmapped.')
     cmd.args['remove-secondary-alignments'] = Argument(prefix='-S ', default='true', desc='Remove all reads marked as secondary alignments.')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
 
@@ -390,7 +390,7 @@ def SortAndIndexBam():
     cmd.args['_index_bam'] = Argument(type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
     cmd.args['_flagstat'] = Argument(type='fix', value=f'&& samtools flagstat -@ {cmd.runtime.cpu} *.bam')
     cmd.args['flagstat_name'] = Argument(prefix ='> ', default='bam.flagstat.txt', desc='flagstat output file name')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
 
@@ -475,7 +475,7 @@ def VardictSingle():
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
     cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 5 -q 22.5 -d 3 -v 1 -f 0.00001 ', desc='pipe to another script')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
 
@@ -509,7 +509,7 @@ def VardictPaired():
     cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 5 -q 22.5 -d 5 -v 1 -f 0.00001 ', desc='pipe to another script')
     cmd.args['names'] = Argument(prefix='-N "{}"', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
-    cmd.outputs['output'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
 
@@ -912,7 +912,7 @@ def ABRA2():
     cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc='Number of threads')
     cmd.args['tmpdir'] = Argument(prefix='--tmpdir ', default='.', desc='Set the temp directory (overrides java.io.tmpdir)')
     cmd.args['ws'] = Argument(prefix='--ws ', default=[400, 200], array=True, delimiter=',', desc='Processing window size and qoverlap')
-    cmd.outputs['output'] = Output(value='{out-bam}')
+    cmd.outputs['out'] = Output(value='{out-bam}')
     return cmd
 
 
@@ -1162,6 +1162,7 @@ def pipeline():
             r2s = [None]*len(r1s)
 
         merge_bam_tasks = []
+        fastp_bwa_tasks = []
         # 如果一个样本有多组fastq，将分别处理，最后合并bam
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
             uniq_tag = f'{sample}-{ind}' if len(r1s) > 1 else sample
@@ -1184,6 +1185,13 @@ def pipeline():
             args['other_args'].value = f'-Q --umi --umi_loc {umi_loc} --umi_len {umi_len} --umi_skip {umi_skip}'
             fastp_task_dict[uniq_tag] = fastp_task
 
+            if 'FastqToSam' in wf.args.skip:
+                map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag='fastp-'+sample, depends=[fastp_task])
+                args['read1'].value = fastp_task.outputs['out1']
+                args['read2'].value = fastp_task.outputs['out2']
+                args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+                fastp_bwa_tasks.append(map_task)
+
             # fastq2sam
             fastq2sam_task, args = wf.add_task(FastqToSam(sample), tag=uniq_tag)
             args['read1'].value = r1
@@ -1200,13 +1208,13 @@ def pipeline():
 
             # MarkIlluminaAdapters
             markadapter_task, args = wf.add_task(MarkIlluminaAdapters(), tag=uniq_tag, depends=[get_umi_task])
-            args['input'].value = get_umi_task.outputs['output']
+            args['input'].value = get_umi_task.outputs['out']
             args['metrics'].value = uniq_tag + '.markadapters.metircs.txt'
             args['output'].value = uniq_tag + '.markadapters.ubam'
 
             # bwa alignment
             bwa_task, args = wf.add_task(Bam2FastqBwaMem(uniq_tag), tag=uniq_tag, depends=[index_task, markadapter_task])
-            args['input'].value = markadapter_task.outputs['output']
+            args['input'].value = markadapter_task.outputs['out']
             args['CLIPPING_ATTRIBUTE'].value = 'XT'
             # 为了在mergeBamAlignment时和markIlluminaAdapters的输入保持一致，建议下面的设置为‘N'
             args['CLIPPING_ACTION'].value = 'N'
@@ -1216,20 +1224,36 @@ def pipeline():
             merge_bam_task, args = wf.add_task(MergeBamAlignment(uniq_tag), tag=uniq_tag, depends=[bwa_task])
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             args['ALIGNED_BAM'].value = bwa_task.outputs['out']
-            args['UNMAPPED_BAM'].value = markadapter_task.outputs['output']
+            args['UNMAPPED_BAM'].value = markadapter_task.outputs['out']
             merge_bam_tasks.append(merge_bam_task)
 
+        merge_bam_task_for_gencore = fastp_bwa_tasks[0]
         if len(r1s) > 1:
             # 合并一个样本的多个fastq的比对结果
+            if 'FastqToSam' in wf.args.skip:
+                # 走 fastp+bwa+gencore路线
+                merge_bam_task_for_gencore, args = wf.add_task(MergeSamFiles(), tag=sample, depends=fastp_bwa_tasks)
+                args['INPUT'].value = [x.outputs['out'] for x in fastp_bwa_tasks]
+                args['SORT_ORDER'].value = 'coordinate'
+                args['OUTPUT'].value = sample + '.merged.bam'
+
             merge_bam_task, args = wf.add_task(MergeSamFiles(), tag=sample, depends=merge_bam_tasks)
             args['INPUT'].value = [x.outputs['out'] for x in merge_bam_tasks]
-            # GroupReadsByUmi 不强求bam是否是sorted
-            args['SORT_ORDER'].value = 'unsorted'
+            args['SORT_ORDER'].value = 'coordinate'
             args['OUTPUT'].value = sample + '.merged.bam'
 
         # bamdst first
-        bamdst_task, args = wf.add_task(Bamdst(), tag='preUMI-'+sample, depends=[merge_bam_task])
-        args['input'].value = merge_bam_task.outputs['out']
+        if 'FastqToSam' in wf.args.skip:
+            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[merge_bam_task_for_gencore])
+            args['input'].value = merge_bam_task_for_gencore.outputs['out']
+            args['output'].value = sample + '.sorted.bam'
+            args['flagstat_name'].value = sample + '.flagstat.txt'
+            bam_task_dict[sample] = sort_bam_task
+            depend_task = sort_bam_task
+        else:
+            depend_task = merge_bam_task
+        bamdst_task, args = wf.add_task(Bamdst(), tag='preUMI-'+sample, depends=[depend_task])
+        args['input'].value = depend_task.outputs['out']
         args['cutoffdepth'].value = 10000
         args['bed'].value = wf.topvars['bed']
         bamdst_task_dict['preUMI-'+sample] = bamdst_task
@@ -1243,16 +1267,16 @@ def pipeline():
             consensus_task, args = wf.add_task(CallDuplexConsensusReads(), tag=sample, depends=[group_umi_task])
         else:
             consensus_task, args = wf.add_task(CallMolecularConsensusReads(), tag=sample, depends=[group_umi_task])
-        args['input'].value = group_umi_task.outputs['output']
+        args['input'].value = group_umi_task.outputs['out']
         args['output'].value = sample + '.consensus.bam'
 
         filter_consensus_task, args = wf.add_task(FilterConsensusReads(), tag=sample, depends=[consensus_task])
-        args['input'].value = consensus_task.outputs['output']
+        args['input'].value = consensus_task.outputs['out']
         args['ref'].value = wf.topvars['ref']
         args['output'].value = sample + '.filtered_consensus.bam'
 
         sam2fastq_task, args = wf.add_task(SamToFastq(), tag=sample, depends=[filter_consensus_task])
-        args['bam'].value = filter_consensus_task.outputs['output']
+        args['bam'].value = filter_consensus_task.outputs['out']
         args['read1'].value = sample + '.consensus.R1.fq.gz'
         args['read2'].value = sample + '.consensus.R2.fq.gz'
         # 带信息到read header
@@ -1276,20 +1300,23 @@ def pipeline():
             args['input'].value = map_task.outputs['out']
             args['output'].value = sample + '.filtered.bam'
 
-        if filter_bam_task:
-            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
-            args['input'].value = filter_bam_task.outputs['output']
+        if 'FastqToSam' in wf.args.skip:
+            pass
         else:
-            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[map_task])
-            args['input'].value = map_task.outputs['out']
-        args['output'].value = sample + '.sorted.bam'
-        args['flagstat_name'].value = sample + '.flagstat.txt'
-        bam_task_dict[sample] = sort_bam_task
+            if filter_bam_task:
+                sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
+                args['input'].value = filter_bam_task.outputs['out']
+            else:
+                sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[map_task])
+                args['input'].value = map_task.outputs['out']
+            args['output'].value = sample + '.sorted.bam'
+            args['flagstat_name'].value = sample + '.flagstat.txt'
+            bam_task_dict[sample] = sort_bam_task
 
         realign_task = None
         if 'ABRA2' not in wf.args.skip:
             realign_task, args = wf.add_task(ABRA2(), tag=sample, depends=[sort_bam_task])
-            args['in-bam'].value = sort_bam_task.outputs['output']
+            args['in-bam'].value = sort_bam_task.outputs['out']
             args['bed'].value = wf.topvars['bed']
             args['ref'].value = wf.topvars['ref']
             args['out-bam'].value = sample+'.realigned.bam'
@@ -1299,10 +1326,10 @@ def pipeline():
         if 'Gencore' not in wf.args.skip:
             if realign_task:
                 gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[realign_task])
-                args['bam'].value = realign_task.outputs['output']
+                args['bam'].value = realign_task.outputs['out']
             else:
                 gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[sort_bam_task])
-                args['bam'].value = sort_bam_task.outputs['output']
+                args['bam'].value = sort_bam_task.outputs['out']
             args['bed'].value = wf.topvars['bed']
             args['ref'].value = wf.topvars['ref']
             args['out'].value = sample + '.gencore.unsorted.bam'
@@ -1316,7 +1343,7 @@ def pipeline():
             bam_task_dict[sample] = sort_bam_task
 
         bamdst_task, args = wf.add_task(Bamdst(), tag='final-'+sample, depends=[sort_bam_task])
-        args['input'].value = sort_bam_task.outputs['output']
+        args['input'].value = sort_bam_task.outputs['out']
         args['cutoffdepth'].value = 5000
         args['bed'].value = wf.topvars['bed']
         bamdst_task_dict[sample] = bamdst_task
@@ -1324,7 +1351,7 @@ def pipeline():
         # 自研脚本估计错误率
         if 'StatSeqError' not in wf.args.skip:
             error_stat_task, args = wf.add_task(stat_context_seq_error(), tag=sample)
-            args['bam'].value = sort_bam_task.outputs['output']
+            args['bam'].value = sort_bam_task.outputs['out']
             args['genome'].value = wf.topvars['ref']
             args['bed'].value = wf.topvars['bed']
             args['out_prefix'].value = sample
@@ -1352,10 +1379,10 @@ def pipeline():
             mutect_task, args = wf.add_task(Mutect2(f'{tumor}-{ind}'), tag=f'{tumor}-{ind}', parent_wkdir='Mutect2'+tumor)
             mutect_tasks.append(mutect_task)
             args['ref'].value = wf.topvars['ref']
-            args['tumor_bam'].value = tumor_bam_task.outputs['output']
+            args['tumor_bam'].value = tumor_bam_task.outputs['out']
             args['tumor_name'].value = tumor
             if normal_bam_task:
-                args['normal_bam'].value = normal_bam_task.outputs['output']
+                args['normal_bam'].value = normal_bam_task.outputs['out']
                 args['normal_name'].value = normal
             args['bam-output'].value = f'{tumor}-{ind}' + '.haplotypes.bam'
             args['germline-resource'].value = wf.topvars['germline_vcf']
@@ -1388,7 +1415,7 @@ def pipeline():
             filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor), tag=tumor, depends=[filter_task])
             args['vcf'].value = filter_task.outputs['out']
             args['ref'].value = wf.topvars['ref']
-            args['bam'].value = tumor_bam_task.outputs['output']
+            args['bam'].value = tumor_bam_task.outputs['out']
             args['bwa-mem-index-image'].value = wf.topvars['bwaMemIndexImage']
             filter_align_task.outputs['out'].report = True
 
@@ -1414,7 +1441,7 @@ def pipeline():
         if error_stat_task_dict:
             args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
-        args['bam'].value = tumor_bam_task.outputs['output']
+        args['bam'].value = tumor_bam_task.outputs['out']
         args['bed'].value = wf.topvars['bed']
         args['tumor_name'].value = tumor
         args['out_prefix'].value = tumor
@@ -1426,7 +1453,7 @@ def pipeline():
         if normal_bam_task:
             vardict_task, args = wf.add_task(VardictPaired(), tag=tumor)
             args['sample'].value = tumor
-            args['bam'].value = [tumor_bam_task.outputs['output'], normal_bam_task.outputs['output']]
+            args['bam'].value = [tumor_bam_task.outputs['out'], normal_bam_task.outputs['out']]
             args['genome'].value = wf.topvars['ref']
             args['bed'].value = wf.topvars['bed']
             args['names'].value = [tumor, normal]
@@ -1434,13 +1461,13 @@ def pipeline():
         else:
             vardict_task, args = wf.add_task(VardictSingle(), tag=tumor, depends=[tumor_bam_task])
             args['sample'].value = tumor
-            args['bam'].value = tumor_bam_task.outputs['output']
+            args['bam'].value = tumor_bam_task.outputs['out']
             args['genome'].value = wf.topvars['ref']
             args['bed'].value = wf.topvars['bed']
             args['output'].value = tumor + '.raw.vcf'
 
         add_contig_task, args = wf.add_task(add_vcf_contig(), tag=tumor, depends=[vardict_task])
-        args['vcf'].value = vardict_task.outputs['output']
+        args['vcf'].value = vardict_task.outputs['out']
         args['ref_dict'].value = wf.topvars['ref_dict']
         args['out'].value = tumor + '.raw.vcf'
 
@@ -1462,7 +1489,7 @@ def pipeline():
         if error_stat_task_dict:
             args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
-        args['bam'].value = tumor_bam_task.outputs['output']
+        args['bam'].value = tumor_bam_task.outputs['out']
         args['bed'].value = wf.topvars['bed']
         args['out_prefix'].value = tumor
         args['tumor_name'].value = tumor
@@ -1481,13 +1508,13 @@ def pipeline():
         # ---VarNet----
         # varnet_task, args = wf.add_task(VarNet(), tag=tumor)
         # args['sample_name'].value = tumor
-        # args['normal_bam'].value = normal_bam_task.outputs['output']
-        # args['tumor_bam'].value = tumor_bam_task.outputs['output']
+        # args['normal_bam'].value = normal_bam_task.outputs['out']
+        # args['tumor_bam'].value = tumor_bam_task.outputs['out']
         # args['reference'].value = wf.topvars['ref']
         # args['region_bed'].value = wf.topvars['bed']
         # args['sample_name_'].value = tumor
-        # args['normal_bam_'].value = normal_bam_task.outputs['output']
-        # args['tumor_bam_'].value = tumor_bam_task.outputs['output']
+        # args['normal_bam_'].value = normal_bam_task.outputs['out']
+        # args['tumor_bam_'].value = tumor_bam_task.outputs['out']
         # args['reference_'].value = wf.topvars['ref']
         # ----end of VarNet----
 
