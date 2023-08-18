@@ -331,8 +331,10 @@ class ValidateMutationByBam(object):
                     if read_name not in all_read_tag_dict:
                         target_tag_dict = dict()
                         for tag in tag_names:
-                            target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
-                        all_read_tag_dict[read_name] = target_tag_dict
+                            if alignment.has_tag(tag):
+                                target_tag_dict[tag] = alignment.get_tag(tag)
+                        if target_tag_dict:
+                            all_read_tag_dict[read_name] = target_tag_dict
         # 开始统计分析
         if support_reads:
             # try:
@@ -446,28 +448,30 @@ class ValidateMutationByBam(object):
                         support_reads.add(read)
 
             for pileup_read in col.pileups:
-                target_tag_dict = dict()
-                read_name = pileup_read.alignment.query_name
-                query_seq = pileup_read.alignment.query_sequence
+                alignment = pileup_read.alignment
+                read_name = alignment.query_name
+                query_seq = alignment.query_sequence
                 query_pos = pileup_read.query_position
                 # clip的base或许是插入的序列
                 if alt_len > 2:
                     cigar = pileup_read.alignment.cigarstring
                     if cigar.endswith('S'):
                         # read右端clip的序列是insertion的起始
-                        query_alignment_end = pileup_read.alignment.query_alignment_end
+                        query_alignment_end = alignment.query_alignment_end
                         if expected_insert[1:].startswith(query_seq[query_alignment_end:].upper()):
                             support_reads.add(read_name)
-                    if pileup_read.alignment.cigartuples[0][0] == 4:
+                    if alignment.cigartuples[0][0] == 4:
                         # read左端clip掉的序列是insertion尾部
                         query_alignment_start = pileup_read.alignment.query_alignment_start
                         if expected_insert.endswith(query_seq[:query_alignment_start]):
                             support_reads.add(read_name)
                 if read_name not in all_read_tag_dict:
+                    target_tag_dict = dict()
                     for tag in tag_names:
-                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
-                    # 不关心query_name是否重复，以最后一个为准
-                    all_read_tag_dict[read_name] = target_tag_dict
+                        if alignment.has_tag(tag):
+                            target_tag_dict[tag] = alignment.get_tag(tag)
+                    if target_tag_dict:
+                        all_read_tag_dict[read_name] = target_tag_dict
                 # 提取支持突变的read的序列信息，围绕突变周围展开
                 if (query_pos is not None) and (read_name in support_reads):
                     if (query_pos >= 4) and (len(query_seq) > query_pos+alt_len+4):
@@ -558,14 +562,15 @@ class ValidateMutationByBam(object):
                         break
                 # 提取tag信息
                 if (read_name in all_read_names) or (read_name in support_reads):
-                    target_tag_dict = dict()
                     if read_name not in all_read_tag_dict:
+                        target_tag_dict = dict()
                         for tag in tag_names:
-                            target_tag_dict[tag] = each.get_tag(tag)
+                            if each.has_tag(tag):
+                                target_tag_dict[tag] = each.get_tag(tag)
                         # 不关心query_name是否重复，以最后一个为准
-                        all_read_tag_dict[read_name] = target_tag_dict
-        # 将consensus_alt_seq和参考基因组序列进行比对，能找到
-
+                        if target_tag_dict:
+                            all_read_tag_dict[read_name] = target_tag_dict
+        # 将consensus_alt_seq和参考基因组序列进行比对，能找到符合突变
         return support_reads, all_read_tag_dict, alt_flank_seqs
 
     def get_del_support_reads(self, contig, start, del_len, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True, logger=None):
@@ -591,19 +596,22 @@ class ValidateMutationByBam(object):
         support_read_seqs = []
         for col in cols:
             for pileup_read in col.pileups:
-                read_name = pileup_read.alignment.query_name
-                query_seq = pileup_read.alignment.query_sequence
+                alignment = pileup_read.alignment
+                read_name = alignment.query_name
+                query_seq = alignment.query_sequence
                 query_pos = pileup_read.query_position_or_next
                 if -pileup_read.indel == del_len:
                     # 由于indel的比对方式有多种，这种方法找到的del证据偏少，需要进行重新比对才能找到足够的证据，目前为未实现
-                    support_reads.add(pileup_read.alignment.query_name)
+                    support_reads.add(read_name)
                     if (query_pos >= 4) and (len(query_seq) > query_pos + 4):
                         support_read_seqs.append(query_seq[query_pos - 4:query_pos + 4])
-                target_tag_dict = dict()
                 if read_name not in all_read_tag_dict:
+                    target_tag_dict = dict()
                     for tag in tag_names:
-                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
-                    all_read_tag_dict[read_name] = target_tag_dict
+                        if alignment.has_tag(tag):
+                            target_tag_dict[tag] = alignment.get_tag(tag)
+                    if target_tag_dict:
+                        all_read_tag_dict[read_name] = target_tag_dict
         return support_reads, all_read_tag_dict, support_read_seqs
 
     def get_substitution_support_reads(self, contig, start, alt, tag_names:tuple=tuple(), min_bq=13, ignore_overlaps=True, logger=None):
@@ -681,16 +689,18 @@ class ValidateMutationByBam(object):
         support_read_seqs = []
         for col in cols:
             for pileup_read in col.pileups:
-                query_seq = pileup_read.alignment.query_sequence
-                query_len = pileup_read.alignment.query_length
+                alignment = pileup_read.alignment
+                query_seq = alignment.query_sequence
+                query_len = alignment.query_length
                 query_pos = pileup_read.query_position
-                read_name = pileup_read.alignment.query_name
-                target_tag_dict = dict()
+                read_name = alignment.query_name
                 if read_name not in all_read_tag_dict:
+                    target_tag_dict = dict()
                     for tag in tag_names:
-                        target_tag_dict[tag] = pileup_read.alignment.get_tag(tag)
-                    # 不关心query_name是否重复，以最后一个为准
-                    all_read_tag_dict[read_name] = target_tag_dict
+                        if alignment.has_tag(tag):
+                            target_tag_dict[tag] = alignment.get_tag(tag)
+                    if target_tag_dict:
+                        all_read_tag_dict[read_name] = target_tag_dict
                 if query_pos is not None:
                     # position of the read base at the pileup site, 0-based. None if is_del or is_refskip is set.
                     # 我们期望该位置下一位|mismatch|insertion|deletion|
@@ -785,7 +795,7 @@ class ValidateMutationByBam(object):
         # 这些reads在附近杂合突变位置的一致性则只有50%
         dis_agree = 0
         total = len(read_seq_lst)
-        if total == 1:
+        if total < 1:
             return True
         for bases in zip(*read_seq_lst):
             # 确保碱基大小写一致
@@ -1876,11 +1886,18 @@ class VcfFilter(ValidateMutationByBam):
                 if bamer and len(reasons) == 0:
                     # 该步骤比较耗时，为加快速度，仅仅对通过前面全部判定条件的突变进行分析
                     support_reads, tag_dict, support_seqs = bamer.get_mut_support_reads(r, tag_names=('cD', 'cE'), logger=logger)
+                    # support_reads, tag_dict, support_seqs = bamer.get_mut_support_reads(r, logger=logger)
+                    # gencore: each consensus read will have a tag FR, which means forward read number of this consensus read.
+                    # If the read is a duplex consensus read, it will also has a tag RR, which means reverse read number of this consensus read.
                     if 'snp_is_good' in tag_dict:
                         snp_good = tag_dict.pop('snp_is_good')
                         if not snp_good:
                             reasons.append('BadSnpQual')
-                    if support_reads:
+                    # 检查证据reads的一致性
+                    consistency = bamer.check_support_consistency(support_seqs, max_disagree=2)
+                    if not consistency:
+                        reasons.append('InconsistentSupports')
+                    if support_reads and tag_dict:
                         fam1_support_num = sum(tag_dict[x]['cD'] == 1 for x in support_reads)
                         fam2_support_num = len(support_reads) - fam1_support_num
                         fam1_all_num = sum(tag_dict[x]['cD'] == 1 for x in tag_dict)
@@ -1889,10 +1906,6 @@ class VcfFilter(ValidateMutationByBam):
                         # median_error = statistics.median(consensus_error)
                         mean_error = statistics.mean(consensus_error)
                         r.info['ConsInfo'] = (fam1_support_num, fam2_support_num, fam1_all_num, fam2_all_num, mean_error)
-                        # 检查证据reads的一致性
-                        consistency = bamer.check_support_consistency(support_seqs, max_disagree=2)
-                        if not consistency:
-                            reasons.append('InconsistentSupports')
                         if fam2_support_num == 0 and mutation_type == 'SNV':
                             if fam1_support_num < 5 or fam2_support_num < 2:
                                 reasons.append('LowUmiReadSupport')
