@@ -1759,7 +1759,7 @@ class VcfFilter(ValidateMutationByBam):
                 continue
 
             if len(r.ref) > 51 or len(r.alts[0]) > 51:
-                print(f'skip long mutation ({r.info["DP"]}):', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
+                print(f'skip long mutation ({len(r.alts[0])}):', r.contig, r.pos, r.ref, list(r.alts), file=log_file)
                 vcf_discard.write(r)
                 continue
 
