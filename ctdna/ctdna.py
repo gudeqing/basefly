@@ -923,14 +923,18 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
         stat_file = os.path.join(task.wkdir, task.outputs['json'].value)
         json_dict = json.load(open(stat_file))
         target_info = dict()
-        target_info['sequencing'] = json_dict['summary']['sequencing']
-        target_info['total_raw_reads'] = json_dict['summary']['before_filtering']['total_reads']
-        target_info['total_raw_bases'] = json_dict['summary']['before_filtering']['total_bases']
-        target_info['q20_rate'] = json_dict['summary']['before_filtering']['q20_rate']
-        target_info['q30_rate'] = json_dict['summary']['before_filtering']['q30_rate']
-        target_info['gc_content'] = json_dict['summary']['before_filtering']['gc_content']
-        target_info['duplication(seq based, not alignment)'] = json_dict['duplication']['rate']
-        target_info['insert_size_peak'] = json_dict['insert_size']['peak']
+        # target_info['sequencing'] = json_dict['summary']['sequencing']
+        target_info['Read1_length'] = json_dict['summary']['before_filtering']['read1_mean_length']
+        target_info['Read2_length'] = json_dict['summary']['before_filtering']['read2_mean_length']
+        target_info['Total_raw_reads'] = json_dict['summary']['before_filtering']['total_reads']
+        target_info['Total_raw_bases'] = json_dict['summary']['before_filtering']['total_bases']
+        target_info['Q20_rate'] = json_dict['summary']['before_filtering']['q20_rate']
+        target_info['Q30_rate'] = json_dict['summary']['before_filtering']['q30_rate']
+        target_info['Q20_bases'] = json_dict['summary']['before_filtering']['q20_bases']
+        target_info['Q30_bases'] = json_dict['summary']['before_filtering']['q30_bases']
+        target_info['GC_content'] = json_dict['summary']['before_filtering']['gc_content']
+        target_info['Duplication(seq based, not alignment)'] = json_dict['duplication']['rate']
+        target_info['Insert_size_peak'] = json_dict['insert_size']['peak']
         result[sample] = target_info
 
     for sample, task in bamdst_task_dict.items():
@@ -943,21 +947,22 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
                     continue
                 name, value = line.strip().split('\t')
                 if '%' in value:
-                    value = float(value.replace('%', ''))
+                    value = round(float(value.replace('%', ''))*0.01, 4)
                 else:
                     value = float(value)
                 target_info[name] = value
             # 计算均一性
             data = pd.read_table(depth_file, header=0)
             mean_coverage = data['Cover depth'].mean()
-            target_info['[Target] Coverage >= 0.2*MeanDepth'] = sum(data['Cover depth'] >= mean_coverage*0.2)/data.shape[0]
-            target_info['[Target] Coverage >= 0.5*MeanDepth'] = sum(data['Cover depth'] >= mean_coverage*0.5)/data.shape[0]
-            target_info['[Target] Coverage >= 300x'] = sum(data['Cover depth'] >= 300)/data.shape[0]
-            target_info['[Target] Coverage >= 500x'] = sum(data['Cover depth'] >= 500)/data.shape[0]
-            target_info['[Target] Coverage >= 1000x'] = sum(data['Cover depth'] >= 1000)/data.shape[0]
-            target_info['[Target] Coverage >= 2000x'] = sum(data['Cover depth'] > 2000)/data.shape[0]
-            target_info['[Target] Coverage >= 5000x'] = sum(data['Cover depth'] > 5000)/data.shape[0]
-            target_info['[Target] Coverage >= 10000x'] = sum(data['Cover depth'] > 10000)/data.shape[0]
+            target_info['[Target] Coverage (>=0.2*MeanDepth)'] = sum(data['Cover depth'] >= mean_coverage*0.2)/data.shape[0]
+            target_info['[Target] Coverage (>=0.5*MeanDepth)'] = sum(data['Cover depth'] >= mean_coverage*0.5)/data.shape[0]
+            target_info['[Target] Coverage (>=200x)'] = sum(data['Cover depth'] >= 200)/data.shape[0]
+            target_info['[Target] Coverage (>=300x)'] = sum(data['Cover depth'] >= 300)/data.shape[0]
+            target_info['[Target] Coverage (>=500x)'] = sum(data['Cover depth'] >= 500)/data.shape[0]
+            target_info['[Target] Coverage (>=1000x)'] = sum(data['Cover depth'] >= 1000)/data.shape[0]
+            target_info['[Target] Coverage (>=2000x)'] = sum(data['Cover depth'] > 2000)/data.shape[0]
+            target_info['[Target] Coverage (>=5000x)'] = sum(data['Cover depth'] > 5000)/data.shape[0]
+            target_info['[Target] Coverage (>=10000x)'] = sum(data['Cover depth'] > 10000)/data.shape[0]
 
         if sample in result:
             result[sample].update(target_info)
@@ -971,9 +976,9 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
             header = f.readline()
             for line in f:
                 size, count, fraction, ratio = line.strip().split()
-                target_info[f'FamSize={size}:count'] = count
-                target_info[f'FamSize={size}:fraction'] = fraction
-                target_info[f'FamSize>={size}:fraction'] = ratio
+                target_info[f'FamSize={size}:count'] = int(count)
+                target_info[f'FamSize={size}:fraction'] = round(float(fraction), 4)
+                target_info[f'FamSize>={size}:fraction'] = round(float(ratio), 4)
             if sample in result:
                 result[sample].update(target_info)
             else:
