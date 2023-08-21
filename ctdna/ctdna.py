@@ -443,6 +443,7 @@ def Bamdst():
     cmd.args['input'] = Argument(prefix='', type='infile', desc='input bam file')
     cmd.outputs['outdir'] = Output(value='{outdir}', report=True)
     cmd.outputs['coverage_report'] = Output(value='{outdir}/coverage.report')
+    cmd.outputs['depth_file'] = Output(value='{outdir}/depth.tsv.gz')
     return cmd
 
 
@@ -934,7 +935,7 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
 
     for sample, task in bamdst_task_dict.items():
         stat_file = os.path.join(task.wkdir, task.outputs['coverage_report'].value)
-        depth_file = os.path.join(task.wkdir, task.outputs['depth.tsv.gz'].value)
+        depth_file = os.path.join(task.wkdir, task.outputs['depth_file'].value)
         with open(stat_file) as f:
             target_info = dict()
             for line in f:
@@ -949,14 +950,14 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
             # 计算均一性
             data = pd.read_table(depth_file, header=0)
             mean_coverage = data['Cover depth'].mean()
-            target_info['[Target] Fraction Region covered >= 0.2*MeanDepth'] = sum(data['Cover depth'] >= mean_coverage*0.2)/data.shape[0]
-            target_info['[Target] Fraction Region covered >= 0.5*MeanDepth'] = sum(data['Cover depth'] >= mean_coverage*0.5)/data.shape[0]
-            target_info['[Target] Fraction Region covered >= 300x'] = sum(data['Cover depth'] >= 300)/data.shape[0]
-            target_info['[Target] Fraction Region covered >= 500x'] = sum(data['Cover depth'] >= 500)/data.shape[0]
-            target_info['[Target] Fraction Region covered >= 1000x'] = sum(data['Cover depth'] >= 1000)/data.shape[0]
-            target_info['[Target] Fraction Region covered >= 2000x'] = sum(data['Cover depth'] > 2000)/data.shape[0]
-            target_info['[Target] Fraction Region covered >= 5000x'] = sum(data['Cover depth'] > 5000)/data.shape[0]
-            target_info['[Target] Fraction Region covered >= 10000x'] = sum(data['Cover depth'] > 10000)/data.shape[0]
+            target_info['[Target] Coverage >= 0.2*MeanDepth'] = sum(data['Cover depth'] >= mean_coverage*0.2)/data.shape[0]
+            target_info['[Target] Coverage >= 0.5*MeanDepth'] = sum(data['Cover depth'] >= mean_coverage*0.5)/data.shape[0]
+            target_info['[Target] Coverage >= 300x'] = sum(data['Cover depth'] >= 300)/data.shape[0]
+            target_info['[Target] Coverage >= 500x'] = sum(data['Cover depth'] >= 500)/data.shape[0]
+            target_info['[Target] Coverage >= 1000x'] = sum(data['Cover depth'] >= 1000)/data.shape[0]
+            target_info['[Target] Coverage >= 2000x'] = sum(data['Cover depth'] > 2000)/data.shape[0]
+            target_info['[Target] Coverage >= 5000x'] = sum(data['Cover depth'] > 5000)/data.shape[0]
+            target_info['[Target] Coverage >= 10000x'] = sum(data['Cover depth'] > 10000)/data.shape[0]
 
         if sample in result:
             result[sample].update(target_info)
@@ -970,8 +971,8 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
             header = f.readline()
             for line in f:
                 size, count, fraction, ratio = line.strip().split()
-                target_info[f'FamSize{size}:count'] = count
-                target_info[f'FamSize{size}:fraction'] = fraction
+                target_info[f'FamSize={size}:count'] = count
+                target_info[f'FamSize={size}:fraction'] = fraction
                 target_info[f'FamSize>={size}:fraction'] = ratio
             if sample in result:
                 result[sample].update(target_info)
@@ -980,7 +981,7 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
 
     table = pd.DataFrame(result)
     table.index.name = 'Metrics'
-    table.to_csv(os.path.join(outdir, 'All.metrics.csv'), sep='\t')
+    table.to_csv(os.path.join(outdir, 'All.metrics.txt'), sep='\t')
     table.to_excel(os.path.join(outdir, 'All.metrics.xlsx'))
 
 
