@@ -808,7 +808,7 @@ def cnvkit():
     cmd.args['drop_low_cov'] = Argument(prefix='--drop-low-coverage', type='bool', default=True, desc='Drop very-low-coverage bins before segmentation to avoid false-positive deletions in poor-quality tumor')
     cmd.args['processes'] = Argument(prefix='-p ', default=5, desc='Number of subprocesses used to running each of the BAM files in parallel')
     cmd.args['rscript_path'] = Argument(prefix='--rscript-path ', default='Rscript', desc='Use this option to specify a non-default R')
-    cmd.args['normal'] = Argument(prefix='-n ', level='optional', desc='Normal samples (.bam) used to construct the pooled, paired, or flat reference.')
+    cmd.args['normal'] = Argument(prefix='-n ', type='infile', level='optional', desc='Normal samples (.bam) used to construct the pooled, paired, or flat reference.')
     cmd.args['genome'] = Argument(prefix='-f ', type='infile', desc='Reference genome, FASTA format (e.g. UCSC hg19.fa)')
     cmd.args['targets'] = Argument(prefix='-t ', type='infile', level='optional', desc='Target intervals (.bed or .list)')
     cmd.args['antitargets'] = Argument(prefix='-a ', type='infile', level='optional', desc='Antitarget intervals (.bed or .list)')
