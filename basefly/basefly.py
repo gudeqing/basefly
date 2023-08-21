@@ -708,6 +708,12 @@ class Workflow:
                 self.success = wf.failed == 0
 
             # 通过软连接汇总输出目录
+            outputs_dir = os.path.join(outdir, 'Outputs')
+            os.makedirs(outputs_dir, exist_ok=True)
+            shutil.copyfile(outfile, os.path.join(outputs_dir, f'{self.meta.name}.ini'))
+            # shutil.copyfile(os.path.join(outdir, 'wf.args.json'), os.path.join(outputs_dir, 'wf.args.json'))
+            shutil.copyfile(os.path.join(outdir, 'wf.run.cmd.txt'), os.path.join(outputs_dir, 'wf.run.cmd.txt'))
+            shutil.copyfile(os.path.join(outdir, 'state.svg'), os.path.join(outputs_dir, 'state.svg'))
             for name, out in self.outputs.items():
                 if '${{' in out.value:
                     src_dir = out.value.replace('${{mode:outdir}}', outdir)
