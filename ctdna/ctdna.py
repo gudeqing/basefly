@@ -917,7 +917,69 @@ def ABRA2():
     return cmd
 
 
+def CNVkit():
+    cmd = Command()
+    cmd.meta.name = 'CNVkit'
+    cmd.meta.source = 'https://github.com/etal/cnvkit'
+    cmd.meta.version = '0.9.9'
+    cmd.meta.desc = 'detecting copy number variants and alterations genome-wide from high-throughput sequencing'
+    cmd.runtime.image = 'etal/cnvkit:latest'
+    cmd.runtime.tool = 'cnvkit.py batch'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
+    cmd.args['tumor_bams'] = Argument(prefix='', type='infile', array=True, desc='Mapped sequence reads (.bam)')
+    cmd.args['seq_method'] = Argument(prefix='-m ', default='hybrid', range=['hybrid', 'amplicon', 'wgs'], desc='Sequencing assay type')
+    cmd.args['segment_method'] = Argument(prefix='--segment-method ', default='cbs', range=['cbs', 'flasso', 'haar', 'none', 'hmm', 'hmm-tumor','hmm-germline'], desc='method used in segment step')
+    cmd.args['drop_low_cov'] = Argument(prefix='--drop-low-coverage', type='bool', default=True, desc='Drop very-low-coverage bins before segmentation to avoid false-positive deletions in poor-quality tumor')
+    cmd.args['processes'] = Argument(prefix='-p ', default=cmd.runtime.cpu, desc='Number of subprocesses used to running each of the BAM files in parallel')
+    cmd.args['rscript_path'] = Argument(prefix='--rscript-path ', default='Rscript', desc='Use this option to specify a non-default R')
+    cmd.args['normal_bams'] = Argument(prefix='-n ', type='infile', array=True, level='optional', desc='Normal samples (.bam) used to construct the pooled, paired, or flat reference.')
+    cmd.args['vcf'] = Argument(prefix='--vcf ', type='infile', level='optional', desc='Typically you would use a properly formatted VCF from joint tumor-normal SNV calling, e.g. the output of MuTect, VarDict, or FreeBayes, having already flagged somatic mutations so they can be skipped in this analysis.')
+    cmd.args['genome'] = Argument(prefix='-f ', type='infile', desc='Reference genome, FASTA format (e.g. UCSC hg19.fa)')
+    cmd.args['targets'] = Argument(prefix='-t ', type='infile', level='optional', desc='Target intervals (.bed or .list)')
+    cmd.args['antitargets'] = Argument(prefix='-a ', type='infile', level='optional', desc='Antitarget intervals (.bed or .list)')
+    cmd.args['annotate'] = Argument(prefix='--annotate ', type='infile', level='optional', desc='Use gene models from this file to assign names to the target regions. Format: UCSC refFlat.txt or ensFlat.txt file (preferred), or BED, interval list, GFF, or similar.')
+    cmd.args['access'] = Argument(prefix='--access', type='infile', level='optional', desc='Regions of accessible sequence on chromosomes (.bed), as output by the <access> command.')
+    cmd.args['output_reference'] = Argument(prefix='--output-reference ', level='optional', desc='Output filename/path for the new reference file being created')
+    cmd.args['cluster'] = Argument(prefix='--cluster', type='bool', default=False, desc='Calculate and use cluster-specific summary stats in the reference pool to normalize samples')
+    cmd.args['reference'] = Argument(prefix='-r ', type='infile', level='optional', desc='Copy number reference file (.cnn)')
+    cmd.args['outdir'] = Argument(prefix='-d ', default='.', desc='output directory')
+    cmd.args['scatter'] = Argument(prefix='--scatter', type='bool', default=True, desc='Create a whole-genome copy ratio profile as a PDF scatter plot.')
+    cmd.args['diagram'] = Argument(prefix='--diagram', type='bool', default=True, desc='Create an ideogram of copy ratios on chromosomes as a PDF')
+    cmd.outputs['out'] = Output(value='*.cnr')
+    return cmd
+
+
+def Manta():
+    cmd = Command()
+    cmd.meta.name = 'Manta'
+    cmd.meta.source = 'https://github.com/Illumina/manta'
+    cmd.meta.version = '0.9.9'
+    cmd.meta.desc = 'Manta calls structural variants (SVs) and indels from mapped paired-end sequencing reads.'
+    cmd.runtime.image = 'michaelfranklin/manta:1.6.0'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.tool = '/opt/manta/bin/configManta.py'
+    cmd.args['config'] = Argument(prefix='--config ', type='infile', level='optional', desc='provide a configuration file to override defaults')
+    cmd.args['normal_bam'] = Argument(prefix='--normalBam ', type='infile', multi_times=True, level='optional', desc='Normal sample BAM or CRAM file.')
+    cmd.args['tumor_bam'] = Argument(prefix='--tumorBam ', type='infile', level='optional', desc='Tumor sample BAM or CRAM file')
+    cmd.args['exome'] = Argument(prefix='--exome', type='bool', default=True, desc='Set options for WES input: turn off depth filters. Supplying the --exome flag at configuration time will provide appropriate settings for WES and other regional enrichment analyses. At present this flag disables all high depth filters')
+    cmd.args['ref'] = Argument(prefix='--referenceFasta ', type='infile', desc='samtools-indexed reference fasta file')
+    cmd.args['outdir'] = Argument(prefix='--runDir ', default='.', desc='Name of directory to be created where all workflow scripts and output will be written')
+    cmd.args['region'] = Argument(prefix='--callRegions ', type='infile', default='Optionally provide a bgzip-compressed/tabix-indexed BED file containing the set of regions to call. No VCF output will be provided outside of these regions. The full genome will still be used to estimate statistics from the input (such as expected fragment size distribution)')
+    cmd.args['_run'] = Argument(prefix='', type='fix', value='&& ./runWorkflow.py')
+    cmd.args['jobs'] = Argument(prefix='-j ', default=cmd.runtime.cpu, desc='number of jobs to submit simultaneously')
+    cmd.outputs['out'] = Output(value='{outdir}/results', type='outdir')
+    cmd.outputs['diploid_sv'] = Output(value='{outdir}/results/variants/diploidSV.vcf.gz', report=True, desc='SVs and indels scored and genotyped under a diploid model for the set of normal samples')
+    cmd.outputs['somatic_sv'] = Output(value='{outdir}/results/variants/somaticSV.vcf.gz', report=True, desc='SVs and indels scored under a somatic variant model')
+    cmd.outputs['tumor_sv'] = Output(value='{outdir}/results/variants/somaticSV.vcf.gz', report=True, desc='Subset of the candidateSV.vcf.gz file after removing redundant candidates and small indels less than the minimum scored variant size (50 by default). The SVs are not scored, but include additional details: (1) paired and split read supporting evidence counts for each allele (2) a subset of the filters from the scored tumor-normal model are applied to the single tumor case to improve precision.')
+    cmd.outputs['candidateSmallIndels'] = Output(value='{outdir}/results/variants/candidateSmallIndels.vcf.gz', desc='Subset of the candidateSV.vcf.gz file containing only simple insertion and deletion variants less than the minimum scored variant size (50 by default)')
+    return cmd
+
+
 def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dict, outdir='.'):
+    print('Merging QC table......')
     result = dict()
     for sample, task in fastp_task_dict.items():
         stat_file = os.path.join(task.wkdir, task.outputs['json'].value)
@@ -952,7 +1014,7 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
                     value = float(value)
                 target_info[name] = value
             # 计算均一性
-            data = pd.read_table(depth_file, header=0)
+            data = pd.read_table(depth_file, header=0, low_memory=False)
             mean_coverage = data['Cover depth'].mean()
             target_info['[Target] Coverage (>=0.2*MeanDepth)'] = sum(data['Cover depth'] >= mean_coverage*0.2)/data.shape[0]
             target_info['[Target] Coverage (>=0.5*MeanDepth)'] = sum(data['Cover depth'] >= mean_coverage*0.5)/data.shape[0]
@@ -1079,6 +1141,7 @@ def pipeline():
                     help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.add_argument('-bed', help="bed file for target region")
+    wf.add_argument('-bgzip_bed', help="The BED file must be bgzip-compressed and tabix-indexed, which is required by Manta")
     wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
     wf.add_argument('-umi', required=True, help='A string describes the read structural. Such as “1S3M3S143T,1S3M3S143T” denotes UMIs locate at 2-4bp of read1 and read2')
     wf.add_argument('--call_duplex', default=False, action='store_true', help='Calls duplex consensus sequences from reads generated from the same double-stranded source molecule.')
@@ -1098,6 +1161,7 @@ def pipeline():
     top_vars = dict(
         ref=TopVar(value=os.path.abspath(wf.args.ref), type='infile'),
         bed=TopVar(value=os.path.abspath(wf.args.bed), type='infile'),
+        bgzip_bed=TopVar(value=os.path.abspath(wf.args.bgzip_bed), type='infile'),
         vep_cache=TopVar(value=os.path.abspath(wf.args.vep_cache), type='indir'),
         vep_plugin=TopVar(value=os.path.abspath(wf.args.vep_plugin) if wf.args.vep_plugin else None, type='indir'),
         pair_info=TopVar(value=os.path.abspath(wf.args.pair) if wf.args.pair else None),
@@ -1527,6 +1591,24 @@ def pipeline():
         args['html'].value = tumor + '.mutscan.html'
         args['json'].value = tumor + '.mutscan.json'
         # ----end of varidict-----------------------
+
+        # ---CNVkit--------------------------------
+        cnvkit_task, args = wf.add_task(CNVkit(), tag=tumor)
+        args['tumor_bams'].value = [tumor_bam_task.outputs['out']]
+        if normal_bam_task:
+            args['normal_bams'].value = [normal_bam_task.outputs['out']]
+        args['targets'].value = wf.topvars['bed']
+        args['genome'].value = wf.topvars['ref']
+        # ---end of CNVkit--------------------------
+
+        # ---Manta -------------------------
+        manta_task, args = wf.add_task(Manta(), tag=tumor)
+        args['tumor_bam'].value = tumor_bam_task.outputs['out']
+        if normal_bam_task:
+            args['normal_bam'].value = [normal_bam_task.outputs['out']]
+        args['region'].value = wf.topvars['bgzip_bed']
+        args['ref'].value = wf.topvars['ref']
+        # ---end of Manta -------------------------
 
         # ---VarNet----
         # varnet_task, args = wf.add_task(VarNet(), tag=tumor)
