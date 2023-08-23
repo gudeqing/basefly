@@ -255,6 +255,7 @@ class ValidateMutationByBam(object):
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
             fastafile=self.genome,
+            compute_baq=False,
             # flag_filter: The default is BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP.
         )
         support_reads = set()
