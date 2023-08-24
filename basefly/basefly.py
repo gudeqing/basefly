@@ -895,7 +895,7 @@ class Workflow:
         wf_args.add_argument('--docker', default=False, action='store_true', help="default won't use docker even if docker image is provided.")
         wf_args.add_argument('--plot', default=False, action='store_true', help="generate directed acyclic graph for whole workflow timely")
         wf_args.add_argument('-threads', metavar='max-workers', default=3, type=int, help="允许的最大并行的任务数量, 默认3")
-        wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, 其包含流程所有软件需要的参数，该配置文件设置的参数值将是流程中最后实际用的值")
+        wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, json格式. 流程每次运行时都会输出wf.args.json, 由于其中包含一些样本信息参数，不可直接使用，但可以根据此模板修改")
         wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
         wf_args.add_argument('--no_skip_depend', default=False, action='store_true', help="当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤")
         wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可能是: 重新设置了命令参数. 使用--list_task可查看候选,可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task")
