@@ -487,6 +487,7 @@ class ValidateMutationByBam(object):
             ignore_overlaps=True,  # set 为True则意味着取质量高的base作为代表
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
+            compute_baq=False,
             fastafile=self.genome,
             # flag_require=read_type,
             # flag_filter=4,
@@ -571,7 +572,8 @@ class ValidateMutationByBam(object):
                 for seq in consenus_alt_seqs:
                     # read包含围绕突变位点展开的超过36个碱基，则认为是证据
                     # 当是处于重复区域的插入时,有可能提取出来的是seq=TTATCTCTTCATTAAGGACGTGTGTGTGTGTGTGTGTGTGTGT
-                    # 重复区域是GT，且长度不止于此，很多正常的read也被当作证据提取出来,所以借助cigar判断
+                    # 重复区域是GT，且长度不止于此，很多正常的read也会被当作证据提取出来,所以借助cigar判断缓解
+                    # 例如：当插入的是3个GT重复单元，那么插入的是2或1个GT的证据也完全有可能算进来，所以只能是缓解
                     if seq in read_seq and ('I' in alignment.cigarstring):
                         support_reads.add(read_name)
                         print('成功捞回证据:', contig, start, alt, seq, read_name, alignment.cigarstring)
@@ -640,6 +642,7 @@ class ValidateMutationByBam(object):
             ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
+            compute_baq=False,
             fastafile=self.genome,
             # flag_filter=4,
         )
@@ -853,6 +856,7 @@ class ValidateMutationByBam(object):
             ignore_overlaps=ignore_overlaps,  # set 为True则意味着取质量高的base作为代表
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
+            compute_baq=False,
             fastafile=self.genome,
         )
         support_reads = set()
@@ -881,12 +885,12 @@ class ValidateMutationByBam(object):
                 # 初步寻找证据信息
                 if query_pos is not None:
                     # position of the read base at the pileup site, 0-based. None if is_del or is_refskip is set.
-                    if (query_pos >= 15) and (query_len > query_pos + 15):
+                    if (query_pos >= 18) and (query_len > query_pos + 18):
                         real_seq = query_seq[query_pos - 5:query_pos + len(alt) + 5]
                         expected_seq = expected_left + alt + expected_right
                         if real_seq.upper() == expected_seq.upper():
                             support_reads.add(read_name)
-                            alt_centered_seqs.append(query_seq[query_pos - 15:query_pos + 15])
+                            alt_centered_seqs.append(query_seq[query_pos - 18:query_pos + 18])
 
         # 尝试捞回其他表达形式的潜在证据
         if alt_centered_seqs:
@@ -904,7 +908,7 @@ class ValidateMutationByBam(object):
                 # 查看read是否包含目标序列
                 for seq in consenus_alt_seqs:
                     # read包含围绕突变位点展开的超过36个碱基，则认为是证据
-                    if seq in read_seq and ('D' in alignment.cigarstring):
+                    if seq in read_seq and ('D' in alignment.cigarstring or 'I' in alignment.cigarstring):
                         support_reads.add(read_name)
                         print('成功捞回证据:', contig, start, seq, read_name, alignment.cigarstring)
                         see_pos = read_seq.find(seq)
@@ -1906,7 +1910,7 @@ class VcfFilter(ValidateMutationByBam):
 
         # 输出文件准备
         if out_prefix is None:
-            out_prefix = self.vcf_path.rsplit('.', 1)[0]
+            out_prefix = self.vcf_path.__str__().rsplit('.', 1)[0]
         out_vcf_name = out_prefix+'.final.vcf'
         vcf_out = VariantFile(out_vcf_name, "w", header=self.vcf.header.copy())
         vcf_discard = VariantFile(out_prefix+'.discarded.vcf', "w", header=self.vcf.header.copy())
@@ -2115,6 +2119,7 @@ class VcfFilter(ValidateMutationByBam):
                                 alt_dp = len(support_reads)
                                 total_dp = len(tag_dict)
                                 af = alt_dp/total_dp
+                                # 不一定适合UMI consenus后的情形，或者UMI consensu后，错误率的分布可能完全偏离二型分布
                                 judge = self.pass_seq_error(r, self.tumor, max(mean_error, error_rate), alpha=alpha, dp=total_dp, af=af)
                                 if not judge[0]:
                                     reasons.append('BackgroundNoise')
@@ -2182,7 +2187,7 @@ if __name__ == '__main__':
     parser.add_argument('-ref_dict', type=Path, required=False, help='path to genome dict file which will be used to add missed contig header in vcf')
     parser.add_argument('-tumor_name', required=False, help='tumor sample name in vcf')
     parser.add_argument('-normal_vcf', type=Path, required=False, help='normal sample vcf file')
-    parser.add_argument('-error_rate_file', type=Path, required=False, help='Estimated background noise file, if not provided, bam file will be used to generate one')
+    parser.add_argument('-error_rate_file', type=Path, required=False, help='Estimated background noise file. Use "stat_3bases_error.py" to prepare this file')
     parser.add_argument('-min_error_rate', type=float, default=1e-6, help='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
     parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model. The pvalue represents the probability of variants come from background noise')
     parser.add_argument('-min_af', type=float, default=0.0001, help='hard cutoff of AF')
