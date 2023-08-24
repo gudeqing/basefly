@@ -898,7 +898,6 @@ def ABRA2():
     cmd.args['gtf'] = Argument(prefix='--gtf ', level='optional', type='infile', desc='GTF file defining exons and transcripts')
     cmd.args['in-bam'] = Argument(prefix='--in ', type='infile', desc='input sam')
     cmd.args['in-vcf'] = Argument(prefix='--in-vcf', type='infile', level='optional', desc='VCF containing known (or suspected) variant sites.  Very large files should be avoided.')
-    cmd.args['index'] = Argument(prefix='--index', type='bool', default=True, desc='Enable BAM index generation when outputting sorted alignments (may require additonal memory)')
     cmd.args['junctions'] = Argument(prefix='--junctions ', type='infile', level='optional', desc='Splice junctions definition file')
     cmd.args['kmer'] = Argument(prefix='--kmer ', type='int', level='optional', array=True, delimiter=',', desc='Optional assembly kmer size(delimit with commas if multiple sizes specified)')
     cmd.args['mac'] = Argument(prefix='--mac ', default=64, desc='Max assembled contigs')
@@ -913,6 +912,7 @@ def ABRA2():
     cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc='Number of threads')
     cmd.args['tmpdir'] = Argument(prefix='--tmpdir ', default='.', desc='Set the temp directory (overrides java.io.tmpdir)')
     cmd.args['ws'] = Argument(prefix='--ws ', default=[400, 200], array=True, delimiter=',', desc='Processing window size and qoverlap')
+    cmd.args['_index'] = Argument(prefix='', type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
     cmd.outputs['out'] = Output(value='{out-bam}')
     return cmd
 
@@ -975,6 +975,30 @@ def Manta():
     cmd.outputs['somatic_sv'] = Output(value='{outdir}/results/variants/somaticSV.vcf.gz', report=True, desc='SVs and indels scored under a somatic variant model')
     cmd.outputs['tumor_sv'] = Output(value='{outdir}/results/variants/somaticSV.vcf.gz', report=True, desc='Subset of the candidateSV.vcf.gz file after removing redundant candidates and small indels less than the minimum scored variant size (50 by default). The SVs are not scored, but include additional details: (1) paired and split read supporting evidence counts for each allele (2) a subset of the filters from the scored tumor-normal model are applied to the single tumor case to improve precision.')
     cmd.outputs['candidateSmallIndels'] = Output(value='{outdir}/results/variants/candidateSmallIndels.vcf.gz', desc='Subset of the candidateSV.vcf.gz file containing only simple insertion and deletion variants less than the minimum scored variant size (50 by default)')
+    return cmd
+
+
+def ETCHING():
+    cmd = Command()
+    cmd.meta.name = 'ETCHING'
+    cmd.meta.source = 'https://github.com/ETCHING-team/ETCHING'
+    cmd.meta.version = '1.4.2'
+    cmd.meta.desc = """Efficient deTection of CHromosomal rearrangements and fusIoN Genes
+    wget http://big.hanyang.ac.kr/ETCHING/PGK2.tar.gz
+    tar zxvf PGK2.tar.gz
+    """
+    cmd.runtime.image = 'gudeqing/etching:1.4.2'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 20 * 1024 ** 3
+    cmd.runtime.tool = 'etching'
+    cmd.args['normal_bam'] = Argument(prefix='-bc ', type='infile', multi_times=True, level='optional', desc='Normal sample BAM or CRAM file.')
+    cmd.args['tumor_bam'] = Argument(prefix='-b ', type='infile', level='optional', desc='Tumor sample BAM or CRAM file')
+    cmd.args['genome'] = Argument(prefix='-g ', type='infile', desc='BWA indexed reference genome')
+    cmd.args['kmer_database'] = Argument(prefix='-f {}/PGK2', default='/home/hxbio04/dbs/etching/PGK2', type='indir', desc='The Pan-Genome k-mer(PGK) set is used to build PGK filter. wget http://big.hanyang.ac.kr/ETCHING/PGK2.tar.gz')
+    cmd.args['threads'] = Argument(prefix='-t ', default=8, desc='threads number')
+    cmd.args['prefix'] = Argument(prefix='-o ', desc='output prefix')
+    cmd.outputs['out'] = Output(value='{prefix}.scored.cleaned.filtered.typed.vcf', report=True)
+    cmd.outputs['out2'] = Output(value='{prefix}.scored.cleaned.vcf')
     return cmd
 
 
@@ -1609,6 +1633,15 @@ def pipeline():
         args['region'].value = wf.topvars['bgzip_bed']
         args['ref'].value = wf.topvars['ref']
         # ---end of Manta -------------------------
+
+        # etching
+        etching_task, args = wf.add_task(ETCHING(), tag=tumor)
+        args['tumor_bam'].value = tumor_bam_task.outputs['out']
+        if normal_bam_task:
+            args['normal_bam'].value = [normal_bam_task.outputs['out']]
+        args['genome'].value = wf.topvars['ref']
+        args['prefix'].value = tumor
+        # end of etching
 
         # ---VarNet----
         # varnet_task, args = wf.add_task(VarNet(), tag=tumor)
