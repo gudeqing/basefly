@@ -10,3 +10,6 @@ RUN curl -L -O http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp 
 
 # install excel related packages for python \
 RUN pip install openpyxl
+
+# 支持中文
+ENV LANG=C.UTF-8
