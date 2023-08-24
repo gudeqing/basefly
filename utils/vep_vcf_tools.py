@@ -541,6 +541,7 @@ def get_tmb(vcfs:tuple, out='TMB.txt', bed_size=59464418, tumor_index=None, min_
 
 def merge_vcf_as_maf(vcfs:tuple, out, min_af=0.05, min_alt_depth=2, min_depth=15, max_pop_freq=0.01):
     """
+    注意输出的Ref和alt格式可能不符合maf格式要求
     vcf "AD" style = [ref_depth, alt1_depth, alt2_depth]
     :param vcfs:
     :param out:
@@ -550,6 +551,7 @@ def merge_vcf_as_maf(vcfs:tuple, out, min_af=0.05, min_alt_depth=2, min_depth=15
     :param max_pop_freq:
     :return:
     """
+    print('注意:本程序输出的Ref和alt格式可能不符合maf格式要求')
     results = []
     samples = []
     for vcf_file in vcfs:
@@ -598,12 +600,12 @@ def merge_vcf_as_maf(vcfs:tuple, out, min_af=0.05, min_alt_depth=2, min_depth=15
                     'CenterUnknown',
                     genome_file,
                     r.contig,
-                    r.start+1,
+                    r.start+1, # 坐标是否和maf格式要求一致？
                     r.stop,
                     csq_dict['STRAND'],
                     csq_dict['Consequence'],
                     csq_dict['VARIANT_CLASS'],
-                    r.ref,
+                    r.ref,  # 和csq_dict['Allele']的格式不对应？
                     'unknown',
                     csq_dict['Allele'],
                     csq_dict['Existing_variation'],
