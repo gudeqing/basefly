@@ -251,7 +251,13 @@ class ValidateMutationByBam(object):
             truncate=True,
             min_base_quality=min_bq,
             ignore_orphans=False,
-            ignore_overlaps=True,  # set 为True则意味着取质量高的base作为代表
+            # *  If called, mpileup will detect overlapping
+            #      *  read pairs and for each base pair set the base quality of the
+            #      *  lower-quality base to zero, thus effectively discarding it from
+            #      *  calling. If the two bases are identical, the quality of the other base
+            #      *  is increased to the sum of their qualities (capped at 200), otherwise
+            #      *  it is multiplied by 0.8.
+            ignore_overlaps=False,  # 设置为True时，pileup 返回的很多碱基质量值为0，pysam的有issue提出这个问题，解决方案是ignore_overlaps=False
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
             fastafile=self.genome,
@@ -290,6 +296,7 @@ class ValidateMutationByBam(object):
         FoxoG = None
         # init value end
         alt_len = len(alt)
+        #  pileup 返回的很多碱基质量值为0，pysam的有issue提出这个问题，解决方案是ignore_overlaps=False
         for idx, col in enumerate(pileup_columns):
             base_quals = col.get_query_qualities()
             query_names = col.get_query_names()
@@ -416,7 +423,7 @@ class ValidateMutationByBam(object):
             truncate=True,
             min_base_quality=min_bq,
             ignore_orphans=False,
-            ignore_overlaps=True,  # set 为True则意味着取质量高的base作为代表
+            ignore_overlaps=True,
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
             fastafile=self.genome,
@@ -484,7 +491,7 @@ class ValidateMutationByBam(object):
             truncate=True,
             min_base_quality=min_bq,
             ignore_orphans=False,
-            ignore_overlaps=True,  # set 为True则意味着取质量高的base作为代表
+            ignore_overlaps=False,  # set 为True则意味着取质量高的base作为代表
             # 这里的max_depth一定要设的足够大，否则有可能漏掉reads
             max_depth=300000,
             compute_baq=False,
