@@ -2065,8 +2065,9 @@ class VcfFilter(ValidateMutationByBam):
 
                 # 2.根据strand bias进行过滤
                 # 当使用链偏倚作为过滤指标时要注意：只有极端链偏倚的SNP才应被视为假阳性候选突变
-                judge2 = self.pass_strand_bias(r, cutoff=1e-6, sample=self.tumor)
-                if not judge2[0]:
+                alt_dp = self.get_alt_depth(r)
+                judge2 = self.pass_strand_bias(r, cutoff=1e-5, sample=self.tumor)
+                if not judge2[0] and af < 0.02 and alt_dp < 20:
                     if 'Bias' not in reasons:
                         reasons.append('Bias')
                         pass
