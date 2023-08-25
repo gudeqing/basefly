@@ -1151,6 +1151,11 @@ def pipeline():
         except:
             FoxoG="NA"
         return(FoxoG)
+    流程默认路线： gatk_preprocess + figbio + (bwa + gencore + ABRA2) + (mutect2 + vardict) + mutscan
+    流程支持跳过FilterBam，Gencore, ABRA2, mutect2, vardict等步骤
+    如果流程选择跳过Fastq2Sam步骤，则会直接走Fastp+Bwa+gencore+vardict+mutect2路线
+    
+    加入abra2步骤后，vardict可以call出EGFR的复合突变，但是证据比较少，而且合并前的2个突变也会报告出
     """
     wf.meta.version = "1.0"
 
@@ -1353,16 +1358,21 @@ def pipeline():
             args['SORT_ORDER'].value = 'coordinate'
             args['OUTPUT'].value = sample + '.merged.bam'
 
-        # bamdst first
+        sort_bam_task = None
         if 'FastqToSam' in wf.args.skip:
-            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[merge_bam_task_for_gencore])
-            args['input'].value = merge_bam_task_for_gencore.outputs['out']
-            args['output'].value = sample + '.sorted.bam'
-            args['flagstat_name'].value = sample + '.flagstat.txt'
-            bam_task_dict[sample] = sort_bam_task
-            depend_task = sort_bam_task
-        else:
-            depend_task = merge_bam_task
+            # merge 多个bam的时候生成的结果已经排序并索引
+            if len(r1s) == 1:
+                # 排序后作为gencore的输入
+                sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[merge_bam_task_for_gencore])
+                args['input'].value = merge_bam_task_for_gencore.outputs['out']
+                args['output'].value = sample + '.sorted.bam'
+                args['flagstat_name'].value = sample + '.flagstat.txt'
+                bam_task_dict[sample] = sort_bam_task
+            else:
+                sort_bam_task = merge_bam_task_for_gencore
+
+        # 第一次bamdst统计
+        depend_task = sort_bam_task or merge_bam_task
         bamdst_task, args = wf.add_task(Bamdst(), tag='preUMI-'+sample, depends=[depend_task])
         args['input'].value = depend_task.outputs['out']
         args['cutoffdepth'].value = 10000
@@ -1411,9 +1421,7 @@ def pipeline():
             args['input'].value = map_task.outputs['out']
             args['output'].value = sample + '.filtered.bam'
 
-        if 'FastqToSam' in wf.args.skip:
-            pass
-        else:
+        if 'FastqToSam' not in wf.args.skip:
             if filter_bam_task:
                 sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
                 args['input'].value = filter_bam_task.outputs['out']
@@ -1424,36 +1432,31 @@ def pipeline():
             args['flagstat_name'].value = sample + '.flagstat.txt'
             bam_task_dict[sample] = sort_bam_task
 
-        realign_task = None
-        if 'ABRA2' not in wf.args.skip:
-            realign_task, args = wf.add_task(ABRA2(), tag=sample, depends=[sort_bam_task])
-            args['in-bam'].value = sort_bam_task.outputs['out']
-            args['bed'].value = wf.topvars['bed']
-            args['ref'].value = wf.topvars['ref']
-            args['out-bam'].value = sample+'.realigned.bam'
-            bam_task_dict[sample] = realign_task
-            sort_bam_task = realign_task
-
         if 'Gencore' not in wf.args.skip:
-            if realign_task:
-                gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[realign_task])
-                args['bam'].value = realign_task.outputs['out']
-            else:
-                gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[sort_bam_task])
-                args['bam'].value = sort_bam_task.outputs['out']
+            gencore_task, args = wf.add_task(gencore(), tag=sample, depends=[sort_bam_task])
+            args['bam'].value = sort_bam_task.outputs['out']
             args['bed'].value = wf.topvars['bed']
             args['ref'].value = wf.topvars['ref']
             args['out'].value = sample + '.gencore.unsorted.bam'
             args['json'].value = sample + '.gencore.json'
             args['html'].value = sample + '.gencore.html'
 
-            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample+'-re', depends=[gencore_task])
+            sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag='gencore-'+sample, depends=[gencore_task])
             args['input'].value = gencore_task.outputs['out']
             args['output'].value = sample + '.sorted.bam'
             args['flagstat_name'].value = sample + '.flagstat.txt'
             bam_task_dict[sample] = sort_bam_task
 
-        bamdst_task, args = wf.add_task(Bamdst(), tag='final-'+sample, depends=[sort_bam_task])
+        realign_task = None
+        if 'ABRA2' not in wf.args.skip:
+            realign_task, args = wf.add_task(ABRA2(), tag=sample, depends=[sort_bam_task])
+            args['in-bam'].value = sort_bam_task.outputs['out']
+            args['bed'].value = wf.topvars['bed']
+            args['ref'].value = wf.topvars['ref']
+            args['out-bam'].value = sample + '.realigned.bam'
+            bam_task_dict[sample] = realign_task
+
+        bamdst_task, args = wf.add_task(Bamdst(), tag='final-'+sample, depends=[realign_task or sort_bam_task])
         args['input'].value = sort_bam_task.outputs['out']
         args['cutoffdepth'].value = 5000
         args['bed'].value = wf.topvars['bed']
@@ -1658,7 +1661,8 @@ def pipeline():
 
     multiqc_task, args = wf.add_task(multi_qc())
     multiqc_task.depends = list(fastp_task_dict.values())
-    multiqc_task.depends += list(groupumi_task_dict.values())
+    if 'FastqToSam' not in wf.args.skip:
+        multiqc_task.depends += list(groupumi_task_dict.values())
     multiqc_task.depends += list(bam_task_dict.values())
     input_dirs = [x.wkdir for x in multiqc_task.depends]
     args['indirs'].value = input_dirs
