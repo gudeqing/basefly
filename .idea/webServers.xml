@@ -3,7 +3,14 @@
   <component name="WebServers">
     <option name="servers">
       <webServer id="f07289ad-b2f2-4889-a1f3-3c11aa4ae8c4" name="hxbio04">
-        <fileTransfer rootFolder="/home/hxbio04" accessType="SFTP" host="192.168.3.248" port="22" sshConfigId="8e416166-3912-43b6-a46f-7262266572d2" sshConfig="hxbio04@192.168.3.248:22 password">
+        <fileTransfer rootFolder="/home/hxbio04" accessType="SFTP" host="192.168.3.248" port="22" sshConfigId="0f3efb65-1cad-4017-a1db-164d79a041f9" sshConfig="hxbio04@192.168.3.248:22">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+      <webServer id="780fd37e-db29-4bc8-b719-507ee5f72d77" name="hxbio04-243">
+        <fileTransfer rootFolder="/home/hxbio04" accessType="SFTP" host="192.168.3.243" port="22" sshConfigId="8e416166-3912-43b6-a46f-7262266572d2" sshConfig="hxbio04@192.168.3.243:22 password">
           <advancedOptions>
             <advancedOptions dataProtectionLevel="Private" keepAliveTimeout="0" passiveMode="true" shareSSLContext="true" />
           </advancedOptions>

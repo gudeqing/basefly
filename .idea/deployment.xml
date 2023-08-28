@@ -13,6 +13,16 @@
           </excludedPaths>
         </serverdata>
       </paths>
+      <paths name="hxbio04-243">
+        <serverdata>
+          <mappings>
+            <mapping deploy="/basefly" local="$PROJECT_DIR$" web="/" />
+          </mappings>
+          <excludedPaths>
+            <excludedPath local="true" path="$PROJECT_DIR$/.idea" />
+          </excludedPaths>
+        </serverdata>
+      </paths>
     </serverData>
     <option name="myAutoUpload" value="ALWAYS" />
   </component>
