@@ -1174,6 +1174,15 @@ def pipeline():
     如果流程选择跳过Fastq2Sam步骤，则会直接走Fastp+Bwa+gencore+vardict+mutect2路线
     
     加入abra2步骤后，vardict可以call出EGFR的复合突变，但是证据比较少，而且合并前的2个突变也会报告出
+    
+    目前流程特性：
+    注意：可能不适合WES和WGS数据，因为没有走GATK的best practice路线，不包含根据数据库进行BQSR等步骤
+    注意： 该流程适用panel somatic variant calling
+    0. 流程默认有两个普通变异caller，vardict和mutect2,可以选择性跳过，另外还有Manta，CNVkit
+    1. 流程默认走路线：SamToFastq + MarkIlluminaAdapters + bwa + MergeBamAliganment + Fgbio(CallMolecularConsensusReads) + gencore + caller, 如果UMI数据质量较好，建议此时选择跳过Gencore
+    2. 跳过FastqToSam步骤，可以走默认的fastp+bwa+gencore+caller路线，该路线可以适用于UMI和非UMI数据
+    3. 跳过FastqToSam步骤并且设置markdup流程参数，可以走默认的fastp+bwa+markdup+gencore+caller路线，该路线适用non-UMI数据, 但markdup步骤可能显得多余
+    4. 跳过FastqToSam和Gencore步骤并且设置markdup流程参数，可以走默认的fastp+bwa+markdup+caller路线, 该路线适用普通non-UMI数据
     """
     wf.meta.version = "1.0"
 
@@ -1639,8 +1648,12 @@ def pipeline():
         vardict_filter_task_ids.append(filter_task.task_id)
 
         mutscan_task, args = wf.add_task(mutscan(), tag='vardict-'+tumor, depends=[filter_task])
-        args['read1'].value = sam2fastq_task_dict[tumor].outputs['read1']
-        args['read2'].value = sam2fastq_task_dict[tumor].outputs['read2']
+        if 'FastqToSam' in wf.args.skip:
+            args['read1'].value = fastp_task_dict[tumor].outputs['out1']
+            args['read2'].value = fastp_task_dict[tumor].outputs['out2']
+        else:
+            args['read1'].value = sam2fastq_task_dict[tumor].outputs['read1']
+            args['read2'].value = sam2fastq_task_dict[tumor].outputs['read2']
         args['ref'].value = wf.topvars['ref']
         args['mutation'].value = filter_task.outputs['final_vcf']
         args['html'].value = tumor + '.mutscan.html'
