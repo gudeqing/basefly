@@ -244,7 +244,7 @@ class ValidateMutationByBam(object):
                 FoxoG = round(F1R2 / (F1R2 + F2R1), 3)
         return FoxoG
 
-    def get_sub_or_snv_support_reads(self, contig, start, ref, alt, tag_names:tuple=tuple(), min_bq=0, logger=None):
+    def get_sub_or_snv_support_reads(self, contig, start, ref, alt, tag_names:tuple=tuple(), min_bq=13, logger=None):
         pileup_columns = self.bam.pileup(
             contig, start-1, start + len(alt)+1,  # 提取左右碱基，方便后续突变碱基与左右碱基质量的比较
             stepper='samtools',
@@ -316,26 +316,30 @@ class ValidateMutationByBam(object):
                     query_seq = alignment.query_sequence
                     query_pos = pileup_read.query_position
                     query_len = alignment.query_length
-                    if query_pos is not None:
-                        query_pos_dict[read_name] = min(query_pos, query_len - query_pos)
-                        if query_seq[query_pos:query_pos+alt_len].upper() == alt:
-                            # 由于未知原因，这里找到的read_name不一定在前面的query_names中
-                            support_reads.add(read_name)
-                            # 提取围绕SNV位点前后5个碱基，用于检查支持突变的read之间的一致性
-                            if (query_pos >= 5) and (query_len > query_pos+alt_len+5):
-                                support_read_seqs.append(query_seq[query_pos-5:query_pos+alt_len+5])
-                            # Counters for FoxoG calculations
-                            if alignment.is_proper_pair:
-                                if alignment.is_read1:
-                                    if alignment.is_reverse:
-                                        F2R1 += 1
-                                    else:
-                                        F1R2 += 1
-                                elif alignment.is_read2:
-                                    if alignment.is_reverse:
-                                        F1R2 += 1
-                                    else:
-                                        F2R1 += 1
+                    # 对于pair，只会记录其中一条记录
+                    if read_name not in support_reads:
+                        if query_pos is not None and pileup_read.indel == 0:
+                            query_pos_dict[read_name] = min(query_pos, query_len - query_pos)
+                            if query_seq[query_pos:query_pos+alt_len].upper() == alt:
+                                # 由于未知原因，这里找到的read_name不一定在前面的query_names中
+                                support_reads.add(read_name)
+                                if start == 115256529:
+                                    print(read_name, query_seq[query_pos:])
+                                # 提取围绕SNV位点前后5个碱基，用于检查支持突变的read之间的一致性
+                                if (query_pos >= 5) and (query_len > query_pos+alt_len+5):
+                                    support_read_seqs.append(query_seq[query_pos-5:query_pos+alt_len+5])
+                                # Counters for FoxoG calculations
+                                if alignment.is_proper_pair:
+                                    if alignment.is_read1:
+                                        if alignment.is_reverse:
+                                            F2R1 += 1
+                                        else:
+                                            F1R2 += 1
+                                    elif alignment.is_read2:
+                                        if alignment.is_reverse:
+                                            F1R2 += 1
+                                        else:
+                                            F2R1 += 1
                     # 由于要获取下面的tag，才不得不对pileups进行循环
                     if read_name not in all_read_tag_dict:
                         target_tag_dict = dict()
@@ -389,7 +393,7 @@ class ValidateMutationByBam(object):
         if logger:
             info = dict(
                 contig=contig,
-                start=start+1,
+                pos=start+1,
                 ref=ref,
                 alt=alt,
                 alt_dp=len(support_reads),
@@ -401,6 +405,8 @@ class ValidateMutationByBam(object):
                 mean_alt_pos=mean_alt_pos,
                 max_alt_pos_diff=max_alt_pos_diff,
                 FoxoG=FoxoG,
+                F2R1=F2R1,
+                F1R2=F1R2,
                 mean_ref_pos=mean_ref_pos,
                 alt_pos_pstd=alt_pos_pstd,
                 ref_pos_std=ref_pos_std,
