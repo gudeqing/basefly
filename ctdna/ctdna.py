@@ -1002,6 +1002,24 @@ def ETCHING():
     return cmd
 
 
+def MarkDuplicates(sample):
+    cmd = Command()
+    cmd.meta.name = 'MarkDuplicates'
+    cmd.meta.desc = 'merge bam alignment and mark duplicate reads'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.tool = 'gatk MarkDuplicates'
+    cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='input bam file list')
+    cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', default=f'{sample}.unsorted.dup_marked.bam', desc='output bam file')
+    cmd.args['METRICS_FILE'] = Argument(prefix='--METRICS_FILE ', default=f'{sample}.dup_metrics.txt')
+    cmd.args['VALIDATION_STRINGENCY'] = Argument(prefix='--VALIDATION_STRINGENCY ', default='SILENT')
+    cmd.args['OPTICAL_DUPLICATE_PIXEL_DISTANCE'] = Argument(prefix='--OPTICAL_DUPLICATE_PIXEL_DISTANCE ', default=2500, desc='The maximum offset between two duplicate clusters in order to consider them optical duplicates. The default is appropriate for unpatterned versions of the Illumina platform. For the patterned flowcell models, 2500 is moreappropriate. For other platforms and models, users should experiment to find what works best.')
+    cmd.args['ASSUME_SORT_ORDER'] = Argument(prefix='--ASSUME_SORT_ORDER ', default='queryname')
+    cmd.args['tmpdir'] = Argument(prefix='--TMP_DIR ', default='.', desc='directorie with space available to be used by this program for temporary storage of working files')
+    cmd.outputs['out'] = Output(value='{OUTPUT}')
+    return cmd
+
+
 def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dict, outdir='.'):
     print('Merging QC table......')
     result = dict()
@@ -1174,6 +1192,7 @@ def pipeline():
     wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
     wf.add_argument('-umi', required=True, help='A string describes the read structural. Such as “1S3M3S143T,1S3M3S143T” denotes UMIs locate at 2-4bp of read1 and read2')
     wf.add_argument('--call_duplex', default=False, action='store_true', help='Calls duplex consensus sequences from reads generated from the same double-stranded source molecule.')
+    wf.add_argument('--markdup', default=False, action='store_true', help='mark duplication reads, this option can only be used when FastqToSam is skipped, and enables non-umi based variant calling')
     wf.add_argument('-scatter', default=10, help='scatter number used for interval splitting of mutect2 variant calling steps')
     wf.add_argument('-min_af', default=0.001, help='Minimum Variant Frequency Cutoff')
 
@@ -1344,7 +1363,7 @@ def pipeline():
             merge_bam_tasks.append(merge_bam_task)
 
         merge_bam_task_for_gencore = fastp_bwa_tasks[0] if fastp_bwa_tasks else None
-        if len(r1s) > 1:
+        if len(r1s) > 1 and (not wf.args.markdup):
             # 合并一个样本的多个fastq的比对结果
             if 'FastqToSam' in wf.args.skip:
                 # 走 fastp+bwa+gencore路线
@@ -1357,6 +1376,14 @@ def pipeline():
             args['INPUT'].value = [x.outputs['out'] for x in merge_bam_tasks]
             args['SORT_ORDER'].value = 'coordinate'
             args['OUTPUT'].value = sample + '.merged.bam'
+
+        if wf.args.markdup:
+            if 'FastqToSam' not in wf.args.skip:
+                raise Exception('FastqToSam should be skipped in this pipeline if wf.args.markdup is set, '
+                                'and gencore is optionally skipped, which means pipeline:fastp + bwa + markdup + varcaller')
+            # bwa 输出的是read name grouped的，足够进行markdup，markdup时assume order 为query name
+            merge_bam_task_for_gencore, args = wf.add_task(MarkDuplicates(sample), tag=sample, depends=fastp_bwa_tasks)
+            args['INPUT'].value = [tsk.outputs['out'] for tsk in fastp_bwa_tasks]
 
         sort_bam_task = None
         if 'FastqToSam' in wf.args.skip:
@@ -1372,12 +1399,13 @@ def pipeline():
                 sort_bam_task = merge_bam_task_for_gencore
 
         # 第一次bamdst统计
-        depend_task = sort_bam_task or merge_bam_task
-        bamdst_task, args = wf.add_task(Bamdst(), tag='preUMI-'+sample, depends=[depend_task])
-        args['input'].value = depend_task.outputs['out']
-        args['cutoffdepth'].value = 10000
-        args['bed'].value = wf.topvars['bed']
-        bamdst_task_dict['preUMI-'+sample] = bamdst_task
+        if ('FastqToSam' in wf.args.skip) and ('Gencore' in wf.args.skip):
+            depend_task = sort_bam_task or merge_bam_task
+            bamdst_task, args = wf.add_task(Bamdst(), tag='preUMI-'+sample, depends=[depend_task])
+            args['input'].value = depend_task.outputs['out']
+            args['cutoffdepth'].value = 10000
+            args['bed'].value = wf.topvars['bed']
+            bamdst_task_dict['preUMI-'+sample] = bamdst_task
 
         group_umi_task, args = wf.add_task(GroupReadsByUmi(sample), tag=sample, depends=[merge_bam_task])
         args['input'].value = merge_bam_task.outputs['out']
