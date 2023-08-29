@@ -1319,11 +1319,14 @@ def pipeline():
                 args['out2'].value = f'{sample}.clean.R2.fq.gz'
             args['html'].value = f'{sample}.fastp.html'
             args['json'].value = f'{sample}.fastp.json'
+            # 例如1S3M2S+T
             read_structures = wf.args.umi.split(',')
             umi_loc = 'read1' if len(read_structures) == 1 else 'per_read'
-            # 如果UMI前面还有需要跳过的碱基，将一并提取出来成为UMI的一部分
             umi_len = read_structures[0].split('M')[0]
             if 'S' in umi_len:
+                # 如果UMI前面还有需要跳过的碱基，将一并提取出来成为UMI的一部分
+                # 这是一种临时措施，正确的做法是增加一步fastp的处理步骤，将碱基剪切掉
+                # 暂不处理这个错误，因为UMI的处理目前建议走fgbio流程，fastp只是用来质控
                 umi_len = sum(int(x) for x in umi_len.split('S'))
             umi_skip = read_structures[0].split('M')[1].split('S', 1)[0]
             args['other_args'].value = f'-Q --umi --umi_loc {umi_loc} --umi_len {umi_len} --umi_skip {umi_skip}'
