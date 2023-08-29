@@ -1411,7 +1411,7 @@ def pipeline():
                 sort_bam_task = merge_bam_task_for_gencore
 
         # 第一次bamdst统计
-        if ('FastqToSam' in wf.args.skip) and ('Gencore' in wf.args.skip):
+        if ('FastqToSam' not in wf.args.skip) and ('Gencore' not in wf.args.skip):
             depend_task = sort_bam_task or merge_bam_task
             bamdst_task, args = wf.add_task(Bamdst(), tag='preUMI-'+sample, depends=[depend_task])
             args['input'].value = depend_task.outputs['out']
