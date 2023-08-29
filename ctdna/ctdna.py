@@ -470,11 +470,11 @@ def VardictSingle():
     cmd.args['mfreq'] = Argument(prefix='-mfreq ', default=0.25, desc="The variant frequency threshold to determine variant as good in case of monomer MSI. Default: 0.25")
     cmd.args['nmfreq'] = Argument(prefix='-nmfreq ', default=0.1, desc='The variant frequency threshold to determine variant as good in case of non-monomer MSI')
     cmd.args['read_position_filter'] = Argument(prefix='-P ', default=3, desc="If the mean variants position is less that specified, it's considered false")
-    cmd.args['min-reads'] = Argument(prefix='-r ', default=2, desc='The minimum # of variant reads')
+    cmd.args['min-reads'] = Argument(prefix='-r ', default=2, desc='The minimum number of variant reads')
     cmd.args['nosv'] = Argument(prefix='--nosv', type='bool', default=True,)
     cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
-    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 5 -q 22.5 -d 3 -v 1 -f 0.00001 ', desc='pipe to another script')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 5 -q 22.5 -d 5 -v 2 -f 0.00001 ', desc='pipe to another script')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['out'] = Output(value='{output}')
     return cmd
@@ -503,11 +503,11 @@ def VardictPaired():
     cmd.args['mfreq'] = Argument(prefix='-mfreq ', default=0.25, desc="The variant frequency threshold to determine variant as good in case of monomer MSI. Default: 0.25")
     cmd.args['nmfreq'] = Argument(prefix='-nmfreq ', default=0.1, desc='The variant frequency threshold to determine variant as good in case of non-monomer MSI')
     cmd.args['read_position_filter'] = Argument(prefix='-P ', default=5, desc="If the mean variants position is less that specified, it's considered false")
-    cmd.args['min-reads'] = Argument(prefix='-r ', default=2, desc='The minimum # of variant reads')
+    cmd.args['min-reads'] = Argument(prefix='-r ', default=2, desc='The minimum number of variant reads')
     cmd.args['nosv'] = Argument(prefix='--nosv', type='bool', default=True,)
     cmd.args['UN'] = Argument(prefix='-UN', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
-    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 5 -q 22.5 -d 5 -v 1 -f 0.00001 ', desc='pipe to another script')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -E -p 5 -q 22.5 -d 5 -v 2 -f 0.00001 ', desc='pipe to another script')
     cmd.args['names'] = Argument(prefix='-N "{}"', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['out'] = Output(value='{output}')
@@ -1411,7 +1411,7 @@ def pipeline():
                 sort_bam_task = merge_bam_task_for_gencore
 
         # 第一次bamdst统计
-        if ('FastqToSam' not in wf.args.skip) and ('Gencore' not in wf.args.skip):
+        if ('FastqToSam' not in wf.args.skip) or ('Gencore' not in wf.args.skip):
             depend_task = sort_bam_task or merge_bam_task
             bamdst_task, args = wf.add_task(Bamdst(), tag='preUMI-'+sample, depends=[depend_task])
             args['input'].value = depend_task.outputs['out']
@@ -1497,7 +1497,7 @@ def pipeline():
             bam_task_dict[sample] = realign_task
 
         bamdst_task, args = wf.add_task(Bamdst(), tag='final-'+sample, depends=[realign_task or sort_bam_task])
-        args['input'].value = sort_bam_task.outputs['out']
+        args['input'].value = (realign_task or sort_bam_task).outputs['out']
         args['cutoffdepth'].value = 5000
         args['bed'].value = wf.topvars['bed']
         bamdst_task_dict[sample] = bamdst_task
