@@ -873,6 +873,11 @@ def fastp():
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', level='optional', desc='read2 fastq file')
     cmd.args['threads'] = Argument(prefix='-w ', default=4, desc='thread number')
+    cmd.args['min_length'] = Argument(prefix='-l ', default=35, desc='reads shorter than length_required will be discarded')
+    cmd.args['correction'] = Argument(prefix='--correction', type='bool', default=True, desc='enable base correction in overlapped regions')
+    cmd.args['overlap_diff_percent_limit'] = Argument(prefix='--overlap_diff_percent_limit ', default=10, desc='The maximum number of mismatched bases to detect overlapped region of PE reads')
+    cmd.args['dedup'] = Argument(prefix='--dedup ', type='bool', default=False, desc='enable deduplication to drop the duplicated reads/pairs')
+    cmd.args['trim_front1'] = Argument(prefix='--trim_front1 ', level='optional', desc='trimming how many bases in front for read1')
     cmd.args['out1'] = Argument(prefix='-o ', type='str', desc='clean read1 output fastq file')
     cmd.args['out2'] = Argument(prefix='-O ', level='optional', type='str', desc='clean read2 output fastq file')
     cmd.args['html'] = Argument(prefix='-h ', type='str', desc='html report file')
@@ -997,8 +1002,8 @@ def ETCHING():
     cmd.args['kmer_database'] = Argument(prefix='-f {}/PGK2', default='/home/hxbio04/dbs/etching/PGK2', type='indir', desc='The Pan-Genome k-mer(PGK) set is used to build PGK filter. wget http://big.hanyang.ac.kr/ETCHING/PGK2.tar.gz')
     cmd.args['threads'] = Argument(prefix='-t ', default=8, desc='threads number')
     cmd.args['prefix'] = Argument(prefix='-o ', desc='output prefix')
-    cmd.outputs['out'] = Output(value='{prefix}.scored.cleaned.filtered.typed.vcf', report=True)
-    cmd.outputs['out2'] = Output(value='{prefix}.scored.cleaned.vcf')
+    cmd.outputs['out'] = Output(value='{prefix}.scored.filtered.typed.vcf', report=True)
+    cmd.outputs['out2'] = Output(value='{prefix}.scored.vcf')
     return cmd
 
 
@@ -1174,6 +1179,9 @@ def pipeline():
     如果流程选择跳过Fastq2Sam步骤，则会直接走Fastp+Bwa+gencore+vardict+mutect2路线
     
     加入abra2步骤后，vardict可以call出EGFR的复合突变，但是证据比较少，而且合并前的2个突变也会报告出
+    
+    # 分析发现，manta和fgbio duplexconsenus不兼容，因为fgbio会引入过高的碱基质量值
+    https://github.com/bcbio/bcbio-nextgen/issues/3662
     
     目前流程特性：
     注意：可能不适合WES和WGS数据，因为没有走GATK的best practice路线，不包含根据数据库进行BQSR等步骤
@@ -1688,6 +1696,13 @@ def pipeline():
             args['normal_bam'].value = [normal_bam_task.outputs['out']]
         args['genome'].value = wf.topvars['ref']
         args['prefix'].value = tumor
+
+        etching_vep_task, args = wf.add_task(vep(tumor), tag='Etching-' + tumor, depends=[etching_task])
+        args['input_file'].value = etching_task.outputs['out']
+        args['fasta'].value = wf.topvars['ref']
+        args['refseq'].value = True
+        args['dir_cache'].value = top_vars['vep_cache']
+        args['dir_plugins'].value = top_vars['vep_plugin']
         # end of etching
 
         # ---VarNet----
@@ -1714,32 +1729,33 @@ def pipeline():
 
     wf.run()
     # tidy
-    if wf.success:
-        # merge qc report
-        merge_qc(fastp_task_dict, bamdst_task_dict, groupumi_task_dict, outdir=os.path.join(wf.wkdir, 'Outputs'))
+    if not wf.success:
+        print('流程失败了，但我们还是要尝试进行结果整理的工作')
+    # merge qc report
+    merge_qc(fastp_task_dict, bamdst_task_dict, groupumi_task_dict, outdir=os.path.join(wf.wkdir, 'Outputs'))
 
-        # merge variant report
-        xls_lst = []
-        for tid in vardict_filter_task_ids:
-            if tid in wf.tasks:
-                xls_file = wf.tasks[tid].outputs['final_xls'].value
-                xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
-                xls_lst.append(xls_file)
-        if xls_lst:
-            out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
-            df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
-            df.to_excel(out_file, index=False)
+    # merge variant report
+    xls_lst = []
+    for tid in vardict_filter_task_ids:
+        if tid in wf.tasks:
+            xls_file = wf.tasks[tid].outputs['final_xls'].value
+            xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
+            xls_lst.append(xls_file)
+    if xls_lst:
+        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
+        df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
+        df.to_excel(out_file, index=False)
 
-        xls_lst = []
-        for tid in mutect2_filter_task_ids:
-            if tid in wf.tasks:
-                xls_file = wf.tasks[tid].outputs['final_xls'].value
-                xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
-                xls_lst.append(xls_file)
-        if xls_lst:
-            out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
-            df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
-            df.to_excel(out_file, index=False)
+    xls_lst = []
+    for tid in mutect2_filter_task_ids:
+        if tid in wf.tasks:
+            xls_file = wf.tasks[tid].outputs['final_xls'].value
+            xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
+            xls_lst.append(xls_file)
+    if xls_lst:
+        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
+        df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
+        df.to_excel(out_file, index=False)
 
 
 if __name__ == '__main__':
