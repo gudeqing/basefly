@@ -918,7 +918,7 @@ def ABRA2():
     cmd.args['tmpdir'] = Argument(prefix='--tmpdir ', default='.', desc='Set the temp directory (overrides java.io.tmpdir)')
     cmd.args['ws'] = Argument(prefix='--ws ', default=[400, 200], array=True, delimiter=',', desc='Processing window size and qoverlap')
     cmd.args['_index'] = Argument(prefix='', type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
-    cmd.outputs['out'] = Output(value='{out-bam}')
+    cmd.outputs['out'] = Output(value='{out-bam}', report=True)
     return cmd
 
 
@@ -1080,18 +1080,19 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
 
     for sample, task in groupumi_task_dict.items():
         stat_file = os.path.join(task.wkdir, task.outputs['family_size'].value)
-        with open(stat_file) as f:
-            target_info = dict()
-            header = f.readline()
-            for line in f:
-                size, count, fraction, ratio = line.strip().split()
-                target_info[f'FamSize={size}:count'] = int(count)
-                target_info[f'FamSize={size}:fraction'] = round(float(fraction), 4)
-                target_info[f'FamSize>={size}:fraction'] = round(float(ratio), 4)
-            if sample in result:
-                result[sample].update(target_info)
-            else:
-                result[sample] = target_info
+        if os.path.exists(stat_file):
+            with open(stat_file) as f:
+                target_info = dict()
+                header = f.readline()
+                for line in f:
+                    size, count, fraction, ratio = line.strip().split()
+                    target_info[f'FamSize={size}:count'] = int(count)
+                    target_info[f'FamSize={size}:fraction'] = round(float(fraction), 4)
+                    target_info[f'FamSize>={size}:fraction'] = round(float(ratio), 4)
+                if sample in result:
+                    result[sample].update(target_info)
+                else:
+                    result[sample] = target_info
 
     table = pd.DataFrame(result)
     table.index.name = 'Metrics'
