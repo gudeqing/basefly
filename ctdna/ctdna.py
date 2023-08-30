@@ -922,11 +922,35 @@ def ABRA2():
     return cmd
 
 
+def CNVkitFlatRef():
+    cmd = Command()
+    cmd.meta.name = 'CNVkitFlatRef'
+    cmd.meta.source = 'https://github.com/etal/cnvkit'
+    cmd.meta.version = '0.9.10'
+    cmd.meta.desc = 'detecting copy number variants and alterations genome-wide from high-throughput sequencing'
+    cmd.runtime.image = 'etal/cnvkit:latest'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
+    cmd.args['_antitarget'] = Argument(prefix='', type='fix', value='cnvkit.py antitarget')
+    cmd.args['access'] = Argument(prefix='--access ', type='infile', desc='Regions of accessible sequence on chromosomes (.bed)')
+    cmd.args['avg-size'] = Argument(prefix='--avg-size ', level='optional', default=150000, desc='Average size of antitarget bins (results are approximate)')
+    cmd.args['_output'] = Argument(prefix='--output ', type='fix', value='antitargets.bed', desc='output file name')
+    cmd.args['targets'] = Argument(prefix='', type='infile', desc='BED or interval file listing the targeted regions.')
+    cmd.args['_reference'] = Argument(prefix='', type='fix', value='&& cnvkit.py reference')
+    cmd.args['output'] = Argument(prefix='-o ', default='FlatReference.cnn', desc='output file name')
+    cmd.args['ref'] = Argument(prefix='-f ', type='infile', desc='genome fasta file')
+    cmd.args['targets2'] = Argument(prefix='-t ', type='infile', desc='BED or interval file listing the targeted regions.')
+    cmd.args['_antitarget2'] = Argument(prefix='-a ', type='fix', value='antitargets.bed')
+    cmd.outputs['out'] = Output(value='{output}')
+    return cmd
+
+
 def CNVkit():
     cmd = Command()
     cmd.meta.name = 'CNVkit'
     cmd.meta.source = 'https://github.com/etal/cnvkit'
-    cmd.meta.version = '0.9.9'
+    cmd.meta.version = '0.9.10'
     cmd.meta.desc = 'detecting copy number variants and alterations genome-wide from high-throughput sequencing'
     cmd.runtime.image = 'etal/cnvkit:latest'
     cmd.runtime.tool = 'cnvkit.py batch'
@@ -941,7 +965,7 @@ def CNVkit():
     cmd.args['rscript_path'] = Argument(prefix='--rscript-path ', default='Rscript', desc='Use this option to specify a non-default R')
     cmd.args['normal_bams'] = Argument(prefix='-n ', type='infile', array=True, level='optional', desc='Normal samples (.bam) used to construct the pooled, paired, or flat reference.')
     cmd.args['vcf'] = Argument(prefix='--vcf ', type='infile', level='optional', desc='Typically you would use a properly formatted VCF from joint tumor-normal SNV calling, e.g. the output of MuTect, VarDict, or FreeBayes, having already flagged somatic mutations so they can be skipped in this analysis.')
-    cmd.args['genome'] = Argument(prefix='-f ', type='infile', desc='Reference genome, FASTA format (e.g. UCSC hg19.fa)')
+    cmd.args['genome'] = Argument(prefix='-f ', type='infile', level='optional', desc='Reference genome, FASTA format (e.g. UCSC hg19.fa)')
     cmd.args['targets'] = Argument(prefix='-t ', type='infile', level='optional', desc='Target intervals (.bed or .list)')
     cmd.args['antitargets'] = Argument(prefix='-a ', type='infile', level='optional', desc='Antitarget intervals (.bed or .list)')
     cmd.args['annotate'] = Argument(prefix='--annotate ', type='infile', level='optional', desc='Use gene models from this file to assign names to the target regions. Format: UCSC refFlat.txt or ensFlat.txt file (preferred), or BED, interval list, GFF, or similar.')
@@ -960,7 +984,7 @@ def Manta():
     cmd = Command()
     cmd.meta.name = 'Manta'
     cmd.meta.source = 'https://github.com/Illumina/manta'
-    cmd.meta.version = '0.9.9'
+    cmd.meta.version = '1.6.0'
     cmd.meta.desc = 'Manta calls structural variants (SVs) and indels from mapped paired-end sequencing reads.'
     cmd.runtime.image = 'michaelfranklin/manta:1.6.0'
     cmd.runtime.cpu = 4
@@ -978,7 +1002,7 @@ def Manta():
     cmd.outputs['out'] = Output(value='{outdir}/results', type='outdir')
     cmd.outputs['diploid_sv'] = Output(value='{outdir}/results/variants/diploidSV.vcf.gz', report=True, desc='SVs and indels scored and genotyped under a diploid model for the set of normal samples')
     cmd.outputs['somatic_sv'] = Output(value='{outdir}/results/variants/somaticSV.vcf.gz', report=True, desc='SVs and indels scored under a somatic variant model')
-    cmd.outputs['tumor_sv'] = Output(value='{outdir}/results/variants/somaticSV.vcf.gz', report=True, desc='Subset of the candidateSV.vcf.gz file after removing redundant candidates and small indels less than the minimum scored variant size (50 by default). The SVs are not scored, but include additional details: (1) paired and split read supporting evidence counts for each allele (2) a subset of the filters from the scored tumor-normal model are applied to the single tumor case to improve precision.')
+    cmd.outputs['tumor_sv'] = Output(value='{outdir}/results/variants/tumorSV.vcf.gz', report=True, desc='Subset of the candidateSV.vcf.gz file after removing redundant candidates and small indels less than the minimum scored variant size (50 by default). The SVs are not scored, but include additional details: (1) paired and split read supporting evidence counts for each allele (2) a subset of the filters from the scored tumor-normal model are applied to the single tumor case to improve precision.')
     cmd.outputs['candidateSmallIndels'] = Output(value='{outdir}/results/variants/candidateSmallIndels.vcf.gz', desc='Subset of the candidateSV.vcf.gz file containing only simple insertion and deletion variants less than the minimum scored variant size (50 by default)')
     return cmd
 
@@ -1022,6 +1046,24 @@ def MarkDuplicates(sample):
     cmd.args['ASSUME_SORT_ORDER'] = Argument(prefix='--ASSUME_SORT_ORDER ', default='queryname')
     cmd.args['tmpdir'] = Argument(prefix='--TMP_DIR ', default='.', desc='directorie with space available to be used by this program for temporary storage of working files')
     cmd.outputs['out'] = Output(value='{OUTPUT}')
+    return cmd
+
+
+def ReformatBaseQual():
+    cmd = Command()
+    cmd.meta.name = 'ReformatBaseQual'
+    cmd.meta.desc = 'Reformats reads to change ASCII quality encoding'
+    cmd.meta.version = '38.96'
+    cmd.runtime.image = 'docker.io/genomecenter/bbmap_38.96:latest'
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = '/bbmap/reformat.sh qin=33 qout=33 mincalledquality=2 maxcalledquality=41 qchist=qc.hist'
+    cmd.args['in1'] = Argument(prefix='in1=', type='infile', desc='read1 fq file')
+    cmd.args['in2'] = Argument(prefix='in2=', type='infile', desc='read2 fq file')
+    cmd.args['out1'] = Argument(prefix='out=', desc='output read1 file')
+    cmd.args['out2'] = Argument(prefix='out2=', desc='output read2 file')
+    cmd.outputs['read1'] = Output(value='{out1}')
+    cmd.outputs['read2'] = Output(value='{out2}')
     return cmd
 
 
@@ -1454,11 +1496,18 @@ def pipeline():
             args['tags'].value = ['cD', 'cE', 'cM', 'aD', 'aE', 'aM', 'bD', 'bE', 'bM',]
         else:
             args['tags'].value = ['cD', 'cE', 'cM']
-        sam2fastq_task_dict[sample] = sam2fastq_task
 
-        map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag=sample, depends=[sam2fastq_task])
-        args['read1'].value = sam2fastq_task.outputs['read1']
-        args['read2'].value = sam2fastq_task.outputs['read2']
+        # 由于fgbio输出的碱基质量值可能是叠加值，超出正常范围，与manta不兼容，因此使用bbmap进行碱基质量值更改
+        reformat_task, args = wf.add_task(ReformatBaseQual(), tag=sample, depends=[sam2fastq_task])
+        args['in1'].value = sam2fastq_task.outputs['read1']
+        args['in2'].value = sam2fastq_task.outputs['read2']
+        args['out1'].value = sample + '.consensus.bq_correct.R1.fq.gz'
+        args['out2'].value = sample + '.consensus.bq_correct.R2.fq.gz'
+        sam2fastq_task_dict[sample] = reformat_task
+
+        map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag=sample, depends=[reformat_task])
+        args['read1'].value = reformat_task.outputs['read1']
+        args['read2'].value = reformat_task.outputs['read2']
         args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
         # header 信息带到bam
         args['include_read_header'].value = True
@@ -1673,12 +1722,22 @@ def pipeline():
         # ----end of varidict-----------------------
 
         # ---CNVkit--------------------------------
+        create_ref_task = None
+        if not normal_bam_task:
+            create_ref_task, args = wf.add_task(CNVkitFlatRef(), tag=tumor)
+            args['access'].value = '/home/hxbio04/dbs/hg19/access-5k-mappable.grch37.bed'
+            args['targets'].value = wf.topvars['bed']
+            args['targets2'].value = wf.topvars['bed']
+            args['ref'].value = wf.topvars['ref']
+
         cnvkit_task, args = wf.add_task(CNVkit(), tag=tumor)
         args['tumor_bams'].value = [tumor_bam_task.outputs['out']]
         if normal_bam_task:
             args['normal_bams'].value = [normal_bam_task.outputs['out']]
-        args['targets'].value = wf.topvars['bed']
-        args['genome'].value = wf.topvars['ref']
+            args['genome'].value = wf.topvars['ref']
+            args['targets'].value = wf.topvars['bed']
+        else:
+            args['reference'].value = create_ref_task.outputs['out']
         # ---end of CNVkit--------------------------
 
         # ---Manta -------------------------
@@ -1688,6 +1747,16 @@ def pipeline():
             args['normal_bam'].value = [normal_bam_task.outputs['out']]
         args['region'].value = wf.topvars['bgzip_bed']
         args['ref'].value = wf.topvars['ref']
+
+        manta_vep_task, args = wf.add_task(vep(tumor), tag='Manta-'+tumor, depends=[manta_task])
+        if normal_bam_task:
+            args['input_file'].value = manta_task.outputs['somatic_sv']
+        else:
+            args['input_file'].value = manta_task.outputs['tumor_sv']
+        args['fasta'].value = wf.topvars['ref']
+        args['refseq'].value = True
+        args['dir_cache'].value = top_vars['vep_cache']
+        args['dir_plugins'].value = top_vars['vep_plugin']
         # ---end of Manta -------------------------
 
         # etching
