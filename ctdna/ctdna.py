@@ -828,6 +828,7 @@ def mutscan():
     cmd.args['support'] = Argument(prefix='--support ', default=2, desc='min read support for reporting a mutation')
     cmd.outputs['json'] = Output(value='{json}')
     cmd.outputs['html'] = Output(value='{html}')
+    cmd.outputs['outdir'] = Output(value='.')
     return cmd
 
 
@@ -1137,9 +1138,30 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
                     result[sample] = target_info
 
     table = pd.DataFrame(result)
+    table = table.loc[:, sorted(result.keys())]
     table.index.name = 'Metrics'
+    table.loc["Total_raw_reads(M)", :] = table.loc["Total_raw_reads"] * 1e-6
+    table.loc["Total_raw_bases(G)", :] = table.loc["Total_raw_bases"] * 1e-9
+    target_rows = [
+        "Total_raw_bases(G)",
+        "Total_raw_reads(M)",
+        "[Target] Average depth",
+        "[Target] Average depth(rmdup)",
+        "Insert_size_peak",
+        "[Total] Fraction of Mapped Reads",
+        "Q30_rate",
+        "[Target] Fraction of Target Data in all data",
+        "[Target] Coverage (>=0.2*MeanDepth)",
+        "[Target] Coverage (>=0.5*MeanDepth)",
+        "[flank] Fraction of flank Reads in all reads",
+        "[Target] Coverage (>=200x)",
+        "[Target] Coverage (>=500x)",
+        "[Target] Coverage (>=2000x)",
+        "[Target] Coverage (>=5000x)",
+    ]
     table.to_csv(os.path.join(outdir, 'All.metrics.txt'), sep='\t')
     table.to_excel(os.path.join(outdir, 'All.metrics.xlsx'))
+    table.loc[target_rows].to_excel(os.path.join(outdir, 'All.target.metrics.xlsx'))
 
 
 def pipeline():
@@ -1814,6 +1836,7 @@ def pipeline():
     if xls_lst:
         out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
+        df = df.sort_values(by=['Sample', 'Chr', 'Start'])
         df.to_excel(out_file, index=False)
 
     xls_lst = []
@@ -1825,6 +1848,7 @@ def pipeline():
     if xls_lst:
         out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
+        df = df.sort_values(by=['Sample', 'Chr', 'Start'])
         df.to_excel(out_file, index=False)
 
 
