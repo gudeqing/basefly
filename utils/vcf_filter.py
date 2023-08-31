@@ -1820,7 +1820,7 @@ class VcfFilter(ValidateMutationByBam):
             target_info['RSEQ'] = r.info['RSEQ']
 
         if 'LOD' in r.info:
-            target_info['LOD(error_rate,error_upper,af_lower,pvalue,min_depth)'] = r.info['LOD']
+            target_info['LOD(error_rate,error_upper,pvalue,min_depth)'] = r.info['LOD']
         if 'ConsInfo' in r.info:
             # consensus depth information
             target_info['(Alt_cD1, Alt_cD2+, cD1, cD2+, MeanError)'] = r.info['ConsInfo']
