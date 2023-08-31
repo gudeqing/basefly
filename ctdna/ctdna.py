@@ -1827,6 +1827,7 @@ def pipeline():
     merge_qc(fastp_task_dict, bamdst_task_dict, groupumi_task_dict, outdir=os.path.join(wf.wkdir, 'Outputs'))
 
     # merge variant report
+    target_genes = ['MET', 'ERBB2', 'EGFR', 'RET', 'BRAF']
     xls_lst = []
     for tid in vardict_filter_task_ids:
         if tid in wf.tasks:
@@ -1834,10 +1835,13 @@ def pipeline():
             xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
             xls_lst.append(xls_file)
     if xls_lst:
-        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
         df = df.sort_values(by=['Sample', 'Chr', 'Start'])
+        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
         df.to_excel(out_file, index=False)
+        target_idx = [x in target_genes for x in df['Gene']]
+        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.5LungCanerGenes.xlsx')
+        df.loc[target_idx].to_excel(out_file, index=False)
 
     xls_lst = []
     for tid in mutect2_filter_task_ids:
@@ -1850,6 +1854,9 @@ def pipeline():
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
         df = df.sort_values(by=['Sample', 'Chr', 'Start'])
         df.to_excel(out_file, index=False)
+        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.5LungCanerGenes.xlsx')
+        target_idx = [x in target_genes for x in df['Gene']]
+        df.loc[target_idx].to_excel(out_file, index=False)
 
 
 if __name__ == '__main__':
