@@ -54,14 +54,14 @@ from collections import Counter
 __author__ = 'gdq'
 
 
-def get_seq_and_qual(contig, start, end, bam, min_bq=15, get_qual=False):
+def get_seq_and_qual(contig, start, end, bam, min_bq=13, get_qual=False):
     cols = bam.pileup(
         contig, start, end,
         stepper='samtools',
         truncate=True,
         min_base_quality=min_bq,
         ignore_orphans=False,
-        ignore_overlaps=False,
+        ignore_overlaps=True,
     )
     # 针对每一个位点，得到相应覆盖的碱基和碱基质量值
     # 如果相应位置出现删除或插入，则用D和I分别代替表示
@@ -158,6 +158,7 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
         # header = ['contig', 'pos', 'ref', 'centered_ref', 'depth', 'alt_stat', 'base_qual_stat']
         header = ['contig', 'pos', 'ref', 'centered_ref', 'depth', 'alt_stat']
         fw.write('\t'.join(header)+'\n')
+        depth_lst = []
         for line in bed_file:
             if line.startswith('track') or line.startswith('#'):
                 continue
@@ -165,6 +166,7 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
             s, t = int(s), int(t)
             seq_quals = get_seq_and_qual(r, s, t, bam)
             target_info_lst = []
+            depths = []
             for pos, seq_qual in zip(range(s, t), seq_quals):
                 if (r, str(pos+1)) in excludes:
                     # print('skip', pos)
@@ -178,6 +180,7 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
                     # 统计alternative碱基的总数
                     alt_types = seq_counter.keys() - {ref, 'N', 'n'}
                     total_depth = sum(seq_counter.values())
+                    depths.append(total_depth)
                     # alt_freq = alt_num / (total)
                     for alt_type in alt_types:
                         alt_depth = seq_counter[alt_type]
@@ -197,14 +200,19 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
                             # dict(qual_counter.most_common())
                         ])
             # write out
+            median_depth = statistics.median(depths)
+            depth_lst.append(median_depth)
             for info in target_info_lst:
                 fw.write('\t'.join(str(x) for x in info)+'\n')
     bam.close()
     gn.close()
+    median_depth = statistics.median(depth_lst)
+    print('Median Depth:', median_depth)
 
     # 查看字段结构大小
     print(dict(zip(alt_raw_dict.keys(), (len(v) for k, v in alt_raw_dict.items()))))
     alt_dict = dict()
+    min_depth = max(median_depth * 5, 5000)
     for alt_type, mdict in alt_raw_dict.items():
         # 例如alt_type='G', mdict={'CAT':{'A': 10, 'G':2}}
         # 合并：由于观察到A->C时，可能是pcr时把A错配成C, 也有可能pcr时把互补链的T错配为G
@@ -222,14 +230,15 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
         for center_seq in sorted(result.keys()):
             v = result[center_seq]
             total = sum(v.values())
-            if total < 2000:
+            if total < min_depth:
                 # total是总的depth，如果总的depth不够多，则统计意义将不足
-                print(f'For context named "{center_seq}", the total depth is only {total}, skip it for not enough statistic meaning')
+                print(f'For context named "{center_seq}", the total deph < median_depth * 5, skip it for not enough statistic meaning')
                 continue
             v = dict(v.most_common())
             # 仅仅输出目标突变的概率
             # freq = {x: v[x]/total for x in v if x==alt_type}
             freq = {alt_type: v[alt_type]/total}
+            freq['Depth'] = total
             freq_result[center_seq] = freq
         # 排序
         freq_result = dict(sorted(
