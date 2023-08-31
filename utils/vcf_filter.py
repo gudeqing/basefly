@@ -1316,8 +1316,8 @@ class VcfFilter(ValidateMutationByBam):
     def poll_error_binomial_conf(self, error_rate, depth, confidence=0.95):
         lower, upper = stats.binom.interval(confidence, n=depth, p=error_rate)
         lower, upper = lower/depth, upper/depth
-        if lower < 1e-6:
-            lower = 1e-6
+        if lower < 1e-7:
+            lower = 1e-7
         return lower, upper
 
     def poll_error_norm_conf(self, error_rate, depth, confidence=0.95):
@@ -1469,7 +1469,7 @@ class VcfFilter(ValidateMutationByBam):
         else:
             return 'Complex'
 
-    def get_raw_error_rate(self, record, min_error_rate=1e-6, read_len=150):
+    def get_raw_error_rate(self, record, min_error_rate=1e-7, read_len=150):
         error_rate = min_error_rate
         format_info = record.samples[self.tumor]
         if 'QUAL' in format_info:
@@ -1488,7 +1488,7 @@ class VcfFilter(ValidateMutationByBam):
             # 保守考虑，将这个错误率缩小5倍
             error_rate = record.info['NM'] / read_len * 0.2
         # print(f'we use QUAL info to infer error rate for {record.contig}:{record.start}:{record.ref}>{record.alts[0]}:', error_rate)
-        return min(error_rate, min_error_rate)
+        return max(error_rate, min_error_rate)
 
     def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, factor=1.0, dp=None, af=None):
         if error_rate == 0:
@@ -1504,16 +1504,17 @@ class VcfFilter(ValidateMutationByBam):
         pvalue = self.get_alt_binomial_pvalue(alt_depth=round(dp*af), depth=dp, error_rate=error_rate)
         # error rate不能为0，af不能为1，否则会报错
         if af <= 0.99:
-            min_depth = self.estimate_min_required_depth(error_rate, af, confidence)
-            min_depth = int(min_depth * 0.9)
+            min_depth = self.estimate_min_required_depth(error_rate, af_upper, confidence)
+            min_depth = int(min_depth)
         else:
             min_depth = 5
         # print(dp, r.qual, error_rate, lower, upper)
         # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
-        if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth) and (af_lower >= error_rate):
-            return True, error_rate, error_upper, af_lower, pvalue, min_depth
+        # if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth) and (af_lower >= error_rate):
+        if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth):
+            return True, error_rate, error_upper, pvalue, min_depth
         else:
-            return False, error_rate, error_upper, af_lower, pvalue, min_depth
+            return False, error_rate, error_upper, pvalue, min_depth
 
     def pass_depth_bias(self, record, cutoff=0.05, info_field='', normal=None, tumor=None):
         """
@@ -1800,8 +1801,6 @@ class VcfFilter(ValidateMutationByBam):
             "pHGVS": pHGVS,  # P-Dot Notation
             "VAF(%)": f'{self.get_af_value(r, self.tumor)*100:.2f}',  # Allele Frequency
             # additional information
-            '=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")': csq_dict['Consequence'],  # Consequence(s)
-            "CLIN_SIG": csq_dict['CLIN_SIG'],
             "Exon": csq_dict['EXON'],  # Affected Exon(s)
             "Strand": csq_dict['STRAND'],
             "VariantClass": csq_dict['VARIANT_CLASS'],
@@ -1826,6 +1825,8 @@ class VcfFilter(ValidateMutationByBam):
             # consensus depth information
             target_info['(Alt_cD1, Alt_cD2+, cD1, cD2+, MeanError)'] = r.info['ConsInfo']
         # 根据注释结果判断是否报告，增加报告字段
+        target_info['=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")']= csq_dict['Consequence']
+        target_info["CLIN_SIG"] = csq_dict['CLIN_SIG']
         consequences = set(csq_dict['Consequence'].split('&'))
         if (consequences - {
             'intron_variant',
@@ -1896,11 +1897,12 @@ class VcfFilter(ValidateMutationByBam):
                   error_rate_file=None, min_af=0.0001, min_depth=5, alpha=0.05, disable_bg_model=False):
         # 先给vcf的header添加新字段定义才能往添加新的字段信息
         self.vcf.header.info.add(
-            'LOD', number=5, type='Float',
-            description='[error_rate, error_upper, af_lower, pvalue, min_depth]. '
+            'LOD', number=4, type='Float',
+            description='[error_rate, error_upper, pvalue, min_depth]. '
                         'The first value is input error rate which will be used as theoretical frequency to '
                         f'calculate the second value. The second value is the upper bound of the {alpha} confidence interval of error rate. '
-                        'The fourth value is the probability of alt observed from background noise'
+                        'The third value is the probability of alt reads observed are from background noise. '
+                        'The last value is the estimated mininum sequencing depth to observe the variant if the variant is true'
         )
         self.vcf.header.info.add(
             'ConsInfo', number=5, type='Float', description='consensus status of reads'
@@ -2017,31 +2019,28 @@ class VcfFilter(ValidateMutationByBam):
                 if seq_error_dict:
                     if mutation_type == 'SNV':
                         key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
-                        # error_rate = seq_error_dict[key][r.alts[0]]
                         if key in seq_error_dict[r.alts[0]]:
                             error_rate = seq_error_dict[r.alts[0]][key][r.alts[0]]
                     elif mutation_type == 'Insertion':
                         key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
-                        if key in seq_error_dict['I']:
-                            error_rate = seq_error_dict['I'][key]['I']
-                            # if len(r.alts[0])-len(r.ref) >= 3:
-                            #     error_rate = error_rate**2
+                        if 'I' in seq_error_dict:
+                            if key in seq_error_dict['I']:
+                                error_rate = seq_error_dict['I'][key]['I']
+                        # print('Insertion', key, error_rate, r.pos, r.ref, list(r.alts))
                     elif mutation_type == 'Deletion':
                         # deletion
                         key = gn.fetch(r.contig, r.pos - key_left, r.pos + 1 + key_right).upper()
-                        if 'D' in seq_error_dict['D']:
-                            # error_rate = seq_error_dict[key]['']
+                        if 'D' in seq_error_dict:
                             if key in seq_error_dict['D']:
                                 error_rate = seq_error_dict['D'][key]['D']
-                                # if len(r.ref) - len(r.alts[0]) >= 3:
-                                #     error_rate = error_rate ** 2
-                        # print('del', key, error_rate, r.ref, list(r.alts))
+                        # print('del', key, error_rate, r.pos, r.ref, list(r.alts))
                     elif mutation_type == 'Complex':
                         # 使用第一个碱基的信息，也即类似snp的方式处理
                         key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
-                        # print(r.pos, key, r.ref, r.alts)
-                        if key in seq_error_dict[r.alts[0][0].upper()]:
-                            error_rate = seq_error_dict[r.alts[0][0].upper()][key][r.alts[0][0].upper()]
+                        if r.alts[0][0].upper() in seq_error_dict:
+                            if key in seq_error_dict[r.alts[0][0].upper()]:
+                                error_rate = seq_error_dict[r.alts[0][0].upper()][key][r.alts[0][0].upper()]
+                        # print('Complex', key, error_rate, r.pos, r.ref, list(r.alts))
                     else:
                         raise Exception(f'mutation type is unknown for {r.__str__()}')
 
@@ -2063,8 +2062,10 @@ class VcfFilter(ValidateMutationByBam):
                 if error_rate > 0.999 or af > 0.999:
                     reasons.append('FromGermline')
                 else:
+                    # 不论是否跳过背景噪音模型，都进行统计
+                    judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
                     if not disable_bg_model:
-                        judge = self.pass_seq_error(r, self.tumor, error_rate, alpha=alpha)
+                        # 不使用背景噪音数据进行过滤
                         if not judge[0]:
                             if ctrl_af_as_error_rate:
                                 reasons.append('NoiseFromNormal')
@@ -2072,9 +2073,9 @@ class VcfFilter(ValidateMutationByBam):
                                 # print(key, error_rate, r.ref, list(r.alts))
                                 reasons.append('BackgroundNoise')
                             pass
-                        # error_rate, error_upper, af_lower, pvalue, min_depth
-                        r.info['LOD'] = tuple(judge[1:])
-                        lod_list.append(judge[2])
+                    # error_rate, error_upper, pvalue, min_depth
+                    r.info['LOD'] = tuple(judge[1:])
+                    lod_list.append(judge[2])
 
                 # 2.根据strand bias进行过滤
                 # 当使用链偏倚作为过滤指标时要注意：只有极端链偏倚的SNP才应被视为假阳性候选突变
@@ -2120,24 +2121,32 @@ class VcfFilter(ValidateMutationByBam):
                         # median_error = statistics.median(consensus_error)
                         mean_error = statistics.mean(consensus_error)
                         r.info['ConsInfo'] = (fam1_support_num, fam2_support_num, fam1_all_num, fam2_all_num, mean_error)
-                        if fam2_support_num == 0 and mutation_type == 'SNV':
-                            if fam1_support_num < 5 or fam2_support_num < 2:
+                        # 针对较大的deletion或insertion,本程序找到的证据可能偏低，不进行下面的过滤
+                        if mutation_type == 'SNV':
+                            if (fam2_support_num == 0) and (fam1_support_num < 5):
+                                # 支持突变的consensus的read数量为0，而且支持突变的非consensus reads数量小于5
                                 reasons.append('LowUmiReadSupport')
-                        else:
-                            # 针对较大的deletion或insertion,本程序找到的证据可能偏低，因为没有局部组装和重比对的功能
-                            if mutation_type == 'SNV' and fam2_support_num < int(fam2_all_num * af * 0.9):
-                                reasons.append('LowUmiReadSupport')
-                        if not disable_bg_model:
-                            # 根据umi统计得到的mean_error再过滤一次
-                            if mean_error > 0:
-                                alt_dp = len(support_reads)
-                                total_dp = len(tag_dict)
-                                af = alt_dp/total_dp
-                                # 不一定适合UMI consenus后的情形，或者UMI consensu后，错误率的分布可能完全偏离二型分布
-                                judge = self.pass_seq_error(r, self.tumor, max(mean_error, error_rate), alpha=alpha, dp=total_dp, af=af)
+                            elif fam2_support_num == 1 and fam1_support_num == 1:
+                                consensus_depth = max(tag_dict[x]['cD'] for x in support_reads)
+                                if consensus_depth <= 2:
+                                    reasons.append('LowUmiReadSupport')
+                            elif fam2_support_num == 2 and fam1_support_num == 0:
+                                consensus_depth = sum(tag_dict[x]['cD'] for x in support_reads)
+                                if consensus_depth < 5:
+                                    reasons.append('LowUmiReadSupport')
+
+                        if mean_error > 0:
+                            alt_dp = len(support_reads)
+                            total_dp = len(tag_dict)
+                            af = alt_dp/total_dp
+                            # 不一定适合UMI consenus后的情形，或者UMI consensu后，错误率的分布可能完全偏离二型分布
+                            # 这里统计得到的测序深度信息和varidict给出的可能不一样，因此可以再重新计算一次
+                            judge = self.pass_seq_error(r, self.tumor, min(mean_error, error_rate), alpha=alpha, dp=total_dp, af=af)
+                            if not disable_bg_model:
+                                reasons.remove('BackgroundNoise')
                                 if not judge[0]:
                                     reasons.append('BackgroundNoise')
-                                    r.info['LOD'] = tuple(judge[1:])
+                            r.info['LOD'] = tuple(judge[1:])
 
             # 更新filter的内容和输出结果
             if reasons:
@@ -2202,7 +2211,7 @@ if __name__ == '__main__':
     parser.add_argument('-tumor_name', required=False, help='tumor sample name in vcf')
     parser.add_argument('-normal_vcf', type=Path, required=False, help='normal sample vcf file')
     parser.add_argument('-error_rate_file', type=Path, required=False, help='Estimated background noise file. Use "stat_3bases_error.py" to prepare this file')
-    parser.add_argument('-min_error_rate', type=float, default=1e-6, help='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
+    parser.add_argument('-min_error_rate', type=float, default=1e-7, help='global minimum error rate, if error rate cannot be aquired in other ways, this value will be used')
     parser.add_argument('-alpha', type=float, default=0.05, help='cutoff of pvalue from background noise model. The pvalue represents the probability of variants come from background noise')
     parser.add_argument('-min_af', type=float, default=0.0001, help='hard cutoff of AF')
     parser.add_argument('--disable_bg_model', default=False, action='store_true', help='disable background noise model filter')
