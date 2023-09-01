@@ -1490,7 +1490,7 @@ class VcfFilter(ValidateMutationByBam):
         # print(f'we use QUAL info to infer error rate for {record.contig}:{record.start}:{record.ref}>{record.alts[0]}:', error_rate)
         return max(error_rate, min_error_rate)
 
-    def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, factor=1.0, dp=None, af=None):
+    def pass_seq_error(self, record, sample, error_rate:float=None, alpha=0.05, dp=None, af=None):
         if error_rate == 0:
             raise Exception("ErrorRate=0? "+record.__str__())
         dp = self.get_depth(record, sample) if not dp else dp
@@ -1499,19 +1499,19 @@ class VcfFilter(ValidateMutationByBam):
         confidence = 1 - alpha
         # confidence越大，则 error_upper越大, af_lower越小，min_depth越大， 这意味着过滤条件越严格
         error_lower, error_upper = self.poll_error_binomial_conf(error_rate=error_rate, depth=dp, confidence=confidence)
-        af_lower, af_upper = self.poll_error_binomial_conf(error_rate=af, depth=dp, confidence=confidence)
+        # af_lower, af_upper = self.poll_error_binomial_conf(error_rate=af, depth=dp, confidence=confidence)
         # 根据二型分布估计突变完全来自背景噪音或测序错误的概率值
         pvalue = self.get_alt_binomial_pvalue(alt_depth=round(dp*af), depth=dp, error_rate=error_rate)
         # error rate不能为0，af不能为1，否则会报错
         if af <= 0.99:
-            min_depth = self.estimate_min_required_depth(error_rate, af_upper, confidence)
+            min_depth = self.estimate_min_required_depth(error_lower, af, confidence)
             min_depth = int(min_depth)
         else:
             min_depth = 5
         # print(dp, r.qual, error_rate, lower, upper)
         # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
         # if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth) and (af_lower >= error_rate):
-        if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth):
+        if (af > error_upper) and (pvalue <= alpha) and (dp > min_depth):
             return True, error_rate, error_upper, pvalue, min_depth
         else:
             return False, error_rate, error_upper, pvalue, min_depth
@@ -1824,6 +1824,8 @@ class VcfFilter(ValidateMutationByBam):
         if 'ConsInfo' in r.info:
             # consensus depth information
             target_info['(Alt_cD1, Alt_cD2+, cD1, cD2+, MeanError)'] = r.info['ConsInfo']
+        if 'PassBGN' in r.info:
+            target_info['PassBGN'] = r.info['PassBGN']
         # 根据注释结果判断是否报告，增加报告字段
         target_info['=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")']= csq_dict['Consequence']
         target_info["CLIN_SIG"] = csq_dict['CLIN_SIG']
@@ -1906,6 +1908,9 @@ class VcfFilter(ValidateMutationByBam):
         )
         self.vcf.header.info.add(
             'ConsInfo', number=5, type='Float', description='consensus status of reads'
+        )
+        self.vcf.header.info.add(
+            'PassBGN', number=1, type='String', description=f'Pass background noise model filter with Alpha={alpha}'
         )
         self.vcf.header.filters.add('NoiseFromNormal', number=None, type=None, description='Noise from normal sample')
         self.vcf.header.filters.add('BackgroundNoise', number=None, type=None, description='Noise from background')
@@ -2026,6 +2031,8 @@ class VcfFilter(ValidateMutationByBam):
                         if 'I' in seq_error_dict:
                             if key in seq_error_dict['I']:
                                 error_rate = seq_error_dict['I'][key]['I']
+                                if len(r.alts[0]) > 3:
+                                    error_rate = error_rate * 0.5
                         # print('Insertion', key, error_rate, r.pos, r.ref, list(r.alts))
                     elif mutation_type == 'Deletion':
                         # deletion
@@ -2033,6 +2040,8 @@ class VcfFilter(ValidateMutationByBam):
                         if 'D' in seq_error_dict:
                             if key in seq_error_dict['D']:
                                 error_rate = seq_error_dict['D'][key]['D']
+                                if len(r.ref) > 3:
+                                    error_rate = error_rate * 0.5
                         # print('del', key, error_rate, r.pos, r.ref, list(r.alts))
                     elif mutation_type == 'Complex':
                         # 使用第一个碱基的信息，也即类似snp的方式处理
@@ -2075,6 +2084,7 @@ class VcfFilter(ValidateMutationByBam):
                             pass
                     # error_rate, error_upper, pvalue, min_depth
                     r.info['LOD'] = tuple(judge[1:])
+                    r.info['PassBGN'] = str(judge[0])
                     lod_list.append(judge[2])
 
                 # 2.根据strand bias进行过滤
@@ -2147,6 +2157,7 @@ class VcfFilter(ValidateMutationByBam):
                                 if not judge[0]:
                                     reasons.append('BackgroundNoise')
                             r.info['LOD'] = tuple(judge[1:])
+                            r.info['PassBGN'] = str(judge[0])
 
             # 更新filter的内容和输出结果
             if reasons:
