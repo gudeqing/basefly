@@ -1302,7 +1302,7 @@ class VcfFilter(ValidateMutationByBam):
             'BRAF': 'NM_004333',
             'EGFR': 'NM_005228',
             'RET': 'NM_020975',
-            'ERBB2': 'NM 004448',
+            'ERBB2': 'NM_004448',
             'ALK': 'NM_004304',
             'FGFR1': 'NM_023110',
             'PDGFRA': 'NM_006206',
@@ -1764,11 +1764,12 @@ class VcfFilter(ValidateMutationByBam):
         csq_format = self.vcf.header.info['CSQ'].description.split('Format: ')[1]
         picked = None
         canonical = None
+        target_transcript = None
         for each in r.info['CSQ']:
             csq_dict = dict(zip(csq_format.split('|'), each.split('|')))
             if csq_dict['SYMBOL'] in self.gene2trans:
                 if csq_dict['Feature'].startswith(self.gene2trans[csq_dict['SYMBOL']]):
-                    canonical = csq_dict
+                    target_transcript = csq_dict
                     break
             # 找到被flag为1的记录作为报告
             if 'PICK' in csq_dict and csq_dict['PICK'] == "1":
@@ -1780,10 +1781,10 @@ class VcfFilter(ValidateMutationByBam):
                         canonical = csq_dict
                 else:
                     canonical = csq_dict
-            if picked and canonical:
+            if picked and canonical and target_transcript:
                 break
         # 优先选择RefSeq经典转录本对应的注释，其次选择被PICK为1的注释
-        csq_dict = canonical or picked
+        csq_dict = target_transcript or canonical or picked
         # 转换坐标或格式
         mutation_type = self.get_mutation_type(r)
         if mutation_type == 'SNP':
