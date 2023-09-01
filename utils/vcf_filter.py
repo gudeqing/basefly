@@ -1244,7 +1244,7 @@ class FindComplexVariant(ValidateMutationByBam):
 
 
 class VcfFilter(ValidateMutationByBam):
-    def __init__(self, vcf_path, bam_file, genome_file, tumor=None, normal=None, normal_vcf=None, gene_primer_used=False):
+    def __init__(self, vcf_path, bam_file, genome_file, tumor=None, normal=None, normal_vcf=None, gene_primer_used=False,gene2trans=None):
         super().__init__(bam_file, genome_file)
         self.vcf = VariantFile(vcf_path)
         self.vcf_path = vcf_path
@@ -1296,6 +1296,28 @@ class VcfFilter(ValidateMutationByBam):
             self.normal_af = normal_af_dict
         else:
             self.normal_af = dict()
+
+        self.gene2trans = {
+            'MET': 'NM_000245',
+            'BRAF': 'NM_004333',
+            'EGFR': 'NM_005228',
+            'RET': 'NM_020975',
+            'ERBB2': 'NM 004448',
+            'ALK': 'NM_004304',
+            'FGFR1': 'NM_023110',
+            'PDGFRA': 'NM_006206',
+            'ROS1': 'NM_002944',
+            'NTRK1': 'NM_001007792',
+            'NTRK2': 'NM_006180',
+            'SDC4': 'NM_002999',
+            'SLC34A2': 'NM_006424',
+        }
+        if gene2trans:
+            # 基因和转录本对应关系
+            with open(gene2trans) as f:
+                for line in f:
+                    gene, transcript = line.strip().split()[:2]
+                    self.gene2trans[gene] = transcript
 
     def add_contig_header(self, ref_dict):
         contig_info = []
@@ -1744,6 +1766,10 @@ class VcfFilter(ValidateMutationByBam):
         canonical = None
         for each in r.info['CSQ']:
             csq_dict = dict(zip(csq_format.split('|'), each.split('|')))
+            if csq_dict['SYMBOL'] in self.gene2trans:
+                if csq_dict['Feature'].startswith(self.gene2trans[csq_dict['SYMBOL']]):
+                    canonical = csq_dict
+                    break
             # 找到被flag为1的记录作为报告
             if 'PICK' in csq_dict and csq_dict['PICK'] == "1":
                 picked = csq_dict
