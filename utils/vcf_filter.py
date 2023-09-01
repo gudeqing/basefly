@@ -1828,7 +1828,8 @@ class VcfFilter(ValidateMutationByBam):
         if 'PassBGN' in r.info:
             target_info['PassBGN'] = r.info['PassBGN']
         # 根据注释结果判断是否报告，增加报告字段
-        target_info['=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")']= csq_dict['Consequence']
+        # target_info['=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")']= csq_dict['Consequence']
+        target_info["Consequence"]= csq_dict['Consequence']
         target_info["CLIN_SIG"] = csq_dict['CLIN_SIG']
         consequences = set(csq_dict['Consequence'].split('&'))
         if (consequences - {
