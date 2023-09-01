@@ -696,6 +696,7 @@ def VcfFilter():
     cmd.outputs['final_xls'] = Output(value='{out_prefix}.final.xlsx', report=True)
     cmd.outputs['discarded_vcf'] = Output(value='{out_prefix}.discarded.vcf', report=True)
     cmd.outputs['log'] = Output(value='{out_prefix}.filtering.log', report=True)
+    cmd.outputs['snv_metrics'] = Output(value='{out_prefix}.SNV.metrics.txt', report=True)
     return cmd
 
 
