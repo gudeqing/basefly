@@ -1392,19 +1392,20 @@ class VcfFilter(ValidateMutationByBam):
         return dis
 
     def get_af_value(self, record, sample):
-        if 'HIAF' in record.info and 'AF' in record.info:
-            # vardict style
-            af = max([record.info['HIAF'], record.info['AF'][0]])
-        elif 'AF' in record.samples[sample]:
-            # mutect2中的输出结果符合
-            af = record.samples[sample]['AF'][0]
-        elif 'FREQ' in record.samples[sample]:
-            # for varscan2 style
-            af = record.samples[sample]['FREQ']
-            if '%' in af:
-                af = float(af.strip('%')) * 0.01
-        else:
-            raise Exception('No AF or FREQ field found !')
+        # if 'HIAF' in record.info and 'AF' in record.info:
+        #     # vardict style
+        #     af = max([record.info['HIAF'], record.info['AF'][0]])
+        # elif 'AF' in record.samples[sample]:
+        #     # mutect2中的输出结果符合
+        #     af = record.samples[sample]['AF'][0]
+        # elif 'FREQ' in record.samples[sample]:
+        #     # for varscan2 style
+        #     af = record.samples[sample]['FREQ']
+        #     if '%' in af:
+        #         af = float(af.strip('%')) * 0.01
+        # else:
+        #     raise Exception('No AF or FREQ field found !')
+        af = self.get_alt_depth(record, sample)/self.get_depth(record, sample)
         return af
 
     def get_normal_af(self, record):
@@ -1511,7 +1512,7 @@ class VcfFilter(ValidateMutationByBam):
         # print(dp, r.qual, error_rate, lower, upper)
         # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
         # if (af > error_upper*factor) and (pvalue < alpha) and (dp > min_depth) and (af_lower >= error_rate):
-        if (af > error_upper) and (pvalue <= alpha) and (dp > min_depth):
+        if (af >= error_upper) and (pvalue <= alpha) and (dp >= min_depth):
             return True, error_rate, error_upper, pvalue, min_depth
         else:
             return False, error_rate, error_upper, pvalue, min_depth
@@ -1906,12 +1907,9 @@ class VcfFilter(ValidateMutationByBam):
                         'The third value is the probability of alt reads observed are from background noise. '
                         'The last value is the estimated mininum sequencing depth to observe the variant if the variant is true'
         )
-        self.vcf.header.info.add(
-            'ConsInfo', number=5, type='Float', description='consensus status of reads'
-        )
-        self.vcf.header.info.add(
-            'PassBGN', number=1, type='String', description=f'Pass background noise model filter with Alpha={alpha}'
-        )
+        self.vcf.header.info.add('ConsInfo', number=5, type='Float', description='consensus status of reads')
+        self.vcf.header.info.add('PassBGN', number=1, type='String', description=f'Pass background noise model filter with Alpha={alpha}')
+        self.vcf.header.info.add('SupportReads', number=1, type='String', description=f'support reads example')
         self.vcf.header.filters.add('NoiseFromNormal', number=None, type=None, description='Noise from normal sample')
         self.vcf.header.filters.add('BackgroundNoise', number=None, type=None, description='Noise from background')
         self.vcf.header.filters.add('FromGermline', number=None, type=None, description='Considered as germline variant found in normal vcf')
@@ -2032,7 +2030,7 @@ class VcfFilter(ValidateMutationByBam):
                             if key in seq_error_dict['I']:
                                 error_rate = seq_error_dict['I'][key]['I']
                                 if len(r.alts[0]) > 3:
-                                    error_rate = error_rate * 0.5
+                                    error_rate = error_rate * 0.1
                         # print('Insertion', key, error_rate, r.pos, r.ref, list(r.alts))
                     elif mutation_type == 'Deletion':
                         # deletion
@@ -2041,7 +2039,7 @@ class VcfFilter(ValidateMutationByBam):
                             if key in seq_error_dict['D']:
                                 error_rate = seq_error_dict['D'][key]['D']
                                 if len(r.ref) > 3:
-                                    error_rate = error_rate * 0.5
+                                    error_rate = error_rate * 0.1
                         # print('del', key, error_rate, r.pos, r.ref, list(r.alts))
                     elif mutation_type == 'Complex':
                         # 使用第一个碱基的信息，也即类似snp的方式处理
@@ -2111,6 +2109,8 @@ class VcfFilter(ValidateMutationByBam):
                 if bamer and len(reasons) == 0:
                     # 该步骤比较耗时，为加快速度，仅仅对通过前面全部判定条件的突变进行分析
                     support_reads, tag_dict, support_seqs = bamer.get_mut_support_reads(r, tag_names=('cD', 'cE'), logger=logger)
+                    if support_reads:
+                        r.info['SupportReads'] = '|'.join(list(support_reads)[:5])
                     # support_reads, tag_dict, support_seqs = bamer.get_mut_support_reads(r, logger=logger)
                     # gencore: each consensus read will have a tag FR, which means forward read number of this consensus read.
                     # If the read is a duplex consensus read, it will also has a tag RR, which means reverse read number of this consensus read.
@@ -2145,19 +2145,19 @@ class VcfFilter(ValidateMutationByBam):
                                 if consensus_depth < 5:
                                     reasons.append('LowUmiReadSupport')
 
-                        if mean_error > 0:
-                            alt_dp = len(support_reads)
-                            total_dp = len(tag_dict)
-                            af = alt_dp/total_dp
-                            # 不一定适合UMI consenus后的情形，或者UMI consensu后，错误率的分布可能完全偏离二型分布
-                            # 这里统计得到的测序深度信息和varidict给出的可能不一样，因此可以再重新计算一次
-                            judge = self.pass_seq_error(r, self.tumor, min(mean_error, error_rate), alpha=alpha, dp=total_dp, af=af)
-                            if not disable_bg_model:
-                                reasons.remove('BackgroundNoise')
-                                if not judge[0]:
-                                    reasons.append('BackgroundNoise')
-                            r.info['LOD'] = tuple(judge[1:])
-                            r.info['PassBGN'] = str(judge[0])
+                            # 针对SNV，当找到的证据多余caller给出的时候，根据统计结果，重新进行噪音模型过滤
+                            if mean_error > 0 and len(support_reads) > alt_dp:
+                                alt_dp = len(support_reads)
+                                total_dp = len(tag_dict)
+                                af = alt_dp/total_dp
+                                # 不一定适合UMI consenus后的情形，或者UMI consensu后，错误率的分布可能完全偏离二型分布
+                                judge = self.pass_seq_error(r, self.tumor, min(mean_error, error_rate), alpha=alpha, dp=total_dp, af=af)
+                                if not disable_bg_model:
+                                    reasons.remove('BackgroundNoise')
+                                    if not judge[0]:
+                                        reasons.append('BackgroundNoise')
+                                r.info['LOD'] = tuple(judge[1:])
+                                r.info['PassBGN'] = str(judge[0])
 
             # 更新filter的内容和输出结果
             if reasons:
