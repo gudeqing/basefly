@@ -62,6 +62,7 @@ def get_seq_and_qual(contig, start, end, bam, min_bq=13, get_qual=False):
         min_base_quality=min_bq,
         ignore_orphans=False,
         ignore_overlaps=True,
+        max_depth=300000,
     )
     # 针对每一个位点，得到相应覆盖的碱基和碱基质量值
     # 如果相应位置出现删除或插入，则用D和I分别代替表示
