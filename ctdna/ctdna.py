@@ -594,7 +594,8 @@ def bcftools_norm():
 def vep(sample):
     cmd = Command()
     cmd.meta.name = 'VEP'
-    cmd.runtime.image = 'ensemblorg/ensembl-vep:release_109.3'
+    # cmd.runtime.image = 'ensemblorg/ensembl-vep:release_109.3'
+    cmd.runtime.image = 'ensemblorg/ensembl-vep:release_110.1'
     # 由于权限问题，更改docker_cmd_prefix
     cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
     cmd.runtime.memory = 10 * 1024 ** 3
@@ -641,6 +642,7 @@ def vep(sample):
     cmd.args['pick'] = Argument(prefix='--pick', type='bool', default=False, desc="Pick one line or block of consequence data per variant, including transcript-specific columns. This is the best method to use if you are interested only in one consequence per variant")
     cmd.args['flag_pick'] = Argument(prefix='--flag_pick ', type='bool', default=True, desc="As per --pick, but adds the PICK flag to the chosen block of consequence data and retains others.")
     cmd.args['filter_common'] = Argument(prefix='--filter_common ', type='bool', default=False, desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters.")
+    cmd.args['civic_vcf'] = Argument(prefix='--custom "file={},short_name=Civic,format=vcf,type=exact,fields=CSQ"', type='infile', default='/home/hxbio04/dbs/vep/CIViC/20230901.nightly-civic_accepted.sorted.vcf.gz', desc='Civic Vcf as reference for annotating')
     cmd.args['other_args'] = Argument(default='', desc='specify other arguments that you want to append to the command')
     cmd.args['_create_index'] = Argument(value='&& tabix *vcf.gz', type='fix')
     cmd.outputs['out_vcf'] = Output(value='{output_file}', report=True)

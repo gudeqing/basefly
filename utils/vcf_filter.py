@@ -1913,6 +1913,11 @@ class VcfFilter(ValidateMutationByBam):
                 target_info['Start'] = start_pos + int(csq_dict['HGVS_OFFSET'])
                 target_info['End'] = end_pos + int(csq_dict['HGVS_OFFSET'])
 
+        if 'Civic_CSQ' in csq_dict and csq_dict['Civic_CSQ']:
+            field_name = "CIViC: Allele|Consequence|SYMBOL|Entrez Gene ID|Feature_type|Feature|HGVSc|HGVSp|CIViC Variant Name|CIViC Variant ID|CIViC Variant Aliases|CIViC Variant URL|CIViC Molecular Profile Name|CIViC Molecular Profile ID|CIViC Molecular Profile Aliases|CIViC Molecular Profile URL|CIViC HGVS|Allele Registry ID|ClinVar IDs|CIViC Molecular Profile Score|CIViC Entity Type|CIViC Entity ID|CIViC Entity URL|CIViC Entity Source|CIViC Entity Variant Origin|CIViC Entity Status|CIViC Entity Significance|CIViC Entity Direction|CIViC Entity Disease|CIViC Entity Therapies|CIViC Entity Therapy Interaction Type|CIViC Evidence Phenotypes|CIViC Evidence Level|CIViC Evidence Rating|CIViC Assertion ACMG Codes|CIViC Assertion AMP Category|CIViC Assertion NCCN Guideline|CIVIC Assertion Regulatory Approval|CIVIC Assertion FDA Companion Test"
+            target_info['SelectedByCsq'] = 'Yes'
+            target_info[field_name] = csq_dict['Civic_CSQ'].replace('&', '|')
+
         return target_info
 
     def write_out_txt(self, vcf, out):
