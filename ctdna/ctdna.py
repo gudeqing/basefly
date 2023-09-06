@@ -602,6 +602,8 @@ def vep(sample):
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'vep'
     cmd.args['input_file'] = Argument(prefix='-i ', type='infile', desc='input file')
+    # 明确输入格式时，当vcf实际为空时程序不会报错
+    cmd.args['format'] = Argument(prefix='--format ', default='vcf',  desc='Input file format - one of "ensembl", "vcf", "hgvs", "id", "region", "spdi".')
     cmd.args['fasta'] = Argument(prefix='--fasta ', type='infile', desc="Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache).")
     cmd.args['output_file'] = Argument(prefix='-o ', default=f'{sample}.vep.vcf.gz', desc='output file')
     cmd.args['output_format'] = Argument(prefix='--', range={'vcf', 'json', 'tab'}, default='vcf', desc="If we choose to write output in VCF format. Consequences are added in the INFO field of the VCF file, using the key 'CSQ'. Data fields are encoded separated by '|'; the order of fields is written in the VCF header. Output fields in the 'CSQ' INFO field can be selected by using --fields.")
@@ -832,7 +834,7 @@ def mutscan():
     cmd.args['support'] = Argument(prefix='--support ', default=2, desc='min read support for reporting a mutation')
     cmd.outputs['json'] = Output(value='{json}')
     cmd.outputs['html'] = Output(value='{html}')
-    cmd.outputs['outdir'] = Output(value='.')
+    cmd.outputs['outdir'] = Output(value='.', report=True)
     return cmd
 
 
@@ -1055,6 +1057,7 @@ def MarkDuplicates(sample):
 
 
 def ReformatBaseQual():
+    # fgbio在进行consenus后，给出的碱基质量值可能超出正常范围，导致后面manta程序出错，因此加入该步骤
     cmd = Command()
     cmd.meta.name = 'ReformatBaseQual'
     cmd.meta.desc = 'Reformats reads to change ASCII quality encoding'
@@ -1069,6 +1072,19 @@ def ReformatBaseQual():
     cmd.args['out2'] = Argument(prefix='out2=', desc='output read2 file')
     cmd.outputs['read1'] = Output(value='{out1}')
     cmd.outputs['read2'] = Output(value='{out2}')
+    return cmd
+
+
+def SortVcf():
+    cmd = Command()
+    cmd.meta.name = 'SortVcf'
+    cmd.meta.desc = 'Sort vcf with bedtools'
+    cmd.runtime.image = 'dceoy/bedtools:latest'
+    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.tool = 'bedtools sort -header'
+    cmd.args['in_vcf'] = Argument(prefix='-i ', type='infile', desc='Input vcf file')
+    cmd.args['out_vcf'] = Argument(prefix='> ', desc='out put vcf file')
+    cmd.outputs['out'] = Output(value='{out_vcf}')
     return cmd
 
 
@@ -1166,6 +1182,272 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
     table.to_csv(os.path.join(outdir, 'All.metrics.txt'), sep='\t')
     table.to_excel(os.path.join(outdir, 'All.metrics.xlsx'))
     table.loc[target_rows].to_excel(os.path.join(outdir, 'All.target.metrics.xlsx'))
+
+
+def merge_sv(wf, gene2trans=None):
+    import pysam
+    print('Merging SV result......')
+    if not gene2trans:
+        # LungCancer Panel
+        gene2trans = {
+            'MET': 'NM_000245',
+            'BRAF': 'NM_004333',
+            'EGFR': 'NM_005228',
+            'RET': 'NM_020975',
+            'ERBB2': 'NM_004448',
+            'ALK': 'NM_004304',
+            'FGFR1': 'NM_023110',
+            'FGFR2': 'NM_000141',
+            'FGFR3': 'NM_000142',
+            'PDGFRA': 'NM_006206',
+            'ROS1': 'NM_002944',
+            'NTRK1': 'NM_001007792',
+            'NTRK2': 'NM_006180',
+            'NTRK3': '?',
+            'SDC4': 'NM_002999',
+            'SLC34A2': 'NM_006424',
+            'NUTM1': 'NM_001284293',
+            'EZR': 'NM_001111077',
+            'CD74': 'NM_001025159',
+            'CD274': '?',
+            'NRAS': '?',
+            'PIK3CA': '?',
+            'PDCD1LG2': '?',
+        }
+    else:
+        gene2trans = dict(line.strip().split()[:2] for line in open(gene2trans))
+
+    def get_target_csq_dict(r, csq_format, gene2trans):
+        picked, canonical, target_transcript = None, None, None
+        if 'CSQ' not in r.info:
+            return dict()
+        for each in r.info['CSQ']:
+            csq_dict = dict(zip(csq_format.split('|'), each.split('|')))
+            if csq_dict['SYMBOL'] in gene2trans:
+                if csq_dict['Feature'].startswith(gene2trans[csq_dict['SYMBOL']]):
+                    target_transcript = csq_dict
+                    break
+            # 找到被flag为1的记录作为报告
+            if 'PICK' in csq_dict and csq_dict['PICK'] == "1":
+                picked = csq_dict
+            # 找到canonical转录本
+            if csq_dict['CANONICAL'] == 'YES':
+                if 'SOURCE' in csq_dict:
+                    if csq_dict['SOURCE'] == 'RefSeq':
+                        canonical = csq_dict
+                else:
+                    canonical = csq_dict
+            if picked and canonical and target_transcript:
+                break
+        csq_dict = target_transcript or canonical or picked
+        return csq_dict
+
+    def get_target_csq_dict2(r, csq_format, gene2trans):
+        """
+        CSQ注释可能包含很多个基因，对于SV注释应该把基因都列出来
+        """
+        if 'CSQ' not in r.info:
+            return dict()
+        # 遍历所有的注释
+        genes = []
+        target_genes = []
+        target_trans = []
+        picked, canonical, target_transcript_csq = None, None, None
+        for each in r.info['CSQ']:
+            csq_dict = dict(zip(csq_format.split('|'), each.split('|')))
+            if csq_dict['SYMBOL']:
+                if csq_dict['SYMBOL'] not in genes:
+                    genes.append(csq_dict['SYMBOL'])
+            if csq_dict['SYMBOL'] in gene2trans:
+                target_genes.append(csq_dict['SYMBOL'])
+                target_trans.append(csq_dict['Feature'])
+                if csq_dict['Feature'].startswith(gene2trans[csq_dict['SYMBOL']]):
+                    target_transcript_csq = csq_dict
+            # 找到被flag为1的记录作为报告
+            if 'PICK' in csq_dict and csq_dict['PICK'] == "1":
+                picked = csq_dict
+            # 找到canonical转录本
+            if csq_dict['CANONICAL'] == 'YES':
+                if 'SOURCE' in csq_dict:
+                    if csq_dict['SOURCE'] == 'RefSeq':
+                        canonical = csq_dict
+                else:
+                    canonical = csq_dict
+        csq_dict = target_transcript_csq or canonical or picked
+        # 虽然取目标转录本为代表，还是要把所有基因和转录本放上来
+        csq_dict['SYMBOL'] = '|'.join(target_genes)
+        csq_dict['Feature'] = '|'.join(target_trans)
+        csq_dict['AllGenes'] = '|'.join(genes)
+        return csq_dict
+
+    def manta2dict(sample, r, csq_format, gene2trans) -> dict:
+        csq_dict = get_target_csq_dict2(r, csq_format, gene2trans)
+        target_info = {
+            'Sample': sample,
+            'ID': r.id,
+            'MateID': r.info['MATEID'][0] if 'MATEID' in r.info else None,
+            "Chr": r.contig,
+            "MateChr": None,
+            "Start": r.pos,
+            "MateStart": None,
+            "CIPOS": r.info['CIPOS'] if 'CIPOS' in r.info else None,
+            "MateCIPOS": None,
+            # END是Pysam的保留字段，用r.stop访问获取
+            "End": r.stop,
+            "CIEND": r.info['CIEND'] if 'CIEND' in r.info else None,
+            "Ref": r.ref,
+            "MateRef": None,
+            "Alt": r.alts[0],
+            "MateAlt": None,
+            'SVLEN': r.info['SVLEN'][0] if 'SVLEN' in r.info else None,
+            "Type": r.info['SVTYPE'],
+            "Gene": csq_dict['SYMBOL'] if csq_dict else None,
+            "MateGene": None,
+            "Transcript": csq_dict['Feature'],
+            "MateTranscript": None,
+            "Exon": csq_dict['EXON'] if csq_dict else None,
+            "MateExon": None,
+            "Strand": csq_dict['STRAND'] if csq_dict else None,
+            "MateStrand": None,
+            "VariantClass": csq_dict['VARIANT_CLASS'] if csq_dict else None,
+            '=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")': csq_dict['Consequence'] if csq_dict else None,
+            "CLIN_SIG": csq_dict['CLIN_SIG'] if csq_dict else None,
+            "SpanRead_Ref": r.samples[sample]['PR'][0],
+            "MateSpanRead_Ref": None,
+            "SpanRead_Alt": r.samples[sample]['PR'][1],
+            "MateSpanRead_Alt": None,
+            "SplitRead_Ref": r.samples[sample]['SR'][0] if 'SR' in r.samples[sample] else None,
+            "MateSplitRead_Ref": None,
+            "SplitRead_Alt": r.samples[sample]['SR'][1] if 'SR' in r.samples[sample] else None,
+            "MateSplitRead_Alt": None,
+            "BND_DEPTH": r.info['BND_DEPTH'] if 'BND_DEPTH' in r.info else None,
+            "MATE_BND_DEPTH": r.info['MATE_BND_DEPTH'] if 'MATE_BND_DEPTH' in r.info else None,
+            "ExistingVariation": csq_dict['Existing_variation'] if csq_dict else None,
+            "CANONICAL": csq_dict['CANONICAL'] if csq_dict else None,
+            "HGVS_OFFSET": csq_dict['HGVS_OFFSET'] if 'HGVS_OFFSET' in csq_dict else 0,
+            "LEFT_SVINS": r.info['LEFT_SVINS_SEQ'] if 'LEFT_SVINS_SEQ' in r.info else None,
+            "RIGHT_SVINSSEQ": r.info['RIGHT_SVINSSEQ'] if 'RIGHT_SVINSSEQ' in r.info else None,
+            "IMPRECISE": True if 'IMPRECISE' in r.info else False,
+            "MAX_AF": csq_dict['MAX_AF'] if csq_dict else None,
+            "MAX_AF_POPS": csq_dict['MAX_AF_POPS'] if csq_dict else None,
+            "gnomADe_EAS_AF": csq_dict['gnomADe_EAS_AF'] if csq_dict else None,
+            'AllGenes': csq_dict['AllGenes'] if 'AllGenes' in csq_dict else None
+        }
+
+        if 'Civic_CSQ' in csq_dict and csq_dict['Civic_CSQ']:
+            field_name = "CIViC: Allele|Consequence|SYMBOL|Entrez Gene ID|Feature_type|Feature|HGVSc|HGVSp|CIViC Variant Name|CIViC Variant ID|CIViC Variant Aliases|CIViC Variant URL|CIViC Molecular Profile Name|CIViC Molecular Profile ID|CIViC Molecular Profile Aliases|CIViC Molecular Profile URL|CIViC HGVS|Allele Registry ID|ClinVar IDs|CIViC Molecular Profile Score|CIViC Entity Type|CIViC Entity ID|CIViC Entity URL|CIViC Entity Source|CIViC Entity Variant Origin|CIViC Entity Status|CIViC Entity Significance|CIViC Entity Direction|CIViC Entity Disease|CIViC Entity Therapies|CIViC Entity Therapy Interaction Type|CIViC Evidence Phenotypes|CIViC Evidence Level|CIViC Evidence Rating|CIViC Assertion ACMG Codes|CIViC Assertion AMP Category|CIViC Assertion NCCN Guideline|CIVIC Assertion Regulatory Approval|CIVIC Assertion FDA Companion Test"
+            target_info[field_name] = csq_dict['Civic_CSQ'].replace('&', '|')
+        return target_info
+
+    def etching2dict(sample, r, csq_format, gene2trans) -> dict:
+        csq_dict = get_target_csq_dict2(r, csq_format, gene2trans)
+        # etching的过滤结果中只给出了mate信息中的一条
+        target_info = {
+            'Sample': sample,
+            'ID': r.id,
+            'MateID': r.info['MATEID'][0] if 'MATEID' in r.info else None,
+            "Chr": r.contig,
+            "MateChr": r.info['CHR2'] if 'CHR2' in r.info else None,
+            "Start": r.pos,
+            # "MateStart": None,
+            "End": r.stop,
+            "CIEND": r.info['CIEND'] if 'CIEND' in r.info else None,
+            "Ref": r.ref,
+            # "MateRef":None,
+            "Alt": r.alts[0],
+            # "MateAlt": None,
+            'SVLEN': r.info['SVLEN'] if 'SVLEN' in r.info else None,
+            "Type": r.info['SVTYPE'],
+            "Gene": csq_dict['SYMBOL'] if csq_dict else None,
+            # "MateGene": None,
+            "Transcript": csq_dict['Feature'] if csq_dict else None,
+            # "MateTranscript": None,
+            "Exon": csq_dict['EXON'] if csq_dict else None,
+            # "MateExon": None,
+            "Strand": csq_dict['STRAND'] if csq_dict else None,
+            # "MateStrand": None,
+            "REPATH": r.info['REPATH'] if 'REPATH' in r.info else None,
+            "SVSCORE": r.info['SVSCORE'] if 'SVSCORE' in r.info else None,
+            "VariantClass": csq_dict['VARIANT_CLASS'] if csq_dict else None,
+            '=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")': csq_dict['Consequence'] if csq_dict else None,
+            "CLIN_SIG": csq_dict['CLIN_SIG'] if csq_dict else None,
+            'ClipReads': r.samples['FIRST_MATE']['CR'] if 'CR' in r.samples['FIRST_MATE'] else None,
+            'MateClipReads': r.samples['SECOND_MATE']['CR'] if 'CR' in r.samples['SECOND_MATE'] else None,
+            'SplitReads': r.samples['FIRST_MATE']['SR'] if 'SR' in r.samples['FIRST_MATE'] else None,
+            'MateSplitReads': r.samples['SECOND_MATE']['SR'] if 'SR' in r.samples['SECOND_MATE'] else None,
+            'PairReads': r.samples['FIRST_MATE']['PE'] if 'SR' in r.samples['FIRST_MATE'] else None,
+            'MatePairReads': r.samples['SECOND_MATE']['PE'] if 'PE' in r.samples['SECOND_MATE'] else None,
+            'NXA': r.samples['FIRST_MATE']['NXA'] if 'NXA' in r.samples['FIRST_MATE'] else None,
+            'MateNXA': r.samples['SECOND_MATE']['NXA'] if 'NXA' in r.samples['SECOND_MATE'] else None,
+            'PURITY':  r.samples['FIRST_MATE']['PURITY'] if 'PURITY' in r.samples['FIRST_MATE'] else None,
+            "ExistingVariation": csq_dict['Existing_variation'] if csq_dict else None,
+            "CANONICAL": csq_dict['CANONICAL'] if csq_dict else None,
+            "HGVS_OFFSET": csq_dict['HGVS_OFFSET'] if 'HGVS_OFFSET' in csq_dict else 0,
+            "MAX_AF": csq_dict['MAX_AF'] if csq_dict else None,
+            "MAX_AF_POPS": csq_dict['MAX_AF_POPS'] if csq_dict else None,
+            "gnomADe_EAS_AF": csq_dict['gnomADe_EAS_AF'] if csq_dict else None,
+            'AllGenes': csq_dict['AllGenes'] if 'AllGenes' in csq_dict else None
+        }
+        if 'Civic_CSQ' in csq_dict and csq_dict['Civic_CSQ']:
+            field_name = "CIViC: Allele|Consequence|SYMBOL|Entrez Gene ID|Feature_type|Feature|HGVSc|HGVSp|CIViC Variant Name|CIViC Variant ID|CIViC Variant Aliases|CIViC Variant URL|CIViC Molecular Profile Name|CIViC Molecular Profile ID|CIViC Molecular Profile Aliases|CIViC Molecular Profile URL|CIViC HGVS|Allele Registry ID|ClinVar IDs|CIViC Molecular Profile Score|CIViC Entity Type|CIViC Entity ID|CIViC Entity URL|CIViC Entity Source|CIViC Entity Variant Origin|CIViC Entity Status|CIViC Entity Significance|CIViC Entity Direction|CIViC Entity Disease|CIViC Entity Therapies|CIViC Entity Therapy Interaction Type|CIViC Evidence Phenotypes|CIViC Evidence Level|CIViC Evidence Rating|CIViC Assertion ACMG Codes|CIViC Assertion AMP Category|CIViC Assertion NCCN Guideline|CIVIC Assertion Regulatory Approval|CIVIC Assertion FDA Companion Test"
+            target_info[field_name] = csq_dict['Civic_CSQ'].replace('&', '|')
+        return target_info
+
+    manta_result = []
+    etching_result = []
+    for tid, task in wf.tasks.items():
+        if task.name.startswith('VEP-Manta'):
+            sample = task.name.split('Manta-')[1]
+            sv_file = os.path.join(task.wkdir, task.outputs['out_vcf'].value)
+            if not os.path.exists(sv_file):
+                continue
+            sv_vcf = pysam.VariantFile(sv_file)
+            csq_format = sv_vcf.header.info['CSQ'].description.split('Format: ')[1]
+            record_dict = dict()
+            # ALT中方括号的方向在判断融合基因中有重要的作用。...]...]指易位序列在第一个断点位置的3'端，[...[...指易位序列在第一个断点位置的5‘端
+            for record in sv_vcf:
+                var_dict = manta2dict(sample, record, csq_format, gene2trans)
+                record_dict[var_dict['ID']] = var_dict
+            for vid, rdict in record_dict.items():
+                mate_id = rdict['MateID']
+                if mate_id and (mate_id in record_dict):
+                    rdict['MateChr'] = record_dict[mate_id]['Chr']
+                    rdict['MateStart'] = record_dict[mate_id]['Start']
+                    rdict['MateCIPOS'] = record_dict[mate_id]['CIPOS']
+                    rdict['MateRef'] = record_dict[mate_id]['Ref']
+                    rdict['MateAlt'] = record_dict[mate_id]['Alt']
+                    rdict['MateGene'] = record_dict[mate_id]['Gene']
+                    rdict['MateTranscript'] = record_dict[mate_id]['Transcript']
+                    rdict['MateExon'] = record_dict[mate_id]['Exon']
+                    rdict['MateStrand'] = record_dict[mate_id]['Strand']
+                    rdict['MateSpanRead_Ref'] = record_dict[mate_id]['SpanRead_Ref']
+                    rdict['MateSpanRead_Alt'] = record_dict[mate_id]['SpanRead_Alt']
+                    rdict['MateSplitRead_Ref'] = record_dict[mate_id]['SplitRead_Ref']
+                    rdict['MateSplitRead_Alt'] = record_dict[mate_id]['SplitRead_Alt']
+            manta_result += list(record_dict.values())
+
+        elif task.name.startswith('VEP-Etching'):
+            sample = task.name.split('Etching-')[1]
+            sv_file = os.path.join(task.wkdir, task.outputs['out_vcf'].value)
+            if not os.path.exists(sv_file):
+                continue
+            sv_vcf = pysam.VariantFile(sv_file)
+            csq_format = sv_vcf.header.info['CSQ'].description.split('Format: ')[1]
+            record_dict = dict()
+            for record in sv_vcf:
+                var_dict = etching2dict(sample, record, csq_format, gene2trans)
+                record_dict[var_dict['ID']] = var_dict
+            etching_result += list(record_dict.values())
+
+    # 输出结果
+    for result, name in zip([manta_result, etching_result], ['Manta', 'Etching']):
+        if result:
+            table = pd.DataFrame(result)
+            table = table.sort_values(by=['Sample', 'Chr', 'Start'])
+            table.to_csv(os.path.join(wf.wkdir, 'Outputs', f'SV.{name}.txt'), sep='\t', index=False)
+            table.to_excel(os.path.join(wf.wkdir, 'Outputs', f'SV.{name}.xlsx'), index=False)
+        else:
+            print(f'No SV result of {name}')
 
 
 def pipeline():
@@ -1793,8 +2075,12 @@ def pipeline():
         args['genome'].value = wf.topvars['ref']
         args['prefix'].value = tumor
 
-        etching_vep_task, args = wf.add_task(vep(tumor), tag='Etching-' + tumor, depends=[etching_task])
-        args['input_file'].value = etching_task.outputs['out']
+        sortvcf_task, args = wf.add_task(SortVcf(), tag=tumor)
+        args['in_vcf'].value = etching_task.outputs['out']
+        args['out_vcf'].value = tumor + '.etching.sorted.vcf'
+
+        etching_vep_task, args = wf.add_task(vep(tumor), tag='Etching-' + tumor)
+        args['input_file'].value = sortvcf_task.outputs['out']
         args['fasta'].value = wf.topvars['ref']
         args['refseq'].value = True
         args['dir_cache'].value = top_vars['vep_cache']
@@ -1829,6 +2115,8 @@ def pipeline():
         print('流程失败了，但我们还是要尝试进行结果整理的工作')
     # merge qc report
     merge_qc(fastp_task_dict, bamdst_task_dict, groupumi_task_dict, outdir=os.path.join(wf.wkdir, 'Outputs'))
+    # merge SV result
+    merge_sv(wf)
 
     # merge variant report
     target_genes = ['MET', 'ERBB2', 'EGFR', 'RET', 'BRAF']
