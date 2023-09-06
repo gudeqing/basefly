@@ -926,6 +926,7 @@ def ABRA2():
     cmd.args['ws'] = Argument(prefix='--ws ', default=[400, 200], array=True, delimiter=',', desc='Processing window size and qoverlap')
     cmd.args['_index'] = Argument(prefix='', type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
     cmd.outputs['out'] = Output(value='{out-bam}', report=True)
+    cmd.outputs['out_bai'] = Output(value='{out-bam}.bai', report=True)
     return cmd
 
 
