@@ -1260,10 +1260,10 @@ def merge_sv(wf, gene2trans=None):
                 if csq_dict['SYMBOL'] not in genes:
                     genes.append(csq_dict['SYMBOL'])
             if csq_dict['SYMBOL'] in gene2trans:
-                target_genes.append(csq_dict['SYMBOL'])
-                target_trans.append(csq_dict['Feature'])
                 if csq_dict['Feature'].startswith(gene2trans[csq_dict['SYMBOL']]):
                     target_transcript_csq = csq_dict
+                    target_genes.append(csq_dict['SYMBOL'])
+                    target_trans.append(csq_dict['Feature'])
             # 找到被flag为1的记录作为报告
             if 'PICK' in csq_dict and csq_dict['PICK'] == "1":
                 picked = csq_dict
@@ -1279,6 +1279,17 @@ def merge_sv(wf, gene2trans=None):
         csq_dict['SYMBOL'] = '|'.join(target_genes)
         csq_dict['Feature'] = '|'.join(target_trans)
         csq_dict['AllGenes'] = '|'.join(genes)
+        # hgvs format
+        cHGVS = csq_dict['HGVSc'].replace('%3D', '=')
+        if cHGVS:
+            csq_dict['HGVSc'] = cHGVS.split(':')[1]
+        else:
+            csq_dict['HGVSc'] = None
+        pHGVS = csq_dict['HGVSp'].replace('%3D', '=')
+        if pHGVS:
+            csq_dict['HGVSp'] = pHGVS.split(':')[1]
+        else:
+            csq_dict['HGVSp'] = None
         return csq_dict
 
     def manta2dict(sample, r, csq_format, gene2trans) -> dict:
@@ -1301,6 +1312,12 @@ def merge_sv(wf, gene2trans=None):
             "Alt": r.alts[0],
             "MateAlt": None,
             'SVLEN': r.info['SVLEN'][0] if 'SVLEN' in r.info else None,
+            'SVINSLEN': r.info['SVINSLEN'][0] if 'SVINSLEN' in r.info else None,
+            'SVINSSEQ': r.info['SVINSSEQ'][0] if 'SVINSSEQ' in r.info else None,
+            "LEFT_SVINSSEQ": r.info['LEFT_SVINSSEQ'][0] if 'LEFT_SVINSSEQ' in r.info else None,
+            "RIGHT_SVINSSEQ": r.info['RIGHT_SVINSSEQ'][0] if 'RIGHT_SVINSSEQ' in r.info else None,
+            # CIGAR alignment for each alternate indel allele
+            "CIGAR": r.info['CIGAR'] if 'CIGAR' in r.info else None,
             "Type": r.info['SVTYPE'],
             "Gene": csq_dict['SYMBOL'] if csq_dict else None,
             "MateGene": None,
@@ -1310,6 +1327,8 @@ def merge_sv(wf, gene2trans=None):
             "MateExon": None,
             "Strand": csq_dict['STRAND'] if csq_dict else None,
             "MateStrand": None,
+            "cHGVS": csq_dict['HGVSc'] if csq_dict else None,
+            "pHGVS": csq_dict['HGVSp'] if csq_dict else None,
             "VariantClass": csq_dict['VARIANT_CLASS'] if csq_dict else None,
             '=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")': csq_dict['Consequence'] if csq_dict else None,
             "CLIN_SIG": csq_dict['CLIN_SIG'] if csq_dict else None,
@@ -1326,8 +1345,6 @@ def merge_sv(wf, gene2trans=None):
             "ExistingVariation": csq_dict['Existing_variation'] if csq_dict else None,
             "CANONICAL": csq_dict['CANONICAL'] if csq_dict else None,
             "HGVS_OFFSET": csq_dict['HGVS_OFFSET'] if 'HGVS_OFFSET' in csq_dict else 0,
-            "LEFT_SVINS": r.info['LEFT_SVINS_SEQ'] if 'LEFT_SVINS_SEQ' in r.info else None,
-            "RIGHT_SVINSSEQ": r.info['RIGHT_SVINSSEQ'] if 'RIGHT_SVINSSEQ' in r.info else None,
             "IMPRECISE": True if 'IMPRECISE' in r.info else False,
             "MAX_AF": csq_dict['MAX_AF'] if csq_dict else None,
             "MAX_AF_POPS": csq_dict['MAX_AF_POPS'] if csq_dict else None,
@@ -1366,9 +1383,11 @@ def merge_sv(wf, gene2trans=None):
             "Exon": csq_dict['EXON'] if csq_dict else None,
             # "MateExon": None,
             "Strand": csq_dict['STRAND'] if csq_dict else None,
+            "cHGVS": csq_dict['HGVSc'] if csq_dict else None,
+            "pHGVS": csq_dict['HGVSp'] if csq_dict else None,
             # "MateStrand": None,
             "REPATH": r.info['REPATH'] if 'REPATH' in r.info else None,
-            "SVSCORE": r.info['SVSCORE'] if 'SVSCORE' in r.info else None,
+            "SVSCORE": float(r.info['SVSCORE']) if 'SVSCORE' in r.info else None,
             "VariantClass": csq_dict['VARIANT_CLASS'] if csq_dict else None,
             '=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")': csq_dict['Consequence'] if csq_dict else None,
             "CLIN_SIG": csq_dict['CLIN_SIG'] if csq_dict else None,
