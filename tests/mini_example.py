@@ -6,7 +6,8 @@ from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 
 def stepA():
     cmd = Command()
-    cmd.meta.name = 'A'
+    cmd.meta.name = 'Module-A'
+    cmd.meta.desc = 'This module is ude to collect information'
     cmd.runtime.image = 'docker/whalesay'
     cmd.runtime.tool = 'echo'
     cmd.args['content'] = Argument(value="'hello cow boy'")
@@ -17,7 +18,9 @@ def stepA():
 
 def stepB():
     cmd = Command()
-    cmd.meta.name = 'B'
+    cmd.meta.name = 'Module-B'
+    cmd.meta.desc = 'This tool is used to get ouput2'
+    cmd.meta.source = 'in-house development'
     cmd.runtime.image = 'docker/whalesay'
     cmd.runtime.tool = 'cat'
     cmd.args['infile'] = Argument(prefix='', type='infile')
@@ -28,10 +31,11 @@ def stepB():
 
 def pipeline():
     wf = Workflow()
-    wf.meta.name = 'mini_pipeline'
-    wf.meta.desc = 'This is a simple pipeline'
+    wf.meta.name = 'MiniPipeline'
+    wf.meta.desc = 'This is a mini pipeline example'
+    wf.meta.source = 'in-house development'
     wf.init_argparser()
-    wf.add_argument('-input', help='input information')
+    wf.add_argument('-input', help='input information for the mini workflow')
     wf.parse_args()
 
     wf.topvars = dict(

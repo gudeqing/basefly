@@ -680,6 +680,8 @@ class Workflow:
             self.show_cmd(parameters.show_cmd)
         elif parameters.list_task:
             self.list_task()
+        elif parameters.only_write_docs:
+            self.generate_docs('ReadMe.md')
         else:
             os.makedirs(outdir, exist_ok=True)
             self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
@@ -892,8 +894,8 @@ class Workflow:
         wf_args = parser.add_argument_group('Arguments for controlling running mode')
         wf_args.add_argument('-outdir', metavar='workdir', default=os.path.join(os.getcwd(), 'Result'), help='结果目录')
         wf_args.add_argument('--run', default=False, action='store_true', help="默认不运行流程, 仅生成流程; 如果outdir目录已经存在cmd_state.txt文件，则自动续跑")
-        wf_args.add_argument('--docker', default=False, action='store_true', help="default won't use docker even if docker image is provided.")
-        wf_args.add_argument('--plot', default=False, action='store_true', help="generate directed acyclic graph for whole workflow timely")
+        wf_args.add_argument('--docker', default=False, action='store_true', help="指示是否使用docker镜像创造运行环境")
+        wf_args.add_argument('--plot', default=False, action='store_true', help="该参数用于通知是否对分析流程进行实时绘图，生成的流程图可以显示任务之间的依赖关系,也可以显示每个任务的参数信息，同时还能根据每个节点的颜色判断任务的运行状态以及任务完成需要的时间'")
         wf_args.add_argument('-threads', metavar='max-workers', default=3, type=int, help="允许的最大并行的任务数量, 默认3")
         wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, json格式. 流程每次运行时都会输出wf.args.json, 由于其中包含一些样本信息参数，不可直接使用，但可以根据此模板修改")
         wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
@@ -907,6 +909,7 @@ class Workflow:
         wf_args.add_argument('--monitor_resource', default=False, action='store_true', help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
         wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=900, type=int, help="等待资源的时间上限, 默认每次等待时间为900秒, 等待时间超过这个时间且资源不足时判定任务失败")
         wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true', help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
+        wf_args.add_argument('--only_write_docs', default=False, action='store_true', help='仅仅输出markdown格式的流程说明文档')
         self.argparser = parser
         # for user defined arguments
         # self.add_argument = partial(self.argparser.add_argument, required=True)
@@ -953,6 +956,98 @@ class Workflow:
                 if out.report:
                     self.outputs[task.name+'.'+_name] = out
 
+    def generate_docs(self, out):
+        """
+        文档结构：
+        1.	引言
+        1.1.	目的
+        1.2.	项目背景
+        1.3.	术语定义
+        1.4.	参考资料
+        2.	流程概述
+        2.1.	流程名称
+        2.2.	流程说明
+        2.3.	流程主要功能
+        3.	流程总体结构
+        3.1.	模块功能汇总表
+        3.2.	流程总体逻辑结构图
+        3.3.	流程运行控制：
+                    输入参数
+                    输出文件
+        3.4.	流程运行环境
+        4.	模块
+        4.1.	模块说明
+        4.2.	主要功能
+        4.3.	模块输入参数
+        4.4.	模块输出
+        """
+        tool_names = []
+        tools = []
+        for task_id, task in self.tasks.items():
+            if task.cmd.meta.name not in tool_names:
+                tool_names.append(task.cmd.meta.name)
+                tools.append(task.cmd)
+        contents = []
+        contents += ['## 系统概述']
+        contents += ['### 系统名称']
+        contents += [f'* {self.meta.name}']
+        contents += ['### 系统说明']
+        contents += [f'* 系统版本号：{self.meta.version}']
+        contents += [f'* 适用范围：{self.meta.source}']
+        contents += [f'* 参考来源：{self.meta.source}']
+        contents += ['### 系统主要功能']
+        contents += [f'{self.meta.desc}']
+        contents += ['## 系统总体结构']
+        contents += ['### 模块列表']
+        contents += ["| name | desc | source | vesion |"]
+        contents += ["| :--- | :---: | :---: | :---: |"]
+        for cmd in tools:
+            contents += [f"|{cmd.meta.name}|{cmd.meta.desc}|{cmd.meta.source}|{cmd.meta.version}|"]
+        contents += ['### 系统总体结构图']
+        contents += ["本系统为数据分析流程，流程结构图可能随参数有所变化，一下仅为一个典型示例图"]
+        contents += [f'![分析流程的有向无循环(DAG)图](./state.svg "{self.meta.name}")']
+        contents += ['## 系统运行环境']
+        contents += ['该系统主要内容是分析流程，需要在Linux操作系统下运行，需安装python > 3.7的环境，环境中需要安装graphviz和xcmds等包. '
+                     '一般情况下，该环境完全由docker容器提供，包括流程运行每个环节所需要的软件或工具，具体所需软件工具可参考前面章节的”模块列表“.']
+        contents += ['## 系统运行控制']
+        contents += ['系统跟随容器一起运行，理论上没有时间限制，主要取决于容器运行周期，容器运行周期又取决于流程本身的具体任务执行情况，'
+                     '分析任务完成后, 容器自动停止。针对系统所包含的分析流程而言，有如下参数控制流程的运行，以方便用户能够根据具体情况分析数据']
+        for arg in self.argparser.__dict__['_actions']:
+            contents += [f'* {arg.dest}: {arg.help}']
+
+        for tool in tools:
+            contents += [f'## 模块 {tool.meta.name}']
+            contents += [f'### 模块说明']
+            contents += [f'* 简介: {tool.meta.desc}']
+            contents += [f'* 参考：{tool.meta.source}']
+            contents += [f'### 模块运行环境']
+            contents += [f'* 镜像：{tool.runtime.image}']
+            contents += [f'* CPU: {tool.runtime.cpu}']
+            contents += [f'* Memory: {tool.runtime.memory}']
+            contents += [f'### 模块输入文件参数']
+            for name, arg in tool.args.items():
+                if not name.startswith('_') and (arg.type in ['infile', 'indir']):
+                    contents += [f'#### {name}']
+                    contents += [f'+ 类型: {arg.type}']
+                    contents += [f'+ 默认值: {arg.default}']
+                    contents += [f'+ 描述: {arg.desc}']
+            contents += [f'### 模块普通参数']
+            for name, arg in tool.args.items():
+                if not name.startswith('_') and  (arg.type not in ['infile', 'indir']):
+                    contents += [f'#### {name}']
+                    contents += [f'+ 类型: {arg.type}']
+                    contents += [f'+ 默认值: {arg.default}']
+                    contents += [f'+ 描述: {arg.desc}']
+            contents += [f'### 模块输出']
+            for key, output in tool.outputs.items():
+                contents += [f'#### {key}']
+                contents += [f'+ type: {output.type}']
+                contents += [f'+ value: {output.value}']
+                contents += [f'+ desc: {output.desc}']
+
+        with open(out, 'w') as f:
+            for each in contents:
+                f.write(each + '\n')
 
 class ToWdlTask(object):
     type_conv_dict = {
