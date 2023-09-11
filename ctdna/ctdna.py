@@ -337,15 +337,22 @@ def ClipBam():
     cmd = Command()
     cmd.meta.name = 'ClipBam'
     cmd.meta.source = 'https://fulcrumgenomics.github.io/fgbio/tools/latest/ClipBam.html'
-    cmd.meta.desc = 'Clips reads from the same template. Ensures that at least N bases are clipped from any end of the read (i.e. R1 5’ end, R1 3’ end, R2 5’ end, and R2 3’ end). Optionally clips reads from the same template to eliminate overlap between the reads.'
+    cmd.meta.desc = 'Clips reads from the same template. Ensures that at least N bases are clipped from any end of the read (i.e. R1 5’ end, R1 3’ end, R2 5’ end, and R2 3’ end). ' \
+                    'Optionally clips reads from the same template to eliminate overlap between the reads. ' \
+                    'This ensures that downstream processes, particularly variant calling, cannot double-count evidence from the same template when both reads span a variant site in the same template.' \
+                    'Clipping overlapping reads is only performed on FR read pairs, and is implemented by clipping approximately half the overlapping bases from each read. By default hard clipping is performed; ' \
+                    'Secondary alignments and supplemental alignments are not clipped, but are passed through into the output. ' \
+                    'In order to correctly clip reads by template and update mate information, the input BAM must be either queryname sorted or query grouped'
     cmd.runtime.image = 'dceoy/fgbio:latest'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio ClipBam'
+    cmd.runtime.tool = 'fgbio --compression 1 ClipBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
+    cmd.args['metrics'] = Argument(prefix='-m ', default='clipbam.metrics.txt', desc='output of clipping metrics.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
     cmd.args['clipping-mode'] = Argument(prefix='-c ', default='Hard', range=['Hard', 'Soft', 'SoftWithMask'], desc='The type of clipping to perform.')
+    cmd.args['clip-overlapping-reads'] = Argument(prefix='--clip-overlapping-reads ', default='true', desc='Clip overlapping reads.')
     cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
@@ -1869,13 +1876,19 @@ def pipeline():
         args['input'].value = map_task.outputs['out']
         args['unmapped'].value = filter_consensus_task.outputs['out']
         args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
-        args['output'].value = sample + '.remapped.bam'
+        args['output'].value = sample + '.zippered.bam'
+
+        clipbam_task, args = wf.add_task(ClipBam(), tag=sample)
+        args['input'].value = zipper_task.outputs['out']
+        args['metrics'].value = sample + '.clipped.metrics.txt'
+        args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        args['output'].value = sample + '.clipped.bam'
 
         if 'FilterBam' in wf.args.skip:
             filter_bam_task = None
         else:
-            filter_bam_task, args = wf.add_task(FilterBam(), tag=sample, depends=[zipper_task])
-            args['input'].value = zipper_task.outputs['out']
+            filter_bam_task, args = wf.add_task(FilterBam(), tag=sample, depends=[clipbam_task])
+            args['input'].value = clipbam_task.outputs['out']
             args['output'].value = sample + '.filtered.bam'
 
         if 'FastqToSam' not in wf.args.skip:
@@ -1883,8 +1896,8 @@ def pipeline():
                 sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
                 args['input'].value = filter_bam_task.outputs['out']
             else:
-                sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[zipper_task])
-                args['input'].value = zipper_task.outputs['out']
+                sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[clipbam_task])
+                args['input'].value = clipbam_task.outputs['out']
             args['output'].value = sample + '.sorted.bam'
             args['flagstat_name'].value = sample + '.flagstat.txt'
             bam_task_dict[sample] = sort_bam_task
