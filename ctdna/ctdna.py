@@ -127,7 +127,7 @@ def ExtractUmisFromBam():
     cmd.runtime.image = 'dceoy/fgbio:latest'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio ExtractUmisFromBam'
+    cmd.runtime.tool = 'fgbio --compression 1 ExtractUmisFromBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='Input BAM file')
     cmd.args['read-structure'] = Argument(prefix='-r ', array=True, default=['3M2S+T', '3M2S+T'], desc='The read structure, one per read in a template.')
     cmd.args['molecular-index-tags'] = Argument(prefix='-t ', array=True, default=['ZA', 'ZB'], desc='SAM tag(s) in which to store the molecular indices.')
@@ -255,7 +255,7 @@ def GroupReadsByUmi(sample):
     cmd.runtime.image = 'dceoy/fgbio:latest'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio GroupReadsByUmi'
+    cmd.runtime.tool = 'fgbio --compression 1 GroupReadsByUmi'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', default=f'{sample}.umi_grouped.bam', desc='The output BAM file.')
     cmd.args['strategy'] = Argument(prefix='-s ', default="adjacency", desc='The UMI assignment strategy. edit: reads are clustered into groups such that each read within a group has at least one other read in the group with <= edits differences and there are inter-group pairings with <= edits differences. Effective when there are small numbers of reads per UMI, but breaks down at very high coverage of UMIs. 3.adjacency: a version of the directed adjacency method described in umi_tools that allows for errors between UMIs but only when there is a count gradient.')
@@ -277,7 +277,7 @@ def CallDuplexConsensusReads():
     cmd.runtime.image = 'dceoy/fgbio:latest'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'fgbio CallDuplexConsensusReads'
+    cmd.runtime.tool = 'fgbio --compression 1 CallDuplexConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
@@ -298,7 +298,7 @@ def CallMolecularConsensusReads():
     cmd.runtime.image = 'dceoy/fgbio:latest'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'fgbio CallMolecularConsensusReads'
+    cmd.runtime.tool = 'fgbio --compression 1 CallMolecularConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
@@ -318,7 +318,7 @@ def FilterConsensusReads():
     cmd.runtime.image = 'dceoy/fgbio:latest'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio FilterConsensusReads'
+    cmd.runtime.tool = 'fgbio --compression 1 FilterConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
@@ -344,7 +344,7 @@ def ClipBam():
     cmd.runtime.tool = 'fgbio ClipBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
-    cmd.args['ref'] = Argument(prefix='-r ', desc='Reference fasta file.')
+    cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
     cmd.args['clipping-mode'] = Argument(prefix='-c ', default='Hard', range=['Hard', 'Soft', 'SoftWithMask'], desc='The type of clipping to perform.')
     cmd.outputs['out'] = Output(value='{output}')
     return cmd
@@ -390,6 +390,29 @@ def SortAndIndexBam():
     cmd.args['_index_bam'] = Argument(type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
     cmd.args['_flagstat'] = Argument(type='fix', value=f'&& samtools flagstat -@ {cmd.runtime.cpu} *.bam')
     cmd.args['flagstat_name'] = Argument(prefix ='> ', default='bam.flagstat.txt', desc='flagstat output file name')
+    cmd.outputs['out'] = Output(value='{output}')
+    return cmd
+
+
+def ZipperBams():
+    cmd = Command()
+    cmd.meta.name = 'ZipperBams'
+    cmd.meta.source = 'https://fulcrumgenomics.github.io/fgbio/tools/latest/ZipperBams.html'
+    cmd.meta.desc = """Zips together an unmapped and mapped BAM to transfer metadata into the output BAM.
+     Both the unmapped and mapped BAMs must be a) queryname sorted or grouped (i.e. all records with the same name are grouped together in the file), and b) have the same ordering of querynames.
+      If either of these are violated the output is undefined! All tags present on the unmapped reads are transferred to the mapped reads. 
+      The options --tags-to-reverse and --tags-to-revcomp will cause tags on the unmapped reads to be reversed or reverse complemented before being copied to reads mapped to the negative strand. 
+    """
+    cmd.runtime.image = 'dceoy/fgbio:latest'
+    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'fgbio --compression 1 ZipperBams'
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.')
+    cmd.args['unmapped'] = Argument(prefix='-u ', type='infile', desc='The input unmapped BAM file.')
+    cmd.args['output'] = Argument(prefix='-o ', desc='The output BAM file.')
+    cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
+    cmd.args['tags-to-reverse'] = Argument(prefix='--tags-to-reverse ', default='Consensus', desc='Set of optional tags to reverse on reads mapped to the negative strand.')
+    cmd.args['tags-to-revcomp'] = Argument(prefix='--tags-to-revcomp ', default='Consensus', desc='Set of optional tags to reverse complement on reads mapped to the negative strand')
     cmd.outputs['out'] = Output(value='{output}')
     return cmd
 
@@ -1821,11 +1844,11 @@ def pipeline():
         args['bam'].value = filter_consensus_task.outputs['out']
         args['read1'].value = sample + '.consensus.R1.fq.gz'
         args['read2'].value = sample + '.consensus.R2.fq.gz'
-        # 带信息到read header
-        if wf.args.call_duplex:
-            args['tags'].value = ['cD', 'cE', 'cM', 'aD', 'aE', 'aM', 'bD', 'bE', 'bM',]
-        else:
-            args['tags'].value = ['cD', 'cE', 'cM']
+        # 带信息到read header, 后用zipperbam替代该功能
+        # if wf.args.call_duplex:
+        #     args['tags'].value = ['cD', 'cE', 'cM', 'aD', 'aE', 'aM', 'bD', 'bE', 'bM',]
+        # else:
+        #     args['tags'].value = ['cD', 'cE', 'cM']
 
         # 由于fgbio输出的碱基质量值可能是叠加值，超出正常范围，与manta不兼容，因此使用bbmap进行碱基质量值更改
         reformat_task, args = wf.add_task(ReformatBaseQual(), tag=sample, depends=[sam2fastq_task])
@@ -1839,14 +1862,20 @@ def pipeline():
         args['read1'].value = reformat_task.outputs['read1']
         args['read2'].value = reformat_task.outputs['read2']
         args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
-        # header 信息带到bam
-        args['include_read_header'].value = True
+        # header 信息带到bam，后用zipperbam替代该功能
+        # args['include_read_header'].value = True
+
+        zipper_task, args = wf.add_task(ZipperBams(), tag=sample)
+        args['input'].value = map_task.outputs['out']
+        args['unmapped'].value = filter_consensus_task.outputs['out']
+        args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        args['output'].value = sample + '.remapped.bam'
 
         if 'FilterBam' in wf.args.skip:
             filter_bam_task = None
         else:
-            filter_bam_task, args = wf.add_task(FilterBam(), tag=sample, depends=[map_task])
-            args['input'].value = map_task.outputs['out']
+            filter_bam_task, args = wf.add_task(FilterBam(), tag=sample, depends=[zipper_task])
+            args['input'].value = zipper_task.outputs['out']
             args['output'].value = sample + '.filtered.bam'
 
         if 'FastqToSam' not in wf.args.skip:
@@ -1854,8 +1883,8 @@ def pipeline():
                 sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[filter_bam_task])
                 args['input'].value = filter_bam_task.outputs['out']
             else:
-                sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[map_task])
-                args['input'].value = map_task.outputs['out']
+                sort_bam_task, args = wf.add_task(SortAndIndexBam(), tag=sample, depends=[zipper_task])
+                args['input'].value = zipper_task.outputs['out']
             args['output'].value = sample + '.sorted.bam'
             args['flagstat_name'].value = sample + '.flagstat.txt'
             bam_task_dict[sample] = sort_bam_task
