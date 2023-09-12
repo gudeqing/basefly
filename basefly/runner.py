@@ -460,7 +460,7 @@ class RunCommands(CommandNetwork):
             order = 1
             for each in files:
                 if re.fullmatch(r'wf.\d.running.*.log', each):
-                    if os.path.getsize(each) > 1:
+                    if os.path.getsize(os.path.join(self.outdir, each)) > 1:
                         order += 1
             self.logger = set_logger(name=os.path.join(self.outdir, f'wf.{order}.running.{time.time()}.log'))
         else:

@@ -1031,10 +1031,10 @@ class Workflow:
         contents += ['该系统主要内容是分析流程，需要在Linux操作系统下运行，需安装python > 3.7的环境，环境中需要安装graphviz和xcmds等包. '
                      '一般情况下，该环境完全由docker容器提供，包括流程运行每个环节所需要的软件或工具，具体所需软件工具可参考前面章节的”模块列表“.']
         contents += ['## 系统运行控制']
-        contents += ['系统跟随容器一起运行，理论上没有时间限制，主要取决于容器运行周期，容器运行周期又取决于流程本身的具体任务执行情况，'
+        contents += ['* 系统跟随容器一起运行，理论上没有时间限制，主要取决于容器运行周期，容器运行周期又取决于流程本身的具体任务执行情况，'
                      '分析任务完成后, 容器自动停止。针对系统所包含的分析流程而言，有如下参数控制流程的运行，以方便用户能够根据具体情况分析数据']
         for arg in self.argparser.__dict__['_actions']:
-            contents += [f'* {arg.dest}: {arg.help}']
+            contents += [f'+ **{arg.dest}**: {arg.help}']
 
         for tool in tools:
             contents += [f'## 模块 {tool.meta.name}']
@@ -1062,13 +1062,16 @@ class Workflow:
             contents += [f'### 模块输出']
             for key, output in tool.outputs.items():
                 contents += [f'#### {key}']
-                contents += [f'+ type: {output.type}']
-                contents += [f'+ value: {output.value}']
-                contents += [f'+ desc: {output.desc}']
+                contents += [f'+ *type*: {output.type}']
+                contents += [f'+ *value example*: {output.value}']
+                contents += [f'+ *description*: {output.desc}']
 
         with open(out, 'w') as f:
             for each in contents:
+                if each.startswith('#'):
+                    f.write('\n')
                 f.write(each + '\n')
+
 
 class ToWdlTask(object):
     type_conv_dict = {
