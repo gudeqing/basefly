@@ -700,7 +700,6 @@ def pipeline():
     * 使用GATK检测small SNP/Indel, 同时支持tumor-only和tumor-normal配对模式
     * 使用GATK检测germline突变，如果输入多个normal样本，则直接进行joint-calling
     * 基于VEP进行突变注释
-    * 使用hisatGenotype进行HLA基因定型分析
     """
     wf.meta.version = "1.0"
     # 定义流程输入参数
@@ -726,7 +725,6 @@ def pipeline():
     wf.add_argument('-vep_cache_dir', required=False, help='VEP cache directory')
     wf.add_argument('-vep_plugin_dir', required=False, help='VEP plugin directory')
     wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval file.")
-    # wf.add_argument('-hisatgenotype_db', required=False, help='indicies directory of hisat-genotype for HLA typing. ')
     wf.parse_args()
 
     top_vars = dict(
