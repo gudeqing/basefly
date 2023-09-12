@@ -539,7 +539,7 @@ def VardictPaired():
     cmd.args['count_overlap_by_first_read'] = Argument(prefix='-UN', type='bool', default=False, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using first read only')
     cmd.args['count_overlap_by_forward_read'] = Argument(prefix='-u', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using foward read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
-    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -E -p 5 -q 22.5 -d 5 -v 2 -f 0.00001 ', desc='pipe to another script')
+    cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 5 -q 22.5 -d 5 -v 2 -f 0.00001 ', desc='pipe to another script')
     cmd.args['names'] = Argument(prefix='-N "{}"', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', desc='output vcf name')
     cmd.outputs['out'] = Output(value='{output}')
