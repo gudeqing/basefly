@@ -1,5 +1,7 @@
 # coding=utf-8
 __author__ = 'gudeqing'
+
+import re
 import time
 import os
 import shutil
@@ -454,11 +456,18 @@ class RunCommands(CommandNetwork):
         self.timeout = timeout
         if not logger:
             os.makedirs(self.outdir, exist_ok=True)
-            self.logger = set_logger(name=os.path.join(self.outdir, f'wf.{time.time()}.log'))
+            files = os.listdir(self.outdir)
+            order = 1
+            for each in files:
+                if re.fullmatch(r'wf.\d.running.*.log', each):
+                    if os.path.getsize(each) > 1:
+                        order += 1
+            self.logger = set_logger(name=os.path.join(self.outdir, f'wf.{order}.running.{time.time()}.log'))
         else:
             self.logger = logger
         # draw state graph
         self.draw_state_graph = draw_state_graph if pgv else False
+        self._draw_state()
 
     def __init_queue(self):
         cmd_pool = queue.Queue()

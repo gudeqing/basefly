@@ -15,6 +15,7 @@ except:
 # shadow default dict
 # from munch import Munch as dict
 from .runner import run_wf
+from .runner import RunCommands
 
 __author__ = 'gdq'
 
@@ -680,9 +681,27 @@ class Workflow:
             self.show_cmd(parameters.show_cmd)
         elif parameters.list_task:
             self.list_task()
-        elif parameters.only_write_docs:
-            self.generate_docs('ReadMe.md')
-        else:
+        elif parameters.dry_run:
+            os.makedirs(outdir, exist_ok=True)
+            self.generate_docs(os.path.join(outdir, 'ReadMe.md'))
+            self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
+            with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
+                args = []
+                for each in sys.argv:
+                    if {'(', '{', ';'} & set(each):
+                        args.append('"' + each + '"')
+                    else:
+                        args.append(each)
+                f.write('python ' + ' '.join(args) + '\n')
+                # print(sys.argv)
+                f.write('>>>Argument Detail\n')
+                f.write('{}\n'.format(dict(parameters.__dict__.items())))
+            outfile = os.path.join(outdir, f'{self.meta.name}.ini')
+            with open(outfile, 'w') as configfile:
+                wf.write(configfile)
+            # 仅仅为了生成流程图
+            RunCommands(outfile, draw_state_graph=True)
+        elif parameters.run:
             os.makedirs(outdir, exist_ok=True)
             self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
             with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
@@ -699,21 +718,21 @@ class Workflow:
             outfile = os.path.join(outdir, f'{self.meta.name}.ini')
             with open(outfile, 'w') as configfile:
                 wf.write(configfile)
-            if parameters.run:
-                wf = run_wf(
-                    outfile,
-                    timeout=parameters.wait_resource_time,
-                    assume_success_steps=tuple(assume_success_tasks),
-                    plot=parameters.plot,
-                    rerun_steps=rerun_steps
-                )
-                self.success = wf.failed == 0
+
+            wf = run_wf(
+                outfile,
+                timeout=parameters.wait_resource_time,
+                assume_success_steps=tuple(assume_success_tasks),
+                plot=parameters.plot,
+                rerun_steps=rerun_steps
+            )
+            self.success = wf.failed == 0
 
             # 通过软连接汇总输出目录
             outputs_dir = os.path.join(outdir, 'Outputs')
             os.makedirs(outputs_dir, exist_ok=True)
             shutil.copyfile(outfile, os.path.join(outputs_dir, f'{self.meta.name}.ini'))
-            # shutil.copyfile(os.path.join(outdir, 'wf.args.json'), os.path.join(outputs_dir, 'wf.args.json'))
+            shutil.copyfile(os.path.join(outdir, 'wf.args.json'), os.path.join(outputs_dir, 'wf.args.json'))
             shutil.copyfile(os.path.join(outdir, 'wf.run.cmd.txt'), os.path.join(outputs_dir, 'wf.run.cmd.txt'))
             shutil.copyfile(os.path.join(outdir, 'state.svg'), os.path.join(outputs_dir, 'state.svg'))
             for name, out in self.outputs.items():
@@ -762,6 +781,8 @@ class Workflow:
                             os.symlink(src_dir.rstrip('/'), dst_path)
                 else:
                     print('Failed to found expected output: ', src_dir)
+        else:
+            print('No actions, you may provide one action parameter: --run, --dry_run, --list_cmd, --list_task, -show_cmd')
 
     def dump_args(self, out='arguments.json'):
         """
@@ -909,7 +930,7 @@ class Workflow:
         wf_args.add_argument('--monitor_resource', default=False, action='store_true', help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
         wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=900, type=int, help="等待资源的时间上限, 默认每次等待时间为900秒, 等待时间超过这个时间且资源不足时判定任务失败")
         wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true', help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
-        wf_args.add_argument('--only_write_docs', default=False, action='store_true', help='仅仅输出markdown格式的流程说明文档')
+        wf_args.add_argument('--dry_run', default=False, action='store_true', help='不运行流程，仅仅输出markdown格式的流程说明文档和流程配置文件')
         self.argparser = parser
         # for user defined arguments
         # self.add_argument = partial(self.argparser.add_argument, required=True)
