@@ -988,10 +988,11 @@ def CNVkitFlatRef():
 
 def CNVkit():
     cmd = Command()
-    cmd.meta.name = 'CNVkit'
+    cmd.meta.name = 'CNVkitBatch'
     cmd.meta.source = 'https://github.com/etal/cnvkit'
     cmd.meta.version = '0.9.10'
-    cmd.meta.desc = 'detecting copy number variants and alterations genome-wide from high-throughput sequencing'
+    cmd.meta.desc = 'detecting copy number variants and alterations genome-wide from high-throughput sequencing. ' \
+                    'Ouputs: *coverage.cnn -> Reference.cnn -> *.cnr -> *.cns -> *call.cns'
     cmd.runtime.image = 'etal/cnvkit:latest'
     cmd.runtime.tool = 'cnvkit.py batch'
     cmd.runtime.cpu = 4
@@ -999,7 +1000,13 @@ def CNVkit():
     cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
     cmd.args['tumor_bams'] = Argument(prefix='', type='infile', array=True, desc='Mapped sequence reads (.bam)')
     cmd.args['seq_method'] = Argument(prefix='-m ', default='hybrid', range=['hybrid', 'amplicon', 'wgs'], desc='Sequencing assay type')
-    cmd.args['segment_method'] = Argument(prefix='--segment-method ', default='cbs', range=['cbs', 'flasso', 'haar', 'none', 'hmm', 'hmm-tumor','hmm-germline'], desc='method used in segment step')
+    cmd.args['segment_method'] = Argument(prefix='--segment-method ', default='cbs', range=['cbs', 'flasso', 'haar', 'none', 'hmm', 'hmm-tumor','hmm-germline'],
+                                          desc='method used in segment step. '
+                                               'Circular binary segmentation (CBS) and '\
+                                               'This method performed best in our benchmarking on mid-size target panels and exomes.'
+                                               'haar, a pure-Python implementation of HaarSeg, a wavelet-based method. Very fast and performs reasonably well on small panels.'
+                                               'flasso – Fused Lasso, reported by some users to perform best on exomes, whole genomes, and some target panels.'
+                                               'hmm (experimental) – a 3-state Hidden Markov Model suitable for most samples. Faster than CBS, and slower but more accurate than Haar')
     cmd.args['drop_low_cov'] = Argument(prefix='--drop-low-coverage', type='bool', default=True, desc='Drop very-low-coverage bins before segmentation to avoid false-positive deletions in poor-quality tumor')
     cmd.args['processes'] = Argument(prefix='-p ', default=cmd.runtime.cpu, desc='Number of subprocesses used to running each of the BAM files in parallel')
     cmd.args['rscript_path'] = Argument(prefix='--rscript-path ', default='Rscript', desc='Use this option to specify a non-default R')
@@ -1013,10 +1020,13 @@ def CNVkit():
     cmd.args['output_reference'] = Argument(prefix='--output-reference ', level='optional', desc='Output filename/path for the new reference file being created')
     cmd.args['cluster'] = Argument(prefix='--cluster', type='bool', default=False, desc='Calculate and use cluster-specific summary stats in the reference pool to normalize samples')
     cmd.args['reference'] = Argument(prefix='-r ', type='infile', level='optional', desc='Copy number reference file (.cnn)')
-    cmd.args['outdir'] = Argument(prefix='-d ', default='.', desc='output directory')
+    cmd.args['_outdir'] = Argument(prefix='-d ', default='.', desc='output directory')
     cmd.args['scatter'] = Argument(prefix='--scatter', type='bool', default=True, desc='Create a whole-genome copy ratio profile as a PDF scatter plot.')
     cmd.args['diagram'] = Argument(prefix='--diagram', type='bool', default=True, desc='Create an ideogram of copy ratios on chromosomes as a PDF')
-    cmd.outputs['out'] = Output(value='*.cnr')
+    cmd.args['_genemetrics'] = Argument(prefix='', type='fix', value="&& cnvkit.py genemetrics *.cnr > genemetrics.result.txt")
+    cmd.outputs['out_cnr'] = Output(value='*.cnr', report=True)
+    cmd.outputs['out_cns'] = Output(value='*.cns', report=True)
+    cmd.outputs['out_genemetrics'] = Output(value='genemetrics.result.txt', report =True)
     return cmd
 
 
@@ -1642,6 +1652,15 @@ def pipeline():
     fastq_info = get_fastq_info(fastq_info=wf.args.fastq_info, r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
+
+    # cnvkit segment method
+    bed_table = pd.read_table(top_vars['bed'].value, header=None)
+    bed_size = (bed_table[2] - bed_table[1]).sum()/10**6
+    if bed_size <= 2:
+        segment_method = 'haar'
+    else:
+        segment_method = 'cbs'
+    print(f'** For CNVKit, segment method "{segment_method} is selected for the {bed_size:.2f}M panel')
 
     # 处理配对信息
     if wf.topvars['pair_info'].value:
