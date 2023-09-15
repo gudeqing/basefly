@@ -1,11 +1,11 @@
 import pandas as pd
 
 
-def generate_igv_snapshot_script(table_file, bam_file_pattern=None, img_dir=None, add_chr='chr', min_af=0.0005):
+def generate_igv_snapshot_script(table_file, out_prefix, bam_file_pattern=None, img_dir=None, add_chr='chr', min_af=0.0005):
     if bam_file_pattern is None:
-        bam_file_pattern = 'D:\\haixi\\2023-EQA-LungCaner\Blood\\ABRA2-{sample}\\{sample}.realigned.bam'
+        bam_file_pattern = f'D:\\haixi\\2023-EQA-LungCaner\\{out_prefix}\\' + 'ABRA2-{sample}\\{sample}.realigned.bam'
     if img_dir is None:
-        img_dir = 'D:\\haixi\\2023-EQA-LungCaner\\Blood\\IGV'
+        img_dir = f'D:\\haixi\\2023-EQA-LungCaner\\{out_prefix}\\IGV'
     table = pd.read_excel(table_file)
     contents = []
     sample_loaded = set()
@@ -42,9 +42,62 @@ def generate_igv_snapshot_script(table_file, bam_file_pattern=None, img_dir=None
         contents.append(f'snapshot {sample}.{row["Type"]}.{add_chr}{row["Chr"]}-{row["Start"]}-{row["Gene"]}-{row["pHGVS"]}.png')
         contents.append('\n')
 
-    with open('igv.snapshot.scripts.txt', 'w') as f:
+    with open(f'{out_prefix}.igv.snapshot.scripts.txt', 'w') as f:
         for each in contents:
             f.write(each+'\n')
+
+    target_info = []
+    for idx, row in table.iterrows():
+        if row['Report'] != 'yes':
+            continue
+
+        region = None
+        if row['pHGVS'] == row['pHGVS']:
+            region = 'exonic'
+        elif "UTR_variant" in row['Consequence']:
+            region = 'UTR'
+        elif "splice_" in row['Consequence']:
+            region = 'splicing'
+        else:
+            region = 'intron'
+
+        mut_type = None
+        if row["Type"] == 'SNV':
+            mut_type = 'Substitution'
+        elif row['Type'] == 'Complex':
+            if len(row["Ref"]) == len(row["Alt"]):
+                mut_type = 'Substitution'
+            else:
+                mut_type = 'Indel'
+        elif row['cHGVS'] and row['cHGVS'].endswith('dup'):
+            mut_type = "Duplication"
+        else:
+            mut_type = row['Type'].capitalize()
+
+        target_info.append({
+            "备注": row["备注"],
+            "Tissue": row["Tissue"] if 'blood' in out_prefix.lower() else row['Blood'],
+            "Report": row["Report"],
+            "Sample": row["Sample"],
+            "Gene": row['Gene'] + '('+row['Transcript'] + ')',
+            "Chr": row["Chr"],
+            "Start": row["Start"],
+            "Ref": row["Ref"],
+            "Alt": row["Alt"],
+            "cHGVS": row["cHGVS"],
+            "pHGVS": row["pHGVS"],
+            "Region": region,
+            "Exon": row["Exon"],
+            "Depth": row["Depth"],
+            "VAF(%)": row["VAF(%)"],
+            "Type": mut_type,
+            "ClinVar": row["CLIN_SIG"],
+            "Consequence": row["Consequence"],
+            "AltDepth": row["AltDepth"],
+        })
+
+        df = pd.DataFrame(target_info)
+        df.to_excel(f'{out_prefix}.结果回报表.xlsx', index=False)
 
 
 if __name__ == '__main__':
