@@ -1025,6 +1025,7 @@ def CNVkit():
     cmd.args['diagram'] = Argument(prefix='--diagram', type='bool', default=True, desc='Create an ideogram of copy ratios on chromosomes as a PDF')
     cmd.args['_genemetrics'] = Argument(prefix='', type='fix', value="&& cnvkit.py genemetrics *.cnr > genemetrics.result.txt")
     cmd.outputs['out_cnr'] = Output(value='*.cnr', report=True)
+    cmd.outputs['out_cns'] = Output(value='*.bintest.cns', report=True)
     cmd.outputs['out_cns'] = Output(value='*.cns', report=True)
     cmd.outputs['out_genemetrics'] = Output(value='genemetrics.result.txt', report =True)
     return cmd
