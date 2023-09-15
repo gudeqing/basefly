@@ -707,6 +707,8 @@ class RunCommands(CommandNetwork):
                     if task_info['cmd'] != self.state[task_name]['cmd']:
                         # 命令行的更改可能只是字符串层面的更改，而没有实质的任务性质更改
                         print(f'we noticed that command of {task_name} changed, but we will not rerun it !')
+                        print('Old cmd:', task_info['cmd'])
+                        print('New cmd:', self.state[task_name]['cmd'])
                     # 对于被已经判定成功的task，使用旧的信息进行更新
                     task_info.pop("name")
                     self.state[task_name].update(task_info)
