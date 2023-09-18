@@ -1832,6 +1832,7 @@ class VcfFilter(ValidateMutationByBam):
             "VAF(%)": f'{self.get_af_value(r, self.tumor)*100:.2f}',  # Allele Frequency
             # additional information
             "Exon": csq_dict['EXON'],  # Affected Exon(s)
+            "Intron": csq_dict['INTRON'],  # Affected Intron(s)
             "Strand": csq_dict['STRAND'],
             "VariantClass": csq_dict['VARIANT_CLASS'],
             "AltDepth": self.get_alt_depth(r),
