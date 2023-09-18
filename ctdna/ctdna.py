@@ -1170,15 +1170,15 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
             # 计算均一性
             data = pd.read_table(depth_file, header=0, low_memory=False)
             mean_coverage = data['Cover depth'].mean()
-            target_info['[Target] Coverage (>=0.2*MeanDepth)'] = sum(data['Cover depth'] >= mean_coverage*0.2)/data.shape[0]
-            target_info['[Target] Coverage (>=0.5*MeanDepth)'] = sum(data['Cover depth'] >= mean_coverage*0.5)/data.shape[0]
-            target_info['[Target] Coverage (>=200x)'] = sum(data['Cover depth'] >= 200)/data.shape[0]
-            target_info['[Target] Coverage (>=300x)'] = sum(data['Cover depth'] >= 300)/data.shape[0]
-            target_info['[Target] Coverage (>=500x)'] = sum(data['Cover depth'] >= 500)/data.shape[0]
-            target_info['[Target] Coverage (>=1000x)'] = sum(data['Cover depth'] >= 1000)/data.shape[0]
-            target_info['[Target] Coverage (>=2000x)'] = sum(data['Cover depth'] >= 2000)/data.shape[0]
-            target_info['[Target] Coverage (>=5000x)'] = sum(data['Cover depth'] >= 5000)/data.shape[0]
-            target_info['[Target] Coverage (>=10000x)'] = sum(data['Cover depth'] >= 10000)/data.shape[0]
+            target_info['[Target] Coverage (>=0.2*MeanDepth)'] = sum(data['Rmdup depth'] >= mean_coverage*0.2)/data.shape[0]
+            target_info['[Target] Coverage (>=0.5*MeanDepth)'] = sum(data['Rmdup depth'] >= mean_coverage*0.5)/data.shape[0]
+            target_info['[Target] Coverage (>=200x)'] = sum(data['Rmdup depth'] >= 200)/data.shape[0]
+            target_info['[Target] Coverage (>=300x)'] = sum(data['Rmdup depth'] >= 300)/data.shape[0]
+            target_info['[Target] Coverage (>=500x)'] = sum(data['Rmdup depth'] >= 500)/data.shape[0]
+            target_info['[Target] Coverage (>=1000x)'] = sum(data['Rmdup depth'] >= 1000)/data.shape[0]
+            target_info['[Target] Coverage (>=2000x)'] = sum(data['Rmdup depth'] >= 2000)/data.shape[0]
+            target_info['[Target] Coverage (>=5000x)'] = sum(data['Rmdup depth'] >= 5000)/data.shape[0]
+            target_info['[Target] Coverage (>=10000x)'] = sum(data['Rmdup depth'] >= 10000)/data.shape[0]
 
         if sample in result:
             result[sample].update(target_info)
