@@ -204,7 +204,7 @@ class Command:
                 try:
                     arg_value = arg_value.value.replace('~', '').format(**value_dict)
                 except KeyError as e:
-                    print(e, f'=> failed to format value of {arg_name}')
+                    print(e, f'=> failed to format value of {arg_name} with value {arg_value.value}')
             elif type(arg_value) == TopVar or type(arg_value) == TmpVar:
                 arg_value = arg_value.value
             elif type(arg_value) == list:
@@ -217,8 +217,7 @@ class Command:
                                 value_dict[k] = v.value or v.default
                             else:
                                 value_dict[k] = v.value.value
-                        # 当前设计中可以用’~{target}‘引用其他参数的形成outputs的值,这里需要替换回来
-                        # '~{}'也是wdl的语法, 其实起初这个功能是为wdl设置的
+                        # 当前设计中可以用’~{other_arg_name}‘或者‘{other_arg_name}’引用其他参数形成outputs的值
                         arg_value[ind] = each.value.replace('~', '').format(**value_dict)
                     elif type(each) == TopVar or type(each) == TmpVar:
                         arg_value[ind] = each.value
@@ -232,7 +231,7 @@ class Command:
                     arg_value = arg.delimiter.join([str(x) for x in arg_value if x is not None])
                 else:
                     # 这里可以处理多值且可重复使用的参数，形如："--i 1 3 -i 2 5", 因此做如下处理
-                    if all([type(v)==list or type(v)==tuple for v in arg_value]):
+                    if all([type(v) == list or type(v) == tuple for v in arg_value]):
                         arg_value = [arg.delimiter.join([str(x) for x in v if x is not None]) for v in arg_value]
                     else:
                         raise Exception('如果一个参数可以接受多个值，而且可以重复使用，必须传入嵌套列表作为值！')
