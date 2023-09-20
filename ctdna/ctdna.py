@@ -1078,7 +1078,7 @@ def ETCHING():
     cmd.args['kmer_database'] = Argument(prefix='-f {}/PGK2', default='/home/hxbio04/dbs/etching/PGK2', type='indir', desc='The Pan-Genome k-mer(PGK) set is used to build PGK filter. wget http://big.hanyang.ac.kr/ETCHING/PGK2.tar.gz')
     cmd.args['threads'] = Argument(prefix='-t ', default=8, desc='threads number')
     cmd.args['prefix'] = Argument(prefix='-o ', desc='output prefix')
-    cmd.outputs['out'] = Output(value='{prefix}.scored.filtered.typed.vcf', report=True)
+    cmd.outputs['out'] = Output(value='{prefix}.scored.filtered.vcf', report=True)
     cmd.outputs['out2'] = Output(value='{prefix}.scored.vcf')
     return cmd
 
@@ -1147,7 +1147,7 @@ def Gridss():
     cmd.runtime.cpu = 8
     cmd.runtime.tool = 'gridss'
     cmd.args['ref'] = Argument(prefix='--reference ', type='infile', desc='reference genome to use. Must have a .fai index file and a bwa index')
-    cmd.args['out'] = Argument(prefix='--output ', desc='output VCF')
+    cmd.args['_fix'] = Argument(prefix='--output ', type='fix', value='tmp.vcf')
     cmd.args['assembly'] = Argument(prefix='--assembly ', level='optional', desc='location of the GRIDSS assembly BAM. This file will be created by GRIDSS. The default filename adds a .assembly.bam suffix to the output file')
     cmd.args['threads'] = Argument(prefix='--threads ', default=8, desc='number of threads to use.')
     cmd.args['blacklist'] = Argument(prefix='--blacklist ', type='infile', default='/home/hxbio04/dbs/gridss/ENCFF001TDO.chr_numeric.bed', desc='BED file containing regions to ignore. The ENCODE DAC blacklist is recommended for hg19.')
@@ -1159,7 +1159,40 @@ def Gridss():
     cmd.args['otherjvmheap'] = Argument(prefix='--otherjvmheap ', default='4g', desc='size of JVM heap for everything else. Useful to prevent java out of memory errors when using large (>4Gb) reference genomes')
     cmd.args['maxcoverage'] = Argument(prefix='--maxcoverage ', default=100000, desc='Regions with coverage in excess of this are ignored')
     cmd.args['bams'] = Argument(prefix='', type='infile', array=True, desc='Input Bam files, the somatic filtering script treats the first bam file as the matched normal, and all subsequent as tumour samples. If you are doing somatic calling, it is strongly recommended to follow this convention.')
+    cmd.args['_mask_repeat'] = Argument(prefix='&& ', type='fix', value='gridss_annotate_vcf_repeatmasker tmp.vcf')
+    cmd.args['out'] = Argument(prefix='--output ', desc='output vcf file')
     cmd.outputs['out'] = Output(value='{out}', desc='output VCF file')
+    return cmd
+
+
+def AnnotSV():
+    cmd = Command()
+    cmd.meta.name = 'AnnotSV'
+    cmd.meta.source = 'https://github.com/lgmgeo/AnnotSV'
+    cmd.meta.desc = ''
+    cmd.meta.version = '3.3.6'
+    cmd.runtime.image = 'quay.io/biocontainers/annotsv:3.3.6--py311hdfd78af_0'
+    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'AnnotSV'
+    cmd.args['annotationsDir'] = Argument(prefix='-annotationsDir ', default='/home/hxbio04/dbs/AnnotSV/', type='indir', desc='Path of the annotations directory')
+    cmd.args['annotationMode'] = Argument(prefix='-annotationMode ', default='full', range=['both', 'full', 'split'], desc='Description of the types of lines produced by AnnotSV')
+    cmd.args['benignAF'] = Argument(prefix='-benignAF ', default=0.01, desc='Allele frequency threshold to select the benign SV in the data sources')
+    cmd.args['includeCI'] = Argument(prefix='-includeCI ', default='0', range=['0', '1'], desc='To expand the "start" and "end" SV positions with the VCF confidence intervals (CIPOS, CIEND) around the breakpoints')
+    cmd.args['candidateGenesFile'] = Argument(prefix='-candidateGenesFile ', type='infile', level='optional', desc='Path of a file containing the candidate genes of the user. (gene names can be space-separated, tabulation-separated, or line-break-separated)')
+    cmd.args['candidateGenesFiltering'] = Argument(prefix='-candidateGenesFiltering ', default='0', range=['0', '1'], desc='To select only the SV annotations ("split" and "full") overlapping a gene from the "candidateGenesFile"')
+    cmd.args['genomeBuild'] = Argument(prefix='-genomeBuild ', default='GRCh37', range=['GRCh37', 'GRCh38'], desc='Genome build used: GRCh38 or GRCh37 or mm9 or mm10')
+    cmd.args['outputFile'] = Argument(prefix='-outputFile ', desc='Output path and file name')
+    cmd.args['outputDir'] = Argument(prefix='-outputDir ', default='.', desc='Output path and file name')
+    cmd.args['snvIndelFiles'] = Argument(prefix='-snvIndelFiles ', type='infile', level='optional', desc='Path of the VCF input file(s) with SNV/indel coordinates used for false positive discovery')
+    cmd.args['snvIndelPASS'] = Argument(prefix='-snvIndelPASS ', default='1', range=['0', '1'], desc='To only use variants from VCF input files that passed all filters during the calling')
+    cmd.args['snvIndelSamples'] = Argument(prefix='-snvIndelSamples ', level='optional', desc='To specify the sample names from the VCF files defined from the -snvIndelFiles option')
+    cmd.args['SVinputFile'] = Argument(prefix='-SVinputFile ', type='infile', desc='Path of the input file (VCF or BED) with SV coordinates')
+    cmd.args['SVminSize'] = Argument(prefix='-SVminSize ', default=50, desc='SV minimum size (in bp)')
+    cmd.args['reftype'] = Argument(prefix='-tx ', default='RefSeq', range=['RefSeq', 'ENSEMBL'], desc='Origin of the transcripts (RefSeq or ENSEMBL)')
+    cmd.args['txFile'] = Argument(prefix='-txFile ', type='infile', level='optional', desc='Path of a file containing a list of preferred genes transcripts to be used in priority during the annotation (Preferred genes transcripts names should be tab or space separated)')
+    cmd.args['vcf'] = Argument(prefix='-vcf ', level='optional', default='0', range=['0', '1'], desc='Creation of a VCF output file format (-svtBEDcol needs to be defined too)')
+    cmd.outputs['out'] = Output(value='{outputFile}', desc='output file')
     return cmd
 
 
@@ -2257,6 +2290,14 @@ def pipeline():
         args['refseq'].value = True
         args['dir_cache'].value = top_vars['vep_cache']
         args['dir_plugins'].value = top_vars['vep_plugin']
+
+        etching_annot_task, args = wf.add_task(AnnotSV(), tag='Manta-' + tumor)
+        if normal_bam_task:
+            args['SVinputFile'].value = manta_task.outputs['somatic_sv']
+        else:
+            args['SVinputFile'].value = manta_task.outputs['tumor_sv']
+        args['snvIndelFiles'].value = vcf_norm_task.outputs['out']
+        args['outputFile'].value = tumor + '.manta.annot.tsv'
         # ---end of Manta -------------------------
 
         # etching
@@ -2277,6 +2318,11 @@ def pipeline():
         args['refseq'].value = True
         args['dir_cache'].value = top_vars['vep_cache']
         args['dir_plugins'].value = top_vars['vep_plugin']
+
+        etching_annot_task, args = wf.add_task(AnnotSV(), tag='Etching-' + tumor)
+        args['SVinputFile'].value = etching_task.outputs['out']
+        args['snvIndelFiles'].value = vcf_norm_task.outputs['out']
+        args['outputFile'].value = tumor + '.etching.annot.tsv'
         # end of etching
 
         # gridss
@@ -2296,6 +2342,11 @@ def pipeline():
         args['refseq'].value = True
         args['dir_cache'].value = top_vars['vep_cache']
         args['dir_plugins'].value = top_vars['vep_plugin']
+
+        gridss_annot_task, args = wf.add_task(AnnotSV(), tag='Gridss-' + tumor)
+        args['SVinputFile'].value = gridss_task.outputs['out']
+        args['snvIndelFiles'].value = vcf_norm_task.outputs['out']
+        args['outputFile'].value = tumor + '.gridss.annot.tsv'
         # end of gridss
 
         # ---VarNet----
