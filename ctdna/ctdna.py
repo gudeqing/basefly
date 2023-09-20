@@ -1128,8 +1128,38 @@ def SortVcf():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.tool = 'bedtools sort -header'
     cmd.args['in_vcf'] = Argument(prefix='-i ', type='infile', desc='Input vcf file')
-    cmd.args['out_vcf'] = Argument(prefix='> ', desc='out put vcf file')
+    cmd.args['out_vcf'] = Argument(prefix='> ', desc='output vcf file')
     cmd.outputs['out'] = Output(value='{out_vcf}')
+    return cmd
+
+
+def Gridss():
+    cmd = Command()
+    cmd.meta.name = 'Gridss'
+    cmd.meta.desc = 'GRIDSS is a module software suite containing tools useful for the detection of genomic rearrangements. ' \
+                    'GRIDSS includes a genome-wide break-end assembler, as well as a structural variation caller for Illumina sequencing data. ' \
+                    'GRIDSS calls variants based on alignment-guided positional de Bruijn graph genome-wide break-end assembly, split read, and read pair evidence.'
+    cmd.meta.source = 'https://github.com/PapenfussLab/gridss'
+    cmd.meta.version = '2.13.2'
+    cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
+    cmd.runtime.image = 'docker.io/gridss/gridss:latest'
+    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.cpu = 8
+    cmd.runtime.tool = 'gridss'
+    cmd.args['ref'] = Argument(prefix='--reference ', type='infile', desc='reference genome to use. Must have a .fai index file and a bwa index')
+    cmd.args['out'] = Argument(prefix='--output ', desc='output VCF')
+    cmd.args['assembly'] = Argument(prefix='--assembly ', level='optional', desc='location of the GRIDSS assembly BAM. This file will be created by GRIDSS. The default filename adds a .assembly.bam suffix to the output file')
+    cmd.args['threads'] = Argument(prefix='--threads ', default=8, desc='number of threads to use.')
+    cmd.args['blacklist'] = Argument(prefix='--blacklist ', type='infile', default='/home/hxbio04/dbs/gridss/ENCFF001TDO.chr_numeric.bed', desc='BED file containing regions to ignore. The ENCODE DAC blacklist is recommended for hg19.')
+    cmd.args['configuration'] = Argument(prefix='--configuration ', type='infile', level='optional', desc='configuration file use to override default GRIDSS settings')
+    cmd.args['labels'] = Argument(prefix='--labels ', level='optional', array=True, delimiter=',', desc='comma separated labels to use in the output VCF for the input files. '
+                                                                             'Supporting read counts for input files with the same label are aggregated (useful for multiple sequencing runs of the same sample). '
+                                                                             'Labels default to input filenames, unless a single read group with a non-empty sample name exists in which case the read group sample name is used')
+    cmd.args['jvmheap'] = Argument(prefix='--jvmheap ', default='30g', desc='size of JVM heap for the high-memory component of assembly and variant calling')
+    cmd.args['otherjvmheap'] = Argument(prefix='--otherjvmheap ', default='4g', desc='size of JVM heap for everything else. Useful to prevent java out of memory errors when using large (>4Gb) reference genomes')
+    cmd.args['maxcoverage'] = Argument(prefix='--maxcoverage ', default=100000, desc='Regions with coverage in excess of this are ignored')
+    cmd.args['bams'] = Argument(prefix='', type='infile', array=True, desc='Input Bam files, the somatic filtering script treats the first bam file as the matched normal, and all subsequent as tumour samples. If you are doing somatic calling, it is strongly recommended to follow this convention.')
+    cmd.outputs['out'] = Output(value='{out}', desc='output VCF file')
     return cmd
 
 
@@ -1401,6 +1431,57 @@ def merge_sv(wf, gene2trans=None):
             target_info[field_name] = csq_dict['Civic_CSQ'].replace('&', '|')
         return target_info
 
+    def gridss2dict(sample, r, csq_format, gene2trans) -> dict:
+        csq_dict = get_target_csq_dict2(r, csq_format, gene2trans)
+        target_info = {
+            'Sample': sample,
+            'ID': r.id,
+            'MateID': r.info['MATEID'][0] if 'MATEID' in r.info else None,
+            "Chr": r.contig,
+            "MateChr": None,
+            "Start": r.pos,
+            "MateStart": None,
+            "CIPOS": r.info['CIPOS'] if 'CIPOS' in r.info else None,
+            "MateCIPOS": None,
+            "Ref": r.ref,
+            "MateRef": None,
+            "Alt": r.alts[0],
+            "MateAlt": None,
+            "Type": r.info['SVTYPE'],
+            "ReadCrosssBreakEnd": r.info['REF'] if 'REF' in r.info else None,
+            "PairedReadSupportBP": r.info['RP'] if 'RP' in r.info else None,
+            "SplitReadSupportBP": r.info['SR'] if 'SR' in r.info else None,
+            "SpanPairSupportRef": r.info['REFPAIR'] if 'REFPAIR' in r.info else None,
+            "FragmentSupportAlt": r.info['VF'] if 'VF' in r.info else None,
+            "AF": r.samples[sample]['AF'][0] if 'AF' in r.samples[sample] else None,
+            "IMPRECISE": True if 'IMPRECISE' in r.info else False,
+            "Gene": csq_dict['SYMBOL'] if csq_dict else None,
+            "MateGene": None,
+            "Transcript": csq_dict['Feature'],
+            "MateTranscript": None,
+            "Exon": csq_dict['EXON'] if csq_dict else None,
+            "MateExon": None,
+            "Strand": csq_dict['STRAND'] if csq_dict else None,
+            "MateStrand": None,
+            "cHGVS": csq_dict['HGVSc'] if csq_dict else None,
+            "pHGVS": csq_dict['HGVSp'] if csq_dict else None,
+            "VariantClass": csq_dict['VARIANT_CLASS'] if csq_dict else None,
+            '=HYPERLINK("https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html","Consequence")': csq_dict['Consequence'] if csq_dict else None,
+            "CLIN_SIG": csq_dict['CLIN_SIG'] if csq_dict else None,
+            "ExistingVariation": csq_dict['Existing_variation'] if csq_dict else None,
+            "CANONICAL": csq_dict['CANONICAL'] if csq_dict else None,
+            "HGVS_OFFSET": csq_dict['HGVS_OFFSET'] if 'HGVS_OFFSET' in csq_dict else 0,
+            "MAX_AF": csq_dict['MAX_AF'] if csq_dict else None,
+            "MAX_AF_POPS": csq_dict['MAX_AF_POPS'] if csq_dict else None,
+            "gnomADe_EAS_AF": csq_dict['gnomADe_EAS_AF'] if csq_dict else None,
+            'AllGenes': csq_dict['AllGenes'] if 'AllGenes' in csq_dict else None
+        }
+
+        if 'Civic_CSQ' in csq_dict and csq_dict['Civic_CSQ']:
+            field_name = "CIViC: Allele|Consequence|SYMBOL|Entrez Gene ID|Feature_type|Feature|HGVSc|HGVSp|CIViC Variant Name|CIViC Variant ID|CIViC Variant Aliases|CIViC Variant URL|CIViC Molecular Profile Name|CIViC Molecular Profile ID|CIViC Molecular Profile Aliases|CIViC Molecular Profile URL|CIViC HGVS|Allele Registry ID|ClinVar IDs|CIViC Molecular Profile Score|CIViC Entity Type|CIViC Entity ID|CIViC Entity URL|CIViC Entity Source|CIViC Entity Variant Origin|CIViC Entity Status|CIViC Entity Significance|CIViC Entity Direction|CIViC Entity Disease|CIViC Entity Therapies|CIViC Entity Therapy Interaction Type|CIViC Evidence Phenotypes|CIViC Evidence Level|CIViC Evidence Rating|CIViC Assertion ACMG Codes|CIViC Assertion AMP Category|CIViC Assertion NCCN Guideline|CIVIC Assertion Regulatory Approval|CIVIC Assertion FDA Companion Test"
+            target_info[field_name] = csq_dict['Civic_CSQ'].replace('&', '|')
+        return target_info
+
     def etching2dict(sample, r, csq_format, gene2trans) -> dict:
         csq_dict = get_target_csq_dict2(r, csq_format, gene2trans)
         # etching的过滤结果中只给出了mate信息中的一条
@@ -1459,6 +1540,7 @@ def merge_sv(wf, gene2trans=None):
 
     manta_result = []
     etching_result = []
+    gridss_result = []
     for tid, task in wf.tasks.items():
         if task.name.startswith('VEP-Manta'):
             sample = task.name.split('Manta-')[1]
@@ -1502,9 +1584,34 @@ def merge_sv(wf, gene2trans=None):
                 var_dict = etching2dict(sample, record, csq_format, gene2trans)
                 record_dict[var_dict['ID']] = var_dict
             etching_result += list(record_dict.values())
+        elif task.name.startswith('VEP-Gridss'):
+            sample = task.name.split('Gridss-')[1]
+            sv_file = os.path.join(task.wkdir, task.outputs['out_vcf'].value)
+            if not os.path.exists(sv_file):
+                continue
+            sv_vcf = pysam.VariantFile(sv_file)
+            csq_format = sv_vcf.header.info['CSQ'].description.split('Format: ')[1]
+            record_dict = dict()
+            for record in sv_vcf:
+                var_dict = gridss2dict(sample, record, csq_format, gene2trans)
+                record_dict[var_dict['ID']] = var_dict
+            # 根据mate_id补充record信息
+            for vid, rdict in record_dict.items():
+                mate_id = rdict['MateID']
+                if mate_id and (mate_id in record_dict):
+                    rdict['MateChr'] = record_dict[mate_id]['Chr']
+                    rdict['MateStart'] = record_dict[mate_id]['Start']
+                    rdict['MateCIPOS'] = record_dict[mate_id]['CIPOS']
+                    rdict['MateRef'] = record_dict[mate_id]['Ref']
+                    rdict['MateAlt'] = record_dict[mate_id]['Alt']
+                    rdict['MateGene'] = record_dict[mate_id]['Gene']
+                    rdict['MateTranscript'] = record_dict[mate_id]['Transcript']
+                    rdict['MateExon'] = record_dict[mate_id]['Exon']
+                    rdict['MateStrand'] = record_dict[mate_id]['Strand']
+            gridss_result += list(record_dict.values())
 
     # 输出结果
-    for result, name in zip([manta_result, etching_result], ['Manta', 'Etching']):
+    for result, name in zip([manta_result, etching_result, gridss_result], ['Manta', 'Etching', 'Gridss']):
         if result:
             table = pd.DataFrame(result)
             table = table.sort_values(by=['Sample', 'Chr', 'Start'])
@@ -2171,6 +2278,25 @@ def pipeline():
         args['dir_cache'].value = top_vars['vep_cache']
         args['dir_plugins'].value = top_vars['vep_plugin']
         # end of etching
+
+        # gridss
+        gridss_task, args = wf.add_task(Gridss(), tag=tumor)
+        if normal_bam_task:
+            args['bams'].value = [normal_bam_task.outputs['out'], tumor_bam_task.outputs['out']]
+            args['labels'].value = [normal, tumor]
+        else:
+            args['bams'].value = [tumor_bam_task.outputs['out']]
+            args['labels'].value = [tumor]
+        args['ref'].value = wf.topvars['ref']
+        args['out'].value = tumor + '.gridss.vcf'
+
+        gridss_vep_task, args = wf.add_task(vep(tumor), tag='Gridss-' + tumor)
+        args['input_file'].value = gridss_task.outputs['out']
+        args['fasta'].value = wf.topvars['ref']
+        args['refseq'].value = True
+        args['dir_cache'].value = top_vars['vep_cache']
+        args['dir_plugins'].value = top_vars['vep_plugin']
+        # end of gridss
 
         # ---VarNet----
         # varnet_task, args = wf.add_task(VarNet(), tag=tumor)
