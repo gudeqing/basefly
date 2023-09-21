@@ -701,95 +701,6 @@ class Workflow:
                 return task
         raise Exception(f'cannot found task {matcher}')
 
-    def to_wdl_tasks(self, outfile=None):
-        # 输出每一个Command的WDL版本
-        with open(outfile or f'{self.meta.name}.tasks.wdl', 'w') as f:
-            seen = set()
-            for _, task in self.tasks.items():
-                if task.cmd.meta.name not in seen:
-                    seen.add(task.cmd.meta.name)
-                    wdl_str = ToWdlTask(task.cmd).wdl
-                    f.write(wdl_str + '\n')
-
-    def to_wdl_workflow(self, outfile=None):
-        print('目前不能保证能生产完全正确的WDL流程, 甚至可能出错，不再维护该功能. 建议使用to_wdl_task后自己编写workflow')
-        ToWdlWorkflow(self).write_wdl(outfile)
-
-    def to_argo_workflow(self, outfile=None):
-        print('目前生成argo workflow 不一定正确')
-        outfile = outfile or f'{self.meta.name}.argo.yaml'
-        lines = ['apiVersion: argoproj.io/v1alpha1']
-        lines += ['kind: Workflow']
-        lines += ['metadata:']
-        lines += [' ' * 2 + f'generateName: {self.meta.name.lower()}']
-        lines += ['spec:']
-        # entry point
-        lines += [' '*2 + 'entrypoint: main']
-        artifacts = [k for k, v in self.topvars.items() if v.type in ['infile', 'indir']]
-        if artifacts:
-            lines += [' ' * 2 + 'arguments:']
-            lines += [' ' * 4 + 'artifacts:']
-            for each in artifacts:
-                if type(self.topvars[each].value) != list:
-                    lines += [' ' * 4 + f'- name: {each}']
-                    lines += [' ' * 6 + f'path: {self.topvars[each].value}']
-                else:
-                    for i, v in enumerate(self.topvars[each].value):
-                        lines += [' ' * 4 + f'- name: {each}_{i}']
-                        lines += [' ' * 6 + f'path: {v}']
-
-        # DAG templates
-        lines += ['']
-        lines += [' '*2 + 'templates:']
-        lines += [' '*2 + '- name: main']
-        lines += [' '*4 + 'dag:']
-        lines += [' '*6 + 'tasks:']
-        for task_id, task in self.tasks.items():
-            task.name = task.name.replace('_', '-')
-            lines += [' '*6 + f'- name: {task.name}']
-            if task.depends:
-                lines += [' '*8 + 'dependencies: ' + str([self.tasks[x].name for x in task.depends]).replace("'", '')]
-            lines += [' '*8 + f'template: {task.name}']
-            args = task.cmd.args
-            # 通过TopVar或者Output传递的文件参数
-            artifacts = [k for k, v in args.items() if (v.type == 'infile' or v.type == 'indir')]
-            if artifacts:
-                lines += [' '*8 + f'arguments:']
-                lines += [' '*10 + f'artifacts:']
-                for each in artifacts:
-                    if type(args[each].value) != list:
-                        lines += [' ' * 10 + f'- name: {each}']
-                        if type(args[each].value) in [TopVar, TmpVar]:
-                            lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{args[each].value.name}}}}}"']
-                        elif type(args[each].value) == Output:
-                            depend_task = self.tasks[args[each].value.task_id].name
-                            depend_name = args[each].value.name
-                            lines += [' ' * 12 + f'from: "{{{{tasks.{depend_task}.outputs.artifacts.{depend_name}}}}}"']
-                        else:
-                            # 只能假设来自topVar了
-                            lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{each}}}}}"']
-                    else:
-                        for i, v in enumerate(args[each].value):
-                            lines += [' ' * 10 + f'- name: {each}_{i}']
-                            if type(v) in [TopVar, TmpVar]:
-                                lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{v.name}}}}}"']
-                            elif type(v) == Output:
-                                depend_task = self.tasks[v.task_id].name
-                                depend_name = v.name
-                                lines += [' ' * 12 + f'from: "{{{{tasks.{depend_task}.outputs.artifacts.{depend_name}}}}}"']
-                            else:
-                                # 只能假设来自topVar了
-                                lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{each}_{i}}}}}"']
-
-        for task_id, task in self.tasks.items():
-            lines += ['']
-            lines += task.argo_template(self.tasks)
-
-        # write argo workflow
-        with open(outfile, 'w') as f:
-            for line in lines:
-                f.write(line+'\n')
-
     def dump_args(self, out='arguments.json'):
         """
         该函数的目的是为了输出流程中每个步骤的参数json模板文件，方便客户后续修改参数
@@ -1086,10 +997,101 @@ class Workflow:
                     f.write('\n')
                 f.write(each + '\n')
 
+    def to_wdl_tasks(self, outfile=None):
+        # 输出每一个Command的WDL版本
+        with open(outfile or f'{self.meta.name}.tasks.wdl', 'w') as f:
+            seen = set()
+            for _, task in self.tasks.items():
+                if task.cmd.meta.name not in seen:
+                    seen.add(task.cmd.meta.name)
+                    wdl_str = ToWdlTask(task.cmd).wdl
+                    f.write(wdl_str + '\n')
+
+    def to_wdl_workflow(self, outfile=None):
+        print('目前不能保证能生产完全正确的WDL流程, 甚至可能出错，不再维护该功能. 建议使用to_wdl_task后自己编写workflow')
+        ToWdlWorkflow(self).write_wdl(outfile)
+
+    def to_argo_workflow(self, outfile=None):
+        print('目前生成argo workflow 不一定正确')
+        outfile = outfile or f'{self.meta.name}.argo.yaml'
+        lines = ['apiVersion: argoproj.io/v1alpha1']
+        lines += ['kind: Workflow']
+        lines += ['metadata:']
+        lines += [' ' * 2 + f'generateName: {self.meta.name.lower()}']
+        lines += ['spec:']
+        # entry point
+        lines += [' '*2 + 'entrypoint: main']
+        artifacts = [k for k, v in self.topvars.items() if v.type in ['infile', 'indir']]
+        if artifacts:
+            lines += [' ' * 2 + 'arguments:']
+            lines += [' ' * 4 + 'artifacts:']
+            for each in artifacts:
+                if type(self.topvars[each].value) != list:
+                    lines += [' ' * 4 + f'- name: {each}']
+                    lines += [' ' * 6 + f'path: {self.topvars[each].value}']
+                else:
+                    for i, v in enumerate(self.topvars[each].value):
+                        lines += [' ' * 4 + f'- name: {each}_{i}']
+                        lines += [' ' * 6 + f'path: {v}']
+
+        # DAG templates
+        lines += ['']
+        lines += [' '*2 + 'templates:']
+        lines += [' '*2 + '- name: main']
+        lines += [' '*4 + 'dag:']
+        lines += [' '*6 + 'tasks:']
+        for task_id, task in self.tasks.items():
+            task.name = task.name.replace('_', '-')
+            lines += [' '*6 + f'- name: {task.name}']
+            if task.depends:
+                lines += [' '*8 + 'dependencies: ' + str([self.tasks[x].name for x in task.depends]).replace("'", '')]
+            lines += [' '*8 + f'template: {task.name}']
+            args = task.cmd.args
+            # 通过TopVar或者Output传递的文件参数
+            artifacts = [k for k, v in args.items() if (v.type == 'infile' or v.type == 'indir')]
+            if artifacts:
+                lines += [' '*8 + f'arguments:']
+                lines += [' '*10 + f'artifacts:']
+                for each in artifacts:
+                    if type(args[each].value) != list:
+                        lines += [' ' * 10 + f'- name: {each}']
+                        if type(args[each].value) in [TopVar, TmpVar]:
+                            lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{args[each].value.name}}}}}"']
+                        elif type(args[each].value) == Output:
+                            depend_task = self.tasks[args[each].value.task_id].name
+                            depend_name = args[each].value.name
+                            lines += [' ' * 12 + f'from: "{{{{tasks.{depend_task}.outputs.artifacts.{depend_name}}}}}"']
+                        else:
+                            # 只能假设来自topVar了
+                            lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{each}}}}}"']
+                    else:
+                        for i, v in enumerate(args[each].value):
+                            lines += [' ' * 10 + f'- name: {each}_{i}']
+                            if type(v) in [TopVar, TmpVar]:
+                                lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{v.name}}}}}"']
+                            elif type(v) == Output:
+                                depend_task = self.tasks[v.task_id].name
+                                depend_name = v.name
+                                lines += [' ' * 12 + f'from: "{{{{tasks.{depend_task}.outputs.artifacts.{depend_name}}}}}"']
+                            else:
+                                # 只能假设来自topVar了
+                                lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{each}_{i}}}}}"']
+
+        for task_id, task in self.tasks.items():
+            lines += ['']
+            lines += task.argo_template(self.tasks)
+
+        # write argo workflow
+        with open(outfile, 'w') as f:
+            for line in lines:
+                f.write(line+'\n')
+
+
 
 class ToWdlTask(object):
     type_conv_dict = {
         'str': 'String',
+        'outstr': 'String',
         'int': 'Int',
         'float': 'Float',
         'bool': 'Boolean',
@@ -1333,6 +1335,7 @@ class ToWdlWorkflow(object):
     """
     type_conv_dict = {
         'str': 'String',
+        'outstr': 'String',
         'int': 'Int',
         'float': 'Float',
         'bool': 'Boolean',
