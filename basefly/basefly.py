@@ -821,7 +821,7 @@ class Workflow:
                             tmp_dict[arg_name] = None
 
             cmd_names.add(cmd_name)
-        print(arg_value_dict)
+        # print(arg_value_dict)
         with open(out, 'w') as f:
             json.dump(arg_value_dict, f, indent=2)
 
