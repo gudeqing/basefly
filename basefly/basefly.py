@@ -572,6 +572,7 @@ class Workflow:
         parameters = self.argparser.parse_args()
         outdir = os.path.abspath(parameters.outdir)
         self.wkdir = outdir
+        self.parameters = parameters
 
         wf['mode'] = dict(
             outdir=outdir,
@@ -688,8 +689,8 @@ class Workflow:
             self.list_task()
         elif parameters.dry_run:
             os.makedirs(outdir, exist_ok=True)
-            self.generate_docs(os.path.join(outdir, 'ReadMe.md'))
-            self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
+            self.generate_docs(os.path.join(outdir, f'{self.meta.name}.ReadMe.md'))
+            self.dump_args(out=os.path.join(outdir, 'wf.static.args.json'))
             with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
                 args = []
                 for each in sys.argv:
@@ -708,7 +709,7 @@ class Workflow:
             RunCommands(outfile, draw_state_graph=True)
         elif parameters.run:
             os.makedirs(outdir, exist_ok=True)
-            self.dump_args(out=os.path.join(outdir, 'wf.args.json'))
+            self.dump_args(out=os.path.join(outdir, 'wf.static.args.json'))
             with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
                 args = []
                 for each in sys.argv:
@@ -737,7 +738,7 @@ class Workflow:
             outputs_dir = os.path.join(outdir, 'Outputs')
             os.makedirs(outputs_dir, exist_ok=True)
             shutil.copyfile(outfile, os.path.join(outputs_dir, f'{self.meta.name}.ini'))
-            shutil.copyfile(os.path.join(outdir, 'wf.args.json'), os.path.join(outputs_dir, 'wf.args.json'))
+            shutil.copyfile(os.path.join(outdir, 'wf.static.args.json'), os.path.join(outputs_dir, 'wf.static.args.json'))
             shutil.copyfile(os.path.join(outdir, 'wf.run.cmd.txt'), os.path.join(outputs_dir, 'wf.run.cmd.txt'))
             shutil.copyfile(os.path.join(outdir, 'state.svg'), os.path.join(outputs_dir, 'state.svg'))
             for name, out in self.outputs.items():
@@ -794,7 +795,8 @@ class Workflow:
         该函数的目的是为了输出流程中每个步骤的参数json模板文件，方便客户后续修改参数
         如果一个command被调用多次，则仅记录第一次被调用的参数
         """
-        print('如果后续需要输入本次生成的wf.static.args.json，强烈建议仅保留被修改的参数，同时注意一个command会被重复使用的情况')
+        if self.parameters.dry_run:
+            print('如果后续需要输入本次生成的wf.static.args.json，强烈建议仅保留被修改的参数，同时注意一个command会被重复使用的情况')
         cmd_names = set()
         arg_value_dict = dict()
         for tid, task in self.tasks.items():
