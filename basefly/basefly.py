@@ -52,9 +52,10 @@ class Argument:
     value: Any = None
     # prefix 可以是如 ’-i '或 'i=', 对于前者, 空格一定要带上
     prefix: str = ''
-    # type is one of ['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix']
-    # fix 类型表示该参数并不是真正的参数，其为固定的字符串. 例如其可以用来表示管道符如‘| samtools sort’，让便拼接多个命令
-    type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix'] = 'str'
+    # type is one of ['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix', 'outstr']
+    # fix 类型表示该参数并不是真正的参数，其为固定的字符串. 例如其可以用来表示管道符如‘| samtools sort’，方便拼接多个命令
+    # outstr 类型表示该参数是用于形成输出文件名或路径的参数，引入该类型的目的是为了输出的wf.args.json更准确
+    type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix', 'outstr'] = 'str'
     level: Literal['required', 'optional'] = 'required'
     # for bool type, default is one of ['false', true']
     default: Any = None
@@ -69,6 +70,8 @@ class Argument:
     # order字段是为了参数排序设计
     order: int = 0
     desc: str = 'This is description of the argument.'
+    # editable字段用于表示该参数是否适合作为流程参数进行修改，如果不可以，则不会显示在参数的配置文件中wf.args.json
+    editable: bool = True
 
     def __post_init__(self):
         # type 类型检查和矫正
@@ -90,6 +93,7 @@ class Argument:
                 self.default = False
         elif self.type == 'fix':
             self.level = 'optional'
+            self.editable = False
             if self.value is None:
                 self.value = self.default
             else:
@@ -103,12 +107,14 @@ class Argument:
                 self.__annotations__['default'] = List[List[Any]]
                 self.__annotations__['value'] = List[List[Any]]
         # 对于有集合候选的参数，先对默认值检查一番
-        if type(self.range) == set:
+        if type(self.range) in {set, list}:
             if self.default not in self.range:
                 raise Exception(f'default value is not in {self.range}')
 
+        if self.type == 'outstr':
+            self.editable = False
 
-@dataclass()
+
 class RunTime:
     image: str = None
     # 软件所在目录
@@ -785,14 +791,10 @@ class Workflow:
 
     def dump_args(self, out='arguments.json'):
         """
-        该函数的目的是为了输出流程中每个步骤的参数json文件，方便客户后续修改参数
-        如果一个command被调用多次，则仅记录第一次被调用的参数，如下参数的赋值不会输出：
-        1. 没有默认值的必须参数
-        2. 输入参数
-        3. 固定参数
-        :param out:
-        :return:
+        该函数的目的是为了输出流程中每个步骤的参数json模板文件，方便客户后续修改参数
+        如果一个command被调用多次，则仅记录第一次被调用的参数
         """
+        print('如果后续需要输入本次生成的wf.static.args.json，强烈建议仅保留被修改的参数，同时注意一个command会被重复使用的情况')
         cmd_names = set()
         arg_value_dict = dict()
         for tid, task in self.tasks.items():
@@ -800,15 +802,26 @@ class Workflow:
             if cmd_name not in cmd_names:
                 tmp_dict = arg_value_dict.setdefault(cmd_name, dict())
                 for arg_name, arg in task.cmd.args.items():
-                    if arg.level == 'required' and (arg.default is None):
-                        continue
-                    if arg.type not in ['infile', 'indir', 'fix']:
-                        if type(arg.value) not in [TopVar, TmpVar, Output]:
-                            tmp_dict[arg_name] = arg.value or arg.default
+                    if arg.editable:
+                        # 对于必须参数，又没有默认值的，那么其一定是在流程中动态赋值的参数
+                        if arg.level == 'required' and (arg.default is None):
+                            continue
+                        # 对于赋值为列表的参数, 且赋值特殊，也不能输出
+                        if type(arg.value) == list:
+                            if type(arg.value[0]) in {TopVar, TmpVar, Output}:
+                                continue
+                        # 对赋值对象为TopVar的参数，其一定是流程最开始的输入参数，也强制归属为动态赋值参数
+                        if type(arg.value) in {TopVar, TmpVar, Output}:
+                            # tmp_dict[arg_name] = arg.value.value
+                            continue
                         else:
-                            tmp_dict[arg_name] = arg.value.value
-            cmd_names.add(cmd_name)
+                            tmp_dict[arg_name] = arg.value or arg.default
+                        # 对于非必须参数，如果没有赋值，则将赋值设置为None
+                        if arg.level == 'optional' and arg.value is None:
+                            tmp_dict[arg_name] = None
 
+            cmd_names.add(cmd_name)
+        print(arg_value_dict)
         with open(out, 'w') as f:
             json.dump(arg_value_dict, f, indent=2)
 
