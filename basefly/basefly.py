@@ -3,7 +3,9 @@ import os
 import shutil
 import json
 import sys
+import re
 import argparse
+import textwrap
 from functools import partial
 from uuid import uuid4, UUID
 from dataclasses import dataclass, field
@@ -174,7 +176,7 @@ class Command:
     
     def __post_init__(self):
         # other_args是本设计自留的特殊参数,可以用来传递用户从来没有定义但是软件本身确实包含的参数
-        self.args['other_args'] = Argument(prefix='', default='', desc='This argument is designed to provide any arguments that are not wrapped in Command')
+        self.args['other_args'] = Argument(prefix='', default='', level='optional', desc='This argument is designed to provide any arguments that are not wrapped in Command')
 
     def format_cmd(self, wf_tasks=None):
         # 该函数应该在参数被具体赋值后才能调用
@@ -460,17 +462,11 @@ class Workflow:
         self.wkdir = outdir
         self.parameters = parameters
 
-        wf['mode'] = dict(
-            outdir=outdir,
-            threads=parameters.threads,
-            retry=parameters.retry,
-            monitor_resource=parameters.monitor_resource,
-            monitor_time_step=3,
-            check_resource_before_run=not parameters.no_check_resource_before_run,
-        )
-
         if parameters.skip:
             self.skip_steps(parameters.skip, skip_depend=not parameters.no_skip_depend)
+
+        if parameters.to_cwl:
+            self.to_cwl_workflow(outdir)
 
         if parameters.rerun_steps:
             rerun_steps = self.get_all_depends(parameters.rerun_steps)
@@ -499,10 +495,26 @@ class Workflow:
         else:
             assume_success_tasks = set()
 
+        wf['mode'] = dict(
+            outdir=outdir,
+            threads=parameters.threads,
+            retry=parameters.retry,
+            monitor_resource=parameters.monitor_resource,
+            monitor_time_step=3,
+            check_resource_before_run=not parameters.no_check_resource_before_run,
+        )
+
         for task_id, task in self.tasks.items():
             cmd_wkdir = os.path.join("${mode:outdir}", task.parent_wkdir, task.name)
             task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
             mount_vols = {cmd_wkdir}
+
+            # format output
+            value_dict = dict()
+            for k, v in task.cmd.args.items():
+                value_dict[k] = v.value or v.default
+            for _, out in task.outputs.items():
+                out.value = out.value.replace('~', '').format(**value_dict)
 
             if task.name in assume_success_tasks:
                 task.depends = None
@@ -520,6 +532,7 @@ class Workflow:
                 )
                 continue
 
+            # 参数赋值处理
             for k, v in task.cmd.args.items():
                 if type(v) != Argument:
                     raise Exception(f'Wrong assignment of value to {k} with {v}')
@@ -856,6 +869,7 @@ class Workflow:
         wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=900, type=int, help="等待资源的时间上限, 默认每次等待时间为900秒, 等待时间超过这个时间且资源不足时判定任务失败")
         wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true', help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
         wf_args.add_argument('--dry_run', default=False, action='store_true', help='不运行流程，仅仅输出markdown格式的流程说明文档和流程配置文件')
+        wf_args.add_argument('--to_cwl', default=False, action='store_true', help='输出cwl格式的流程草稿')
         self.argparser = parser
         # for user defined arguments
         # self.add_argument = partial(self.argparser.add_argument, required=True)
@@ -889,13 +903,13 @@ class Workflow:
                                 task.depends.append(each.task_id)
                 else:
                     pass
-
-            # format output
-            value_dict = dict()
-            for k, v in task.cmd.args.items():
-                value_dict[k] = v.value or v.default
-            for _, out in task.outputs.items():
-                out.value = out.value.replace('~', '').format(**value_dict)
+            # 为了生成cwl，下面的代码移动到run中
+            # # format output
+            # value_dict = dict()
+            # for k, v in task.cmd.args.items():
+            #     value_dict[k] = v.value or v.default
+            # for _, out in task.outputs.items():
+            #     out.value = out.value.replace('~', '').format(**value_dict)
 
             # 添加workflow的output
             for _name, out in task.outputs.items():
@@ -1086,6 +1100,176 @@ class Workflow:
             for line in lines:
                 f.write(line+'\n')
 
+    def to_cwl_tool(self, cmd: Command):
+        convert_type: dict[str, str] = {
+            'str': 'string',
+            'outstr': 'string',
+            'infile': 'File',
+            'outfile': 'File',
+            'indir': 'Directory',
+            'outdir': 'Directory',
+            'bool': 'boolean',
+            'int': 'int',
+            'float': 'float',
+        }
+        contents = '#!/usr/bin/env cwl-runner\n'
+        contents += 'cwlVersion: v1.0\n'
+        contents += 'class: CommandLineTool\n'
+        contents += f'label: "{cmd.meta.name}"\n'
+        contents += f'doc: |\n'
+        for each in textwrap.wrap(cmd.meta.desc):
+            contents += ' '*4 + each + '\n'
+        contents += '\n'
+        contents += 'hints:\n'
+        contents += ' '*2 + 'SoftwareRequirement:\n'
+        contents += ' '*4 + 'packages:\n'
+        contents += ' '*6 + f'{cmd.meta.name}:\n'
+        contents += ' '*8 + f'specs: ["{cmd.meta.source}"]\n'
+        contents += ' '*8 + f'version: ["{cmd.meta.version}"]\n'
+        contents += ' '*2 + 'DockerRequirement:\n'
+        contents += ' ' * 4 + f"dockerPull: {cmd.runtime.image}\n"
+        contents += ' '*2 + "ResourceRequirement:\n"
+        contents += ' '*4 + f"coresMin: {cmd.runtime.cpu}\n"
+        # RAM的单位为M
+        contents += ' '*4 + f"ramMin: {int(cmd.runtime.memory/1024)}\n"
+        contents += '\n'
+        base_cmd = cmd.runtime.tool_dir + cmd.runtime.tool
+        base_cmd = base_cmd.split()
+        if base_cmd:
+            contents += f'baseCommand: {base_cmd}\n'
+        contents += 'inputs:\n'
+        pos = 0
+        for arg_name, arg in cmd.args.items():
+            if arg.type == 'fix':
+                continue
+            if arg_name in ('out', 'in', 'inputs', 'outputs'):
+                # arg名称和cwl保留字段冲突，加x以区别
+                arg_name = arg_name + 'x'
+                arg.name = arg_name
+            pos += 1
+            contents += ' '*2 + f'{arg_name}:\n'
+            arg_type = convert_type[arg.type]
+            if arg.array and (not arg.multi_times):
+                arg_type += '[]'
+            if arg.level == 'optional':
+               arg_type += '?'
+            if arg.multi_times:
+                if arg.array:
+                    print('! 对于多值且可以重复使用的参数，可能生成结果存在问题')
+                contents += ' '*4 + 'type:\n'
+                contents += ' '*6 + 'type: array\n'
+                contents += ' '*6 + f'items: {arg_type}\n'
+                contents += ' '*6 + 'inputBinding:\n'
+                contents += ' '*8 + f'prefix: {arg.prefix.strip()}\n'
+                if arg.prefix.endswith(' '):
+                    contents += ' ' * 8 + 'separate: true\n'
+                else:
+                    contents += ' ' * 8 + 'separate: false\n'
+                contents += ' '*4 + 'inputBinding:\n'
+                contents += ' '*6 + f'position {pos}\n'
+            else:
+                contents += ' '*4 + f'type: {arg_type}\n'
+                contents += ' '*4 + 'inputBinding:\n'
+                contents += ' '*6 + f'position: {pos}\n'
+                contents += ' '*6 + f'prefix: {arg.prefix.strip()}\n'
+                if '[' in arg_type:
+                    contents += ' '*6 + f'itemSeparator: "{arg.delimiter}"\n'
+                if arg.prefix.endswith(' '):
+                    contents += ' '*6 + 'separate: true\n'
+                else:
+                    contents += ' '*6 + 'separate: false\n'
+        contents += '\n'
+        contents += 'outputs:\n'
+
+        for out_name, out_obj in cmd.outputs.items():
+            if out_name in ('out', 'in', 'inputs', 'outputs'):
+                # arg名称和cwl保留字段冲突，加x以区别
+                out_name = out_name + 'x'
+            contents += ' '*2 + f'{out_name}:\n'
+            contents += ' '*4 + f'type: {convert_type[out_obj.type]}\n'
+            contents += ' '*4 + 'outputBinding:\n'
+            out_expr = out_obj.value
+            # 目前仅考支持输出表达式包含一个参数名称变量
+            matched_arg_name = re.findall('{(.*?)}', out_expr)
+            if matched_arg_name:
+                matched_arg_name = matched_arg_name[0]
+                if matched_arg_name in ('out', 'in', 'inputs', 'outputs'):
+                    out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs.'+matched_arg_name+'x)')
+                else:
+                    out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs.'+matched_arg_name+')')
+            contents += ' '*6 + f'glob: {out_expr}'
+
+        return contents
+
+    def to_cwl_workflow(self, outdir):
+        # 生成流程草稿
+        os.makedirs(outdir, exist_ok=True)
+        convert_type: dict[str, str] = {
+            'str': 'string',
+            'outstr': 'string',
+            'infile': 'File',
+            'outfile': 'File',
+            'indir': 'Directory',
+            'outdir': 'Directory',
+            'bool': 'boolean',
+            'int': 'int',
+            'float': 'float',
+        }
+        contents = '#!/usr/bin/env cwl-runner\n'
+        contents += 'cwlVersion: v1.0\n'
+        contents += 'class: Workflow\n'
+
+        contents += 'inputs:\n'
+        for name, top_var in self.topvars.items():
+            contents += ' '*2 + f'{name}: {convert_type[top_var.type]}\n'
+        contents += '\n'
+
+        contents += 'outputs:\n'
+        for name, out_obj in self.outputs.items():
+            contents += ' ' * 2 + f'{name}:\n'
+            contents += ' ' * 4 + f'type: {convert_type[out_obj.type]}\n'
+            contents += ' ' * 4 + f'outputSource: {name.replace(".", "/", 1)}\n'
+        contents += '\n'
+
+        contents += 'steps:\n'
+        for task_id, task in self.tasks.items():
+            contents += ' '*2 + f'{task.name}\n'
+            contents += ' '*4 + f'run: {task.cmd.meta.name}.tool.cwl\n'
+            contents += ' '*4 + 'in:\n'
+            # 参数赋值
+            for arg_name, arg in task.cmd.args.items():
+                if type(arg.value) == TopVar:
+                    contents += ' ' * 6 + f'{arg_name}: {arg.value.name}\n'
+                if type(arg.value) in {Output}:
+                    contents += ' '*6 + f'{arg_name}:\n'
+                    depend_task_name = self.tasks[arg.value.task_id].name
+                    contents += ' '*8 + f'source: {depend_task_name}/{arg.value.name}\n'
+            # 定义输出
+            out_names = []
+            for out_name, out_obj in task.cmd.outputs.items():
+                out_names.append(out_name)
+            contents += ' '*4 + f'out: [{",".join(out_names)}]\n'
+            contents += '\n'
+
+        # 输出流程
+        outfile = os.path.join(outdir, f'{self.meta.name}.wf.cwl')
+        with open(outfile, 'w') as f:
+            f.write(contents)
+        # 输出tools
+        added_tools = []
+        for task_id, task in self.tasks.items():
+            cmd = task.cmd
+            name = cmd.meta.name
+            if name not in added_tools:
+                added_tools.append(name)
+                outfile = os.path.join(outdir, f'{name}.tool.cwl')
+                with open(outfile, 'w') as f:
+                    f.write(self.to_cwl_tool(cmd))
+        # 新建2个空文件
+        for each in ['LICENSE', 'R.md']:
+            outfile = os.path.join(outdir, each)
+            with open(outfile, 'w') as f:
+                f.write('')
 
 
 class ToWdlTask(object):

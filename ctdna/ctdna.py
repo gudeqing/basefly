@@ -1152,7 +1152,7 @@ def Gridss():
     cmd.args['threads'] = Argument(prefix='--threads ', default=8, desc='number of threads to use.')
     cmd.args['blacklist'] = Argument(prefix='--blacklist ', type='infile', default='/home/hxbio04/dbs/gridss/ENCFF001TDO.chr_numeric.bed', desc='BED file containing regions to ignore. The ENCODE DAC blacklist is recommended for hg19.')
     cmd.args['configuration'] = Argument(prefix='--configuration ', type='infile', level='optional', desc='configuration file use to override default GRIDSS settings')
-    cmd.args['labels'] = Argument(prefix='--labels ', level='optional', array=True, delimiter=',', desc='comma separated labels to use in the output VCF for the input files. '
+    cmd.args['labels'] = Argument(prefix='--labels ', type='outstr', level='optional', array=True, delimiter=',', desc='comma separated labels to use in the output VCF for the input files. '
                                                                              'Supporting read counts for input files with the same label are aggregated (useful for multiple sequencing runs of the same sample). '
                                                                              'Labels default to input filenames, unless a single read group with a non-empty sample name exists in which case the read group sample name is used')
     cmd.args['jvmheap'] = Argument(prefix='--jvmheap ', default='30g', desc='size of JVM heap for the high-memory component of assembly and variant calling')
@@ -1201,6 +1201,8 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
     result = dict()
     for sample, task in fastp_task_dict.items():
         stat_file = os.path.join(task.wkdir, task.outputs['json'].value)
+        if not os.path.exists(stat_file):
+            continue
         json_dict = json.load(open(stat_file))
         target_info = dict()
         # target_info['sequencing'] = json_dict['summary']['sequencing']
@@ -1220,6 +1222,8 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
     for sample, task in bamdst_task_dict.items():
         stat_file = os.path.join(task.wkdir, task.outputs['coverage_report'].value)
         depth_file = os.path.join(task.wkdir, task.outputs['depth_file'].value)
+        if not os.path.exists(stat_file):
+            continue
         with open(stat_file) as f:
             target_info = dict()
             for line in f:
@@ -1265,6 +1269,8 @@ def merge_qc(fastp_task_dict:dict, bamdst_task_dict:dict, groupumi_task_dict:dic
                 else:
                     result[sample] = target_info
 
+    if not result:
+        return
     table = pd.DataFrame(result)
     table = table.loc[:, sorted(result.keys())]
     table.index.name = 'Metrics'
@@ -1828,7 +1834,7 @@ def pipeline():
     # create dict or fai for reference if necessary
     dict_file = wf.topvars['ref'].value.rsplit('.', 1)[0] + '.dict'
     fai_file = wf.topvars['ref'].value + '.fai'
-    wf.topvars['ref_dict'] = TopVar(value=dict_file, type='infile')
+    wf.topvars['ref_dict'] = TopVar(value=dict_file, type='infile', name='ref_dict')
     if not os.path.exists(dict_file) or not os.path.exists(fai_file):
         print(f'dict or fai file for {wf.args.ref} does not exist, we will try to create one rightly')
         creat_dict_task = creat_ref_dict()
@@ -2387,7 +2393,8 @@ def pipeline():
         if tid in wf.tasks:
             xls_file = wf.tasks[tid].outputs['final_xls'].value
             xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
-            xls_lst.append(xls_file)
+            if os.path.exists(xls_file):
+                xls_lst.append(xls_file)
     if xls_lst:
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
         df = df.sort_values(by=['Sample', 'Chr', 'Start'])
@@ -2402,7 +2409,8 @@ def pipeline():
         if tid in wf.tasks:
             xls_file = wf.tasks[tid].outputs['final_xls'].value
             xls_file = os.path.join(wf.wkdir, wf.tasks[tid].name, xls_file)
-            xls_lst.append(xls_file)
+            if os.path.exists(xls_file):
+                xls_lst.append(xls_file)
     if xls_lst:
         out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
