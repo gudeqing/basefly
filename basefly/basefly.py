@@ -148,6 +148,7 @@ class Output:
     task_id: str = None
     name: str = None
     desc: str = None
+    format: str = None
 
     def __post_init__(self):
         if self.value is None:
@@ -1120,6 +1121,7 @@ class Workflow:
         for each in textwrap.wrap(cmd.meta.desc):
             contents += ' '*4 + each + '\n'
         contents += '\n'
+
         contents += 'hints:\n'
         contents += ' '*2 + 'SoftwareRequirement:\n'
         contents += ' '*4 + 'packages:\n'
@@ -1132,11 +1134,13 @@ class Workflow:
         contents += ' '*4 + f"coresMin: {cmd.runtime.cpu}\n"
         # RAM的单位为M
         contents += ' '*4 + f"ramMin: {int(cmd.runtime.memory/1024)}\n"
+
         contents += '\n'
         base_cmd = cmd.runtime.tool_dir + cmd.runtime.tool
         base_cmd = base_cmd.split()
         if base_cmd:
             contents += f'baseCommand: {base_cmd}\n'
+
         contents += 'inputs:\n'
         pos = 0
         for arg_name, arg in cmd.args.items():
@@ -1153,11 +1157,22 @@ class Workflow:
                 arg_type += '[]'
             if arg.level == 'optional':
                arg_type += '?'
+
             if arg.multi_times:
                 if arg.array:
                     print('! 对于多值且可以重复使用的参数，可能生成结果存在问题')
                 contents += ' '*4 + 'type:\n'
                 contents += ' '*6 + 'type: array\n'
+
+                # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
+                if arg.value is not None and arg.type == 'infile':
+                    if arg.format == 'bam':
+                        contents += ' ' * 6 + 'secondaryFiles:\n'
+                        contents += ' ' * 8 + '- .bai\n'
+                    elif arg.format == 'vcf.gz':
+                        contents += ' ' * 6 + 'secondaryFiles:\n'
+                        contents += ' ' * 8 + '- .tbi\n'
+
                 contents += ' '*6 + f'items: {arg_type}\n'
                 contents += ' '*6 + 'inputBinding:\n'
                 contents += ' '*8 + f'prefix: {arg.prefix.strip()}\n'
@@ -1169,6 +1184,16 @@ class Workflow:
                 contents += ' '*6 + f'position {pos}\n'
             else:
                 contents += ' '*4 + f'type: {arg_type}\n'
+
+                # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
+                if arg.value is not None and arg.type == 'infile':
+                    if arg.format == 'bam':
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .bai\n'
+                    elif arg.format == 'vcf.gz':
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .tbi\n'
+
                 contents += ' '*4 + 'inputBinding:\n'
                 contents += ' '*6 + f'position: {pos}\n'
                 contents += ' '*6 + f'prefix: {arg.prefix.strip()}\n'
@@ -1179,8 +1204,8 @@ class Workflow:
                 else:
                     contents += ' '*6 + 'separate: false\n'
         contents += '\n'
-        contents += 'outputs:\n'
 
+        contents += 'outputs:\n'
         for out_name, out_obj in cmd.outputs.items():
             if out_name in ('out', 'in', 'inputs', 'outputs'):
                 # arg名称和cwl保留字段冲突，加x以区别

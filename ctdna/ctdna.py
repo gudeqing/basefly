@@ -91,13 +91,13 @@ def FastqToSam(sample):
     cmd.runtime.tool = 'gatk FastqToSam'
     cmd.args['read1'] = Argument(prefix='-F1 ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-F2 ', level='optional', type='infile', editable=False, desc='read2 fastq file')
-    cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.unmapped.bam', type='outstr', desc='output sam file')
+    cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.unmapped.bam', type='outstr', format='ubam', desc='output sam file')
     cmd.args['read_group_name'] = Argument(prefix='--READ_GROUP_NAME ', default=sample, editable=False, desc='read group name')
     cmd.args['sample_name'] = Argument(prefix='--SAMPLE_NAME ', default=sample, editable=False, desc='sample name')
     cmd.args['library_name'] = Argument(prefix='--LIBRARY_NAME ', default=sample, editable=False, desc='library name')
     cmd.args['platform'] = Argument(prefix='--PLATFORM ', default='illumina', desc='sequencing platform name')
     cmd.args['tmpdir'] = Argument(prefix='--TMP_DIR ', default='.', editable=False, desc='directorie with space available to be used by this program for temporary storage of working files')
-    cmd.outputs['out'] = Output(value='{out}')
+    cmd.outputs['out'] = Output(value='{out}', format='ubam')
     return cmd
 
 
@@ -128,7 +128,7 @@ def ExtractUmisFromBam():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fgbio --compression 1 ExtractUmisFromBam'
-    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='Input BAM file')
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='Input BAM file', format='ubam')
     cmd.args['read-structure'] = Argument(prefix='-r ', array=True, default=['3M2S+T', '3M2S+T'], desc='The read structure, one per read in a template.')
     cmd.args['molecular-index-tags'] = Argument(prefix='-t ', array=True, default=['ZA', 'ZB'], desc='SAM tag(s) in which to store the molecular indices.')
     cmd.args['annotate-read-names'] = Argument(prefix='-a ', default='false', desc='Annotate the read names with the molecular indices.')
@@ -146,11 +146,11 @@ def MarkIlluminaAdapters():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'gatk MarkIlluminaAdapters'
-    cmd.args['input'] = Argument(prefix='--INPUT ', type='infile', desc='Input BAM file')
+    cmd.args['input'] = Argument(prefix='--INPUT ', type='infile', desc='Input BAM file', format='ubam')
     cmd.args['metrics'] = Argument(prefix='--METRICS ', type='outstr', default='metrics.txt', desc='Histogram showing counts of bases_clipped in how many reads Required')
     cmd.args['output'] = Argument(prefix='--OUTPUT ', type='outstr', desc='Output BAM file')
     cmd.outputs['out'] = Output(value="{output}")
-    cmd.outputs['metrics'] = Output(value="{metrics}")
+    cmd.outputs['metrics'] = Output(value="{metrics}", format='ubam')
     return cmd
 
 
@@ -174,7 +174,7 @@ def Bam2FastqBwaMem(sample):
     cmd.args['_fix3'] = Argument(type='fix', value='/dev/stdin - ')
     cmd.args['_fix4'] = Argument(type='fix', value=f' | samtools view --threads {cmd.runtime.cpu} -1 - ', desc='input data to samtools view')
     cmd.args['out'] = Argument(prefix='> ',  value=f'{sample}.unmerged.bam', type='outstr', desc='output bam file')
-    cmd.outputs['out'] = Output(value="{out}")
+    cmd.outputs['out'] = Output(value="{out}", format='bam')
     return cmd
 
 
@@ -194,7 +194,7 @@ def bwa_mem(sample, platform):
     cmd.args['read2'] = Argument(prefix='', level='optional', type='infile', desc='read2 fastq file')
     cmd.args['_fix'] = Argument(type='fix', value=f'| samtools view -O BAM --threads {cmd.runtime.cpu} - ')
     cmd.args['out'] = Argument(prefix='> ', value=f'{sample}.unmerged.bam', type='outstr', desc='output bam file')
-    cmd.outputs['out'] = Output(value="{out}")
+    cmd.outputs['out'] = Output(value="{out}", format='bam')
     return cmd
 
 
@@ -209,8 +209,8 @@ def MergeBamAlignment(sample):
     cmd.args['VALIDATION_STRINGENCY'] = Argument(prefix='--VALIDATION_STRINGENCY ', default='SILENT')
     cmd.args['EXPECTED_ORIENTATIONS'] = Argument(prefix='--EXPECTED_ORIENTATIONS ', level='optional')
     cmd.args['ATTRIBUTES_TO_RETAIN'] = Argument(prefix='--ATTRIBUTES_TO_RETAIN ', default='X0')
-    cmd.args['ALIGNED_BAM'] = Argument(prefix='--ALIGNED_BAM ', type='infile', desc='SAM or BAM file')
-    cmd.args['UNMAPPED_BAM'] = Argument(prefix='--UNMAPPED_BAM ', type='infile', desc='unmapped bam file')
+    cmd.args['ALIGNED_BAM'] = Argument(prefix='--ALIGNED_BAM ', type='infile', desc='SAM or BAM file', format='bam')
+    cmd.args['UNMAPPED_BAM'] = Argument(prefix='--UNMAPPED_BAM ', type='infile', desc='unmapped bam file', format='ubam')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', type='outstr', default=f'{sample}.merged.bam', desc='output bam file')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='--REFERENCE_SEQUENCE ', type='infile', desc='reference fasta file')
     cmd.args['SORT_ORDER'] = Argument(prefix='--SORT_ORDER ', default='coordinate', desc='The order in which the merged reads should be output.  Default value: coordinate. Possible values: {unsorted, queryname, coordinate, duplicate, unknown}')
@@ -227,7 +227,7 @@ def MergeBamAlignment(sample):
     cmd.args['PROGRAM_GROUP_COMMAND_LINE'] = Argument(prefix='--PROGRAM_GROUP_COMMAND_LINE ', default='"bwa-mem2 mem -M -Y -p -v 3 -K 100000000 -t 4 ref.fa"')
     cmd.args['PROGRAM_GROUP_NAME'] = Argument(prefix='--PROGRAM_GROUP_NAME ', default='"bwamem"')
     cmd.args['tmpdir'] = Argument(prefix='--TMP_DIR ', default='.', type='outstr', desc='directory with space available to be used by this program for temporary storage of working files')
-    cmd.outputs['out'] = Output(value='{OUTPUT}')
+    cmd.outputs['out'] = Output(value='{OUTPUT}', format='bam')
     return cmd
 
 
@@ -239,11 +239,11 @@ def MergeSamFiles():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'gatk MergeSamFiles'
-    cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='SAM or BAM input file')
+    cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='SAM or BAM input file', format='bam')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', type='outstr', desc='SAM or BAM file to write merged result')
     cmd.args['CREATE_INDEX'] = Argument(prefix='--CREATE_INDEX ', default='true', range=['true', 'false'], desc='Whether to create a BAM index when writing a coordinate-sorted BAM file.')
     cmd.args['SORT_ORDER'] = Argument(prefix='--SORT_ORDER ', default='coordinate', range=['unsorted', 'queryname', 'coordinate', 'duplicate', 'unknown'], desc='Sort order of output file')
-    cmd.outputs['out'] = Output(value='{OUTPUT}')
+    cmd.outputs['out'] = Output(value='{OUTPUT}', format='bam')
     return cmd
 
 
@@ -256,14 +256,14 @@ def GroupReadsByUmi(sample):
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fgbio --compression 1 GroupReadsByUmi'
-    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', default=f'{sample}.umi_grouped.bam', desc='The output BAM file.')
     cmd.args['strategy'] = Argument(prefix='-s ', default="adjacency", desc='The UMI assignment strategy. edit: reads are clustered into groups such that each read within a group has at least one other read in the group with <= edits differences and there are inter-group pairings with <= edits differences. Effective when there are small numbers of reads per UMI, but breaks down at very high coverage of UMIs. 3.adjacency: a version of the directed adjacency method described in umi_tools that allows for errors between UMIs but only when there is a count gradient.')
     cmd.args['family-size-histogram'] = Argument(prefix='-f ', type='outstr', default=f'{sample}.family.size.txt', desc='Optional output of tag family size counts.')
     cmd.args['raw-tag'] = Argument(prefix='-t ', default='RX', desc='The tag containing the raw UMI.')
     cmd.args['assign-tag'] = Argument(prefix='-T ', default='MI', desc='The output tag for UMI grouping.')
     cmd.args['min-map-q'] = Argument(prefix='-m ', default=1, desc='Minimum mapping quality for mapped reads.')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     cmd.outputs['family_size'] = Output(value=f'{sample}.family.size.txt')
     return cmd
 
@@ -278,14 +278,14 @@ def CallDuplexConsensusReads():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'fgbio --compression 1 CallDuplexConsensusReads'
-    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
     cmd.args['error-rate-pre-umi'] = Argument(prefix='-1 ', default=45, desc='The Phred-scaled error rate for an error prior to the UMIs being integrated.')
     cmd.args['error-rate-post-umi'] = Argument(prefix='-2 ', default=30, desc='The Phred-scaled error rate for an error post the UMIs have been integrated.')
     cmd.args['min-input-base-quality'] = Argument(prefix='-m ', default=20, desc='Ignore bases in raw reads that have Q below this value.')
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='The number of threads to use while consensus calling')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -299,14 +299,14 @@ def CallMolecularConsensusReads():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'fgbio --compression 1 CallMolecularConsensusReads'
-    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
     cmd.args['error-rate-pre-umi'] = Argument(prefix='-1 ', default=45, desc='The Phred-scaled error rate for an error prior to the UMIs being integrated.')
     cmd.args['error-rate-post-umi'] = Argument(prefix='-2 ', default=30, desc='The Phred-scaled error rate for an error post the UMIs have been integrated.')
     cmd.args['min-input-base-quality'] = Argument(prefix='-m ', default=20, desc='Ignore bases in raw reads that have Q below this value.')
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='The number of threads to use while consensus calling')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -319,7 +319,7 @@ def FilterConsensusReads():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fgbio --compression 1 FilterConsensusReads'
-    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
     cmd.args['min-reads'] = Argument(prefix='-M ', default='2 1 1', desc='The minimum number of reads supporting a consensus base/read. The first value applies to the final consensus read, the second value to one single-strand consensus, and the last value to the other single-strand consensus')
@@ -329,7 +329,7 @@ def FilterConsensusReads():
     cmd.args['max-base-error-rate'] = Argument(prefix='-e ', default=0.1, desc='The maximum error rate for a single consensus base.')
     cmd.args['min-mean-base-quality'] = Argument(prefix='-q ', default=25, desc='The minimum mean base quality across the consensus read.')
     cmd.args['max-no-call-fraction'] = Argument(prefix='-n ', default=0.05, desc='Maximum fraction of no-calls in the read after filtering.')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -347,13 +347,13 @@ def ClipBam():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fgbio --compression 1 ClipBam'
-    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.')
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['metrics'] = Argument(prefix='-m ', type='outstr', default='clipbam.metrics.txt', desc='output of clipping metrics.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
     cmd.args['clipping-mode'] = Argument(prefix='-c ', default='Hard', range=['Hard', 'Soft', 'SoftWithMask'], desc='The type of clipping to perform.')
     cmd.args['clip-overlapping-reads'] = Argument(prefix='--clip-overlapping-reads ', default='true', desc='Clip overlapping reads.')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -370,14 +370,14 @@ def FilterBam():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fgbio FilterBam'
-    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.')
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['remove-duplicates'] = Argument(prefix='-D ', default='true', range=['true', 'false'], desc='If true remove all reads that are marked as duplicates')
     cmd.args['remove-unmapped-reads'] = Argument(prefix='-U ', default='true', desc='Remove all unmapped reads.')
     cmd.args['min-map-q'] = Argument(prefix='-M ', default=1, desc='Remove all mapped reads with MAPQ lower than this number.')
     cmd.args['remove-single-end-mappings'] = Argument(prefix='-P ', default='false', desc='Removes non-PE reads and any read whose mate pair is unmapped.')
     cmd.args['remove-secondary-alignments'] = Argument(prefix='-S ', default='true', desc='Remove all reads marked as secondary alignments.')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -390,14 +390,14 @@ def SortAndIndexBam():
     cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'samtools sort'
-    cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
+    cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.', format='bam')
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='Number of additional threads to use')
     cmd.args['output-fmt'] = Argument(prefix='--output-fmt ', default='BAM', desc='output format')
     cmd.args['input'] = Argument(prefix='', type='infile', desc='input bam file')
     cmd.args['_index_bam'] = Argument(type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
     cmd.args['_flagstat'] = Argument(type='fix', value=f'&& samtools flagstat -@ {cmd.runtime.cpu} *.bam')
     cmd.args['flagstat_name'] = Argument(prefix ='> ', type='outstr', default='bam.flagstat.txt', desc='flagstat output file name')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -414,13 +414,13 @@ def ZipperBams():
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fgbio --compression 1 ZipperBams'
-    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.')
+    cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.', format='bam')
     cmd.args['unmapped'] = Argument(prefix='-u ', type='infile', desc='The input unmapped BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
     cmd.args['tags-to-reverse'] = Argument(prefix='--tags-to-reverse ', default='Consensus', desc='Set of optional tags to reverse on reads mapped to the negative strand.')
     cmd.args['tags-to-revcomp'] = Argument(prefix='--tags-to-revcomp ', default='Consensus', desc='Set of optional tags to reverse complement on reads mapped to the negative strand')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -434,7 +434,7 @@ def gencore():
     cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'gencore'
-    cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='input sorted bam/sam file.')
+    cmd.args['bam'] = Argument(prefix='-i ', type='infile', format='bam', desc='input sorted bam/sam file.')
     cmd.args['out'] = Argument(prefix='-o ', type='outstr', desc='output bam/sam file')
     cmd.args['ref'] = Argument(prefix='--ref ', type='infile', desc='reference fasta file name (should be an uncompressed .fa/.fasta file)')
     cmd.args['bed'] = Argument(prefix='--bed ', type='infile', desc='bed file to specify the capturing region')
@@ -451,7 +451,7 @@ def gencore():
     cmd.args['html'] = Argument(prefix='--html ', type='outstr', default='gencore.html', desc='the html format report file name')
     cmd.outputs['json'] = Output(value='{json}')
     cmd.outputs['html'] = Output(value='{html}')
-    cmd.outputs['out'] = Output(value='{out}')
+    cmd.outputs['out'] = Output(value='{out}', format='bam')
     return cmd
 
 
@@ -470,7 +470,7 @@ def Bamdst():
     cmd.args['bed'] = Argument(prefix='-p ', type='infile', desc='probe bed file')
     cmd.args['outdir'] = Argument(prefix='-o ', type='outstr', default='.', desc='output directory')
     cmd.args['flank'] = Argument(prefix='-f ', default=100, desc='calculate the coverage of flank region')
-    cmd.args['input'] = Argument(prefix='', type='infile', desc='input bam file')
+    cmd.args['input'] = Argument(prefix='', type='infile', format='bam', desc='input bam file')
     cmd.outputs['outdir'] = Output(value='{outdir}', report=True)
     cmd.outputs['coverage_report'] = Output(value='{outdir}/coverage.report')
     cmd.outputs['depth_file'] = Output(value='{outdir}/depth.tsv.gz')
@@ -488,7 +488,7 @@ def VardictSingle():
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'vardict-java'
     cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
-    cmd.args['bam'] = Argument(prefix='-b ', type='infile', desc='The indexed BAM file')
+    cmd.args['bam'] = Argument(prefix='-b ', type='infile', format='bam', desc='The indexed BAM file')
     cmd.args['genome'] = Argument(prefix='-G ', type='infile', desc='The reference fasta. Should be indexed (.fai).')
     cmd.args['threads'] = Argument(prefix='-th ', default=8, desc='Threads count.')
     cmd.args['min-freq'] = Argument(prefix='-f ', default="0.0001", desc='The threshold for allele frequency')
@@ -507,7 +507,7 @@ def VardictSingle():
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
     cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_valid.pl -A -E -p 5 -q 22.5 -d 5 -v 2 -f 0.00001 ', desc='pipe to another script')
     cmd.args['output'] = Argument(prefix='> ', type='outstr', desc='output vcf name')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -522,7 +522,7 @@ def VardictPaired():
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'vardict-java'
     cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
-    cmd.args['bam'] = Argument(prefix='-b "{}"', type='infile', array=True, delimiter='|', desc='The indexed BAM files, tumor|normal')
+    cmd.args['bam'] = Argument(prefix='-b "{}"', type='infile', array=True, delimiter='|', format='bam', desc='The indexed BAM files, tumor|normal')
     cmd.args['genome'] = Argument(prefix='-G ', type='infile', desc='The reference fasta. Should be indexed (.fai).')
     cmd.args['threads'] = Argument(prefix='-th ', default=8, desc='Threads count.')
     cmd.args['min-freq'] = Argument(prefix='-f ', default="0.0001", desc='The threshold for allele frequency')
@@ -542,7 +542,7 @@ def VardictPaired():
     cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 5 -q 22.5 -d 5 -v 2 -f 0.00001 ', desc='pipe to another script')
     cmd.args['names'] = Argument(prefix='-N "{}"', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', type='outstr', desc='output vcf name')
-    cmd.outputs['out'] = Output(value='{output}')
+    cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
 
 
@@ -573,8 +573,8 @@ def Mutect2(prefix):
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'gatk Mutect2'
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
-    cmd.args['tumor_bam'] = Argument(prefix='-I ', type='infile', desc='tumor bam')
-    cmd.args['normal_bam'] = Argument(prefix='-I ', type='infile', level='optional', desc='normal bam')
+    cmd.args['tumor_bam'] = Argument(prefix='-I ', type='infile', format='bam', desc='tumor bam')
+    cmd.args['normal_bam'] = Argument(prefix='-I ', type='infile', level='optional', format='bam', desc='normal bam')
     cmd.args['tumor_name'] = Argument(prefix='-tumor ', desc='tumor sample name')
     cmd.args['normal_name'] = Argument(prefix='-normal ', level='optional', editable=False, desc='normal sample name')
     cmd.args['germline-resource'] = Argument(prefix='--germline-resource ', type='infile', level='optional', desc='optional database of known germline variants (and its index) (see http://gnomad.broadinstitute.org/downloads)')
@@ -598,7 +598,7 @@ def Mutect2(prefix):
     cmd.args['f1r2-tar-gz'] = Argument(prefix='--f1r2-tar-gz ', type='outstr', default=f'{prefix}.f1r2.tar.gz', desc='If specified, collect F1R2 counts and output files into this tar.gz file')
     cmd.args['mitochondria'] = Argument(prefix='--mitochondira', type='bool', desc='if to turn on mitochondria mode. Specifically, the mode sets --initial-tumor-lod to 0, --tumor-lod-to-emit to 0, --af-of-alleles-not-in-resource to 4e-3, and the advanced parameter --pruning-lod-thres')
     cmd.args['tmpdir'] = Argument(prefix='--tmp-dir ', default='.', type='outstr', desc='directorie with space available to be used by this program for temporary storage of working files')
-    cmd.outputs['out'] = Output(value='{out}')
+    cmd.outputs['out'] = Output(value='{out}', format='vcf.gz')
     cmd.outputs['f1r2'] = Output(value='{f1r2-tar-gz}')
     cmd.outputs['stats'] = Output(value='{out}.stats')
     return cmd
@@ -612,14 +612,14 @@ def bcftools_norm():
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = "bcftools norm"
-    cmd.args['fasta-ref'] = Argument(prefix='-f ', type='infile', desc='reference fasta file')
+    cmd.args['fasta-ref'] = Argument(prefix='-f ', type='infile', format='vcf', desc='reference fasta file')
     cmd.args['multiallelics'] = Argument(prefix='-m ', default='-both', desc='Split multiallelics (-) or join biallelics (+), type: snps|indels|both|any [both]' )
     cmd.args['out'] = Argument(prefix='-o ', type='outstr', desc='Write output to a file [standard output]')
     cmd.args['output-type'] = Argument(prefix='--output-type ', default='v', desc="'b' compressed BCF; 'u' uncompressed BCF; 'z' compressed VCF; 'v' uncompressed VCF [v]")
     cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc="Use multithreading with <int> worker threads")
     cmd.args['check_ref'] = Argument(prefix='-c ', default='e', desc='Check REF alleles and exit (e), warn (w), exclude (x), or set (s) bad sites')
     cmd.args['vcf'] = Argument(type='infile', desc='input vcf file')
-    cmd.outputs['out'] = Output(value='{out}')
+    cmd.outputs['out'] = Output(value='{out}', format='vcf')
     return cmd
 
 
@@ -633,7 +633,7 @@ def vep(sample):
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'vep'
-    cmd.args['input_file'] = Argument(prefix='-i ', type='infile', desc='input file')
+    cmd.args['input_file'] = Argument(prefix='-i ', type='infile', desc='input file', format='vcf')
     # 明确输入格式时，当vcf实际为空时程序不会报错
     cmd.args['format'] = Argument(prefix='--format ', default='vcf',  desc='Input file format - one of "ensembl", "vcf", "hgvs", "id", "region", "spdi".')
     cmd.args['fasta'] = Argument(prefix='--fasta ', type='infile', desc="Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache).")
@@ -681,7 +681,7 @@ def vep(sample):
     cmd.args['other_args'] = Argument(default='', desc='specify other arguments that you want to append to the command')
     cmd.args['_create_index'] = Argument(value='&& tabix *vcf.gz', type='fix')
     cmd.outputs['out_vcf'] = Output(value='{output_file}', report=True)
-    cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi', report=True)
+    cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi', report=True, format='vcf.gz')
     return cmd
 
 
@@ -694,14 +694,14 @@ def stat_context_seq_error():
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
     cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/stat_3bases_error.py', desc='script path')
-    cmd.args['bam'] = Argument(prefix='-bam ', type='infile', level='optional', desc='path to bam file which will be used to estimate background noise')
+    cmd.args['bam'] = Argument(prefix='-bam ', type='infile', level='optional', format='bam', desc='path to bam file which will be used to estimate background noise')
     cmd.args['bed'] = Argument(prefix='-bed ', type='infile', level='optional', desc='path to target region file which will be used to estimate background noise')
     cmd.args['genome'] = Argument(prefix='-genome ', type='infile', desc='path to indexed genome fasta')
     cmd.args['exclude_from'] = Argument(prefix='-exclude_from ', type='infile', level='optional', desc='bed or vcf file containing known variant in input bam, these variants will be excluded during background noise estimating')
     cmd.args['center_size'] = Argument(prefix='-center_size ', default=(1, 1), array=True, desc='extending size around ref base during background noise estimating')
     cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', type='outstr', desc='output file prefix')
     cmd.outputs['stat_per_site'] = Output(value='{out_prefix}.each_site.txt', report=True)
-    cmd.outputs['context_error_rate'] = Output(value='{out_prefix}.centered*_site.json', report=True)
+    cmd.outputs['context_error_rate'] = Output(value='{out_prefix}.centered*_site.json', report=True, format='bam')
     return cmd
 
 
@@ -714,7 +714,7 @@ def VcfFilter():
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
     cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/vcf_filter.py', desc='script path')
-    cmd.args['vcf'] = Argument(prefix='-vcf ', type='infile', desc='path to vcf annotated with vep')
+    cmd.args['vcf'] = Argument(prefix='-vcf ', type='infile', format='vcf', desc='path to vcf annotated with vep')
     cmd.args['genome'] = Argument(prefix='-genome ', type='infile', desc='path to indexed genome fasta')
     cmd.args['ref_dict'] = Argument(prefix='-ref_dict ', type='infile', level='optional', desc='path to genome dict file which will be used to add contig header in vcf')
     cmd.args['bam'] = Argument(prefix='-bam ', type='infile', level='optional', desc='path to bam file which will be used to estimate background noise')
@@ -729,7 +729,7 @@ def VcfFilter():
     cmd.args['min_af'] = Argument(prefix='-min_af ', default=0.001, desc='Variant AF hard cutoff')
     cmd.args['disable_bg_model'] = Argument(prefix='--disable_bg_model', type='bool', default=True, desc='disable background noise modeling filter')
     cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', desc='output file prefix')
-    cmd.outputs['final_vcf'] = Output(value='{out_prefix}.final.vcf', report=True)
+    cmd.outputs['final_vcf'] = Output(value='{out_prefix}.final.vcf', report=True, format='vcf')
     cmd.outputs['final_txt'] = Output(value='{out_prefix}.final.txt', report=True)
     cmd.outputs['final_xls'] = Output(value='{out_prefix}.final.xlsx', report=True)
     cmd.outputs['discarded_vcf'] = Output(value='{out_prefix}.discarded.vcf', report=True)
@@ -745,9 +745,9 @@ def MergeVcfs(sample):
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360056969852-MergeVcfs-Picard-'
     cmd.runtime.tool = 'gatk MergeVcfs'
-    cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input vcf list')
+    cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input vcf list', format='vcf.gz')
     cmd.args['out'] = Argument(prefix='-O ', type='outstr', default=f'{sample}.vcf.gz', desc='The merged VCF or BCF file. File format is determined by file extension.')
-    cmd.outputs['out'] = Output(value='{out}')
+    cmd.outputs['out'] = Output(value='{out}', format='vcf.gz')
     return cmd
 
 
@@ -769,9 +769,9 @@ def FilterMutectCalls(sample):
     cmd.meta.desc = 'FilterMutectCalls applies filters to the raw output of Mutect2'
     cmd.runtime.tool = 'gatk FilterMutectCalls'
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
-    cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
-    cmd.args['bam'] = Argument(prefix='-I ', type='infile', level='optional', desc=' BAM/SAM/CRAM file containing reads')
-    cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
+    cmd.args['vcf'] = Argument(prefix='-V ', type='infile', format='vcf.gz', desc='A VCF file containing variants')
+    cmd.args['bam'] = Argument(prefix='-I ', type='infile', format='bam', level='optional', desc=' BAM/SAM/CRAM file containing reads')
+    cmd.args['ref'] = Argument(prefix='-R ', type='infile', format='fasta', desc='reference fasta file')
     cmd.args['out'] = Argument(prefix='-O ', type='outstr', default=f'{sample}.filtered.vcf.gz', desc='output vcf file')
     cmd.args['contamination-table'] = Argument(prefix='--contamination-table ', level='optional', type='infile')
     cmd.args['tumor-segmentation'] = Argument(prefix='--tumor-segmentation ', level='optional', type='infile')
@@ -789,7 +789,7 @@ def FilterMutectCalls(sample):
     cmd.args['max-median-fragment-length-difference'] = Argument(prefix='--max-median-fragment-length-difference ', default=10000, desc='Maximum difference between median alt and ref fragment lengths')
     cmd.args ['long-indel-length'] = Argument(prefix='--long-indel-length ', default=5, desc='Indels of this length or greater are treated specially by the mapping quality filter')
     cmd.args['pcr-slippage-rate'] = Argument(prefix='--pcr-slippage-rate ', default=0.1, desc='The frequency of polymerase slippage in contexts where it is suspected')
-    cmd.outputs['out'] = Output(value='{out}', report=True)
+    cmd.outputs['out'] = Output(value='{out}', report=True, format='vcf.gz')
     cmd.outputs['filtering-stats'] = Output(value='{filtering-stats}', report=True)
     return cmd
 
@@ -801,12 +801,12 @@ def FilterAlignmentArtifacts(sample):
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4418051467035-FilterAlignmentArtifacts-EXPERIMENTAL-'
     cmd.runtime.tool = 'gatk FilterAlignmentArtifacts'
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
-    cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
+    cmd.args['vcf'] = Argument(prefix='-V ', type='infile', format='vcf.gz', desc='A VCF file containing variants')
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
-    cmd.args['bam'] = Argument(prefix='-I ', type='infile', desc='input bam file')
+    cmd.args['bam'] = Argument(prefix='-I ', type='infile', format='bam', desc='input bam file')
     cmd.args['bwa-mem-index-image'] = Argument(prefix='--bwa-mem-index-image ', type='infile', desc='BWA-mem index image')
     cmd.args['out'] = Argument(prefix='-O ', type='outstr', default=f'{sample}.align_artifacts_filtered.vcf.gz', desc='output vcf file')
-    cmd.outputs['out'] = Output(value='{out}')
+    cmd.outputs['out'] = Output(value='{out}', format='vcf.gz')
     return cmd
 
 
@@ -941,7 +941,7 @@ def ABRA2():
     cmd.args['contigs'] = Argument(prefix='--contigs ', level='optional', desc='Optional file to which assembled contigs are written')
     cmd.args['max_dist'] = Argument(prefix='--dist ', default=1000, desc='Max read move distance')
     cmd.args['gtf'] = Argument(prefix='--gtf ', level='optional', type='infile', desc='GTF file defining exons and transcripts')
-    cmd.args['in-bam'] = Argument(prefix='--in ', type='infile', desc='input sam')
+    cmd.args['in-bam'] = Argument(prefix='--in ', type='infile', format='bam', desc='input sam')
     cmd.args['in-vcf'] = Argument(prefix='--in-vcf', type='infile', level='optional', desc='VCF containing known (or suspected) variant sites.  Very large files should be avoided.')
     cmd.args['junctions'] = Argument(prefix='--junctions ', type='infile', level='optional', desc='Splice junctions definition file')
     cmd.args['kmer'] = Argument(prefix='--kmer ', type='int', level='optional', array=True, delimiter=',', desc='Optional assembly kmer size(delimit with commas if multiple sizes specified)')
@@ -958,7 +958,7 @@ def ABRA2():
     cmd.args['tmpdir'] = Argument(prefix='--tmpdir ', default='.', desc='Set the temp directory (overrides java.io.tmpdir)')
     cmd.args['ws'] = Argument(prefix='--ws ', default=[400, 200], array=True, delimiter=',', desc='Processing window size and qoverlap')
     cmd.args['_index'] = Argument(prefix='', type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
-    cmd.outputs['out'] = Output(value='{out-bam}', report=True)
+    cmd.outputs['out'] = Output(value='{out-bam}', report=True, format='bam')
     cmd.outputs['out_bai'] = Output(value='{out-bam}.bai', report=True)
     return cmd
 
@@ -999,7 +999,7 @@ def CNVkit():
     cmd.runtime.cpu = 4
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
-    cmd.args['tumor_bams'] = Argument(prefix='', type='infile', array=True, desc='Mapped sequence reads (.bam)')
+    cmd.args['tumor_bams'] = Argument(prefix='', type='infile', array=True, format='bam', desc='Mapped sequence reads (.bam)')
     cmd.args['seq_method'] = Argument(prefix='-m ', default='hybrid', range=['hybrid', 'amplicon', 'wgs'], desc='Sequencing assay type')
     cmd.args['segment_method'] = Argument(prefix='--segment-method ', default='cbs', range=['cbs', 'flasso', 'haar', 'none', 'hmm', 'hmm-tumor','hmm-germline'],
                                           desc='method used in segment step. '
@@ -1011,8 +1011,8 @@ def CNVkit():
     cmd.args['drop_low_cov'] = Argument(prefix='--drop-low-coverage', type='bool', default=True, desc='Drop very-low-coverage bins before segmentation to avoid false-positive deletions in poor-quality tumor')
     cmd.args['processes'] = Argument(prefix='-p ', default=cmd.runtime.cpu, desc='Number of subprocesses used to running each of the BAM files in parallel')
     cmd.args['rscript_path'] = Argument(prefix='--rscript-path ', default='Rscript', desc='Use this option to specify a non-default R')
-    cmd.args['normal_bams'] = Argument(prefix='-n ', type='infile', array=True, level='optional', desc='Normal samples (.bam) used to construct the pooled, paired, or flat reference.')
-    cmd.args['vcf'] = Argument(prefix='--vcf ', type='infile', level='optional', desc='Typically you would use a properly formatted VCF from joint tumor-normal SNV calling, e.g. the output of MuTect, VarDict, or FreeBayes, having already flagged somatic mutations so they can be skipped in this analysis.')
+    cmd.args['normal_bams'] = Argument(prefix='-n ', type='infile', array=True, level='optional', format='bam', desc='Normal samples (.bam) used to construct the pooled, paired, or flat reference.')
+    cmd.args['vcf'] = Argument(prefix='--vcf ', type='infile', level='optional', format='vcf', desc='Typically you would use a properly formatted VCF from joint tumor-normal SNV calling, e.g. the output of MuTect, VarDict, or FreeBayes, having already flagged somatic mutations so they can be skipped in this analysis.')
     cmd.args['genome'] = Argument(prefix='-f ', type='infile', level='optional', desc='Reference genome, FASTA format (e.g. UCSC hg19.fa)')
     cmd.args['targets'] = Argument(prefix='-t ', type='infile', level='optional', desc='Target intervals (.bed or .list)')
     cmd.args['antitargets'] = Argument(prefix='-a ', type='infile', level='optional', desc='Antitarget intervals (.bed or .list)')
@@ -1043,8 +1043,8 @@ def Manta():
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.tool = '/opt/manta/bin/configManta.py'
     cmd.args['config'] = Argument(prefix='--config ', type='infile', level='optional', desc='provide a configuration file to override defaults')
-    cmd.args['normal_bam'] = Argument(prefix='--normalBam ', type='infile', multi_times=True, level='optional', desc='Normal sample BAM or CRAM file.')
-    cmd.args['tumor_bam'] = Argument(prefix='--tumorBam ', type='infile', level='optional', desc='Tumor sample BAM or CRAM file')
+    cmd.args['normal_bam'] = Argument(prefix='--normalBam ', type='infile', format='bam', multi_times=True, level='optional', desc='Normal sample BAM or CRAM file.')
+    cmd.args['tumor_bam'] = Argument(prefix='--tumorBam ', type='infile', format='bam', level='optional', desc='Tumor sample BAM or CRAM file')
     cmd.args['exome'] = Argument(prefix='--exome', type='bool', default=True, desc='Set options for WES input: turn off depth filters. Supplying the --exome flag at configuration time will provide appropriate settings for WES and other regional enrichment analyses. At present this flag disables all high depth filters')
     cmd.args['ref'] = Argument(prefix='--referenceFasta ', type='infile', desc='samtools-indexed reference fasta file')
     cmd.args['outdir'] = Argument(prefix='--runDir ', default='.', desc='Name of directory to be created where all workflow scripts and output will be written')
@@ -1052,10 +1052,10 @@ def Manta():
     cmd.args['_run'] = Argument(prefix='', type='fix', value='&& ./runWorkflow.py')
     cmd.args['jobs'] = Argument(prefix='-j ', default=cmd.runtime.cpu, desc='number of jobs to submit simultaneously')
     cmd.outputs['out'] = Output(value='{outdir}/results', type='outdir')
-    cmd.outputs['diploid_sv'] = Output(value='{outdir}/results/variants/diploidSV.vcf.gz', report=True, desc='SVs and indels scored and genotyped under a diploid model for the set of normal samples')
-    cmd.outputs['somatic_sv'] = Output(value='{outdir}/results/variants/somaticSV.vcf.gz', report=True, desc='SVs and indels scored under a somatic variant model')
-    cmd.outputs['tumor_sv'] = Output(value='{outdir}/results/variants/tumorSV.vcf.gz', report=True, desc='Subset of the candidateSV.vcf.gz file after removing redundant candidates and small indels less than the minimum scored variant size (50 by default). The SVs are not scored, but include additional details: (1) paired and split read supporting evidence counts for each allele (2) a subset of the filters from the scored tumor-normal model are applied to the single tumor case to improve precision.')
-    cmd.outputs['candidateSmallIndels'] = Output(value='{outdir}/results/variants/candidateSmallIndels.vcf.gz', desc='Subset of the candidateSV.vcf.gz file containing only simple insertion and deletion variants less than the minimum scored variant size (50 by default)')
+    cmd.outputs['diploid_sv'] = Output(value='{outdir}/results/variants/diploidSV.vcf.gz', report=True, format='vcf.gz', desc='SVs and indels scored and genotyped under a diploid model for the set of normal samples')
+    cmd.outputs['somatic_sv'] = Output(value='{outdir}/results/variants/somaticSV.vcf.gz', report=True, format='vcf.gz', desc='SVs and indels scored under a somatic variant model')
+    cmd.outputs['tumor_sv'] = Output(value='{outdir}/results/variants/tumorSV.vcf.gz', report=True, format='vcf.gz', desc='Subset of the candidateSV.vcf.gz file after removing redundant candidates and small indels less than the minimum scored variant size (50 by default). The SVs are not scored, but include additional details: (1) paired and split read supporting evidence counts for each allele (2) a subset of the filters from the scored tumor-normal model are applied to the single tumor case to improve precision.')
+    cmd.outputs['candidateSmallIndels'] = Output(value='{outdir}/results/variants/candidateSmallIndels.vcf.gz', format='vcf.gz', desc='Subset of the candidateSV.vcf.gz file containing only simple insertion and deletion variants less than the minimum scored variant size (50 by default)')
     return cmd
 
 
@@ -1072,14 +1072,14 @@ def ETCHING():
     cmd.runtime.cpu = 4
     cmd.runtime.memory = 20 * 1024 ** 3
     cmd.runtime.tool = 'etching'
-    cmd.args['normal_bam'] = Argument(prefix='-bc ', type='infile', multi_times=True, level='optional', desc='Normal sample BAM or CRAM file.')
-    cmd.args['tumor_bam'] = Argument(prefix='-b ', type='infile', level='optional', desc='Tumor sample BAM or CRAM file')
+    cmd.args['normal_bam'] = Argument(prefix='-bc ', type='infile', multi_times=True, format='bam', level='optional', desc='Normal sample BAM or CRAM file.')
+    cmd.args['tumor_bam'] = Argument(prefix='-b ', type='infile', format='bam', level='optional', desc='Tumor sample BAM or CRAM file')
     cmd.args['genome'] = Argument(prefix='-g ', type='infile', desc='BWA indexed reference genome')
     cmd.args['kmer_database'] = Argument(prefix='-f {}/PGK2', default='/home/hxbio04/dbs/etching/PGK2', type='indir', desc='The Pan-Genome k-mer(PGK) set is used to build PGK filter. wget http://big.hanyang.ac.kr/ETCHING/PGK2.tar.gz')
     cmd.args['threads'] = Argument(prefix='-t ', default=8, desc='threads number')
     cmd.args['prefix'] = Argument(prefix='-o ', desc='output prefix')
-    cmd.outputs['out'] = Output(value='{prefix}.scored.filtered.vcf', report=True)
-    cmd.outputs['out2'] = Output(value='{prefix}.scored.vcf')
+    cmd.outputs['out'] = Output(value='{prefix}.scored.filtered.vcf', format='vcf', report=True)
+    cmd.outputs['out2'] = Output(value='{prefix}.scored.vcf', format='vcf')
     return cmd
 
 
@@ -1090,14 +1090,14 @@ def MarkDuplicates(sample):
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.tool = 'gatk MarkDuplicates'
-    cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='input bam file list')
+    cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', format='bam', multi_times=True, desc='input bam file list')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', default=f'{sample}.unsorted.dup_marked.bam', desc='output bam file')
     cmd.args['METRICS_FILE'] = Argument(prefix='--METRICS_FILE ', default=f'{sample}.dup_metrics.txt')
     cmd.args['VALIDATION_STRINGENCY'] = Argument(prefix='--VALIDATION_STRINGENCY ', default='SILENT')
     cmd.args['OPTICAL_DUPLICATE_PIXEL_DISTANCE'] = Argument(prefix='--OPTICAL_DUPLICATE_PIXEL_DISTANCE ', default=2500, desc='The maximum offset between two duplicate clusters in order to consider them optical duplicates. The default is appropriate for unpatterned versions of the Illumina platform. For the patterned flowcell models, 2500 is moreappropriate. For other platforms and models, users should experiment to find what works best.')
     cmd.args['ASSUME_SORT_ORDER'] = Argument(prefix='--ASSUME_SORT_ORDER ', default='queryname')
     cmd.args['tmpdir'] = Argument(prefix='--TMP_DIR ', default='.', desc='directorie with space available to be used by this program for temporary storage of working files')
-    cmd.outputs['out'] = Output(value='{OUTPUT}')
+    cmd.outputs['out'] = Output(value='{OUTPUT}', format='bam')
     return cmd
 
 
@@ -1158,10 +1158,10 @@ def Gridss():
     cmd.args['jvmheap'] = Argument(prefix='--jvmheap ', default='30g', desc='size of JVM heap for the high-memory component of assembly and variant calling')
     cmd.args['otherjvmheap'] = Argument(prefix='--otherjvmheap ', default='4g', desc='size of JVM heap for everything else. Useful to prevent java out of memory errors when using large (>4Gb) reference genomes')
     cmd.args['maxcoverage'] = Argument(prefix='--maxcoverage ', default=100000, desc='Regions with coverage in excess of this are ignored')
-    cmd.args['bams'] = Argument(prefix='', type='infile', array=True, desc='Input Bam files, the somatic filtering script treats the first bam file as the matched normal, and all subsequent as tumour samples. If you are doing somatic calling, it is strongly recommended to follow this convention.')
+    cmd.args['bams'] = Argument(prefix='', type='infile', array=True, format='bam', desc='Input Bam files, the somatic filtering script treats the first bam file as the matched normal, and all subsequent as tumour samples. If you are doing somatic calling, it is strongly recommended to follow this convention.')
     cmd.args['_mask_repeat'] = Argument(prefix='&& ', type='fix', value='gridss_annotate_vcf_repeatmasker tmp.vcf')
     cmd.args['out'] = Argument(prefix='--output ', desc='output vcf file')
-    cmd.outputs['out'] = Output(value='{out}', desc='output VCF file')
+    cmd.outputs['out'] = Output(value='{out}', desc='output VCF file', format='vcf')
     return cmd
 
 
@@ -1187,12 +1187,12 @@ def AnnotSV():
     cmd.args['snvIndelFiles'] = Argument(prefix='-snvIndelFiles ', type='infile', level='optional', desc='Path of the VCF input file(s) with SNV/indel coordinates used for false positive discovery')
     cmd.args['snvIndelPASS'] = Argument(prefix='-snvIndelPASS ', default='1', range=['0', '1'], desc='To only use variants from VCF input files that passed all filters during the calling')
     cmd.args['snvIndelSamples'] = Argument(prefix='-snvIndelSamples ', level='optional', desc='To specify the sample names from the VCF files defined from the -snvIndelFiles option')
-    cmd.args['SVinputFile'] = Argument(prefix='-SVinputFile ', type='infile', desc='Path of the input file (VCF or BED) with SV coordinates')
+    cmd.args['SVinputFile'] = Argument(prefix='-SVinputFile ', type='infile', format='vcf', desc='Path of the input file (VCF or BED) with SV coordinates')
     cmd.args['SVminSize'] = Argument(prefix='-SVminSize ', default=50, desc='SV minimum size (in bp)')
     cmd.args['reftype'] = Argument(prefix='-tx ', default='RefSeq', range=['RefSeq', 'ENSEMBL'], desc='Origin of the transcripts (RefSeq or ENSEMBL)')
     cmd.args['txFile'] = Argument(prefix='-txFile ', type='infile', level='optional', desc='Path of a file containing a list of preferred genes transcripts to be used in priority during the annotation (Preferred genes transcripts names should be tab or space separated)')
     cmd.args['vcf'] = Argument(prefix='-vcf ', level='optional', default='0', range=['0', '1'], desc='Creation of a VCF output file format (-svtBEDcol needs to be defined too)')
-    cmd.outputs['out'] = Output(value='{outputFile}', desc='output file')
+    cmd.outputs['out'] = Output(value='{outputFile}', desc='output file', format='vcf')
     return cmd
 
 
