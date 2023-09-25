@@ -1144,6 +1144,12 @@ class Workflow:
         contents += 'inputs:\n'
         pos = 0
         for arg_name, arg in cmd.args.items():
+            # 如果arg_prefix是纯数字，需要加引号, 因此所有的都统一加引号
+            if arg.prefix.strip():
+                if '"' in arg.prefix:
+                    arg.prefix = f"'{arg.prefix}'"
+                else:
+                    arg.prefix = f'"{arg.prefix}"'
             if arg.type == 'fix':
                 continue
             if arg_name in ('out', 'in', 'inputs', 'outputs'):
@@ -1159,19 +1165,21 @@ class Workflow:
                arg_type += '?'
 
             if arg.multi_times:
+                # 对于可以重复使用的参数
                 if arg.array:
                     print('! 对于多值且可以重复使用的参数，可能生成结果存在问题')
                 contents += ' '*4 + 'type:\n'
-                contents += ' '*6 + 'type: array\n'
-
-                contents += ' '*6 + f'items: {arg_type}\n'
+                if arg.level == 'optional':
+                    contents += ' '*6 + '- "null"\n'
+                contents += ' '*6 + '- type: array\n'
+                contents += ' '*8 + f'items: {arg_type.replace("?", "")}\n'
                 if arg.prefix.strip():
-                    contents += ' '*6 + 'inputBinding:\n'
-                    contents += ' '*8 + f'prefix: {arg.prefix.strip()}\n'
+                    contents += ' '*8 + 'inputBinding:\n'
+                    contents += ' '*10 + f'prefix: {arg.prefix.strip()}\n'
                     if arg.prefix.endswith(' '):
-                        contents += ' ' * 8 + 'separate: true\n'
+                        contents += ' ' * 10 + 'separate: true\n'
                     else:
-                        contents += ' ' * 8 + 'separate: false\n'
+                        contents += ' ' * 10 + 'separate: false\n'
                 contents += ' '*4 + 'inputBinding:\n'
                 contents += ' '*6 + f'position: {pos}\n'
                 # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
@@ -1219,10 +1227,10 @@ class Workflow:
             if matched_arg_name:
                 matched_arg_name = matched_arg_name[0]
                 if matched_arg_name in ('out', 'in', 'inputs', 'outputs'):
-                    out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs.'+matched_arg_name+'x)')
+                    out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs["'+matched_arg_name+'x"])')
                 else:
-                    out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs.'+matched_arg_name+')')
-            contents += ' '*6 + f'glob: {out_expr}'
+                    out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs["'+matched_arg_name+'"])')
+            contents += ' '*6 + f'glob: {out_expr}\n'
 
         return contents
 
