@@ -1164,27 +1164,26 @@ class Workflow:
                 contents += ' '*4 + 'type:\n'
                 contents += ' '*6 + 'type: array\n'
 
+                contents += ' '*6 + f'items: {arg_type}\n'
+                if arg.prefix.strip():
+                    contents += ' '*6 + 'inputBinding:\n'
+                    contents += ' '*8 + f'prefix: {arg.prefix.strip()}\n'
+                    if arg.prefix.endswith(' '):
+                        contents += ' ' * 8 + 'separate: true\n'
+                    else:
+                        contents += ' ' * 8 + 'separate: false\n'
+                contents += ' '*4 + 'inputBinding:\n'
+                contents += ' '*6 + f'position: {pos}\n'
                 # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
                 if arg.value is not None and arg.type == 'infile':
                     if arg.format == 'bam':
-                        contents += ' ' * 6 + 'secondaryFiles:\n'
-                        contents += ' ' * 8 + '- .bai\n'
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .bai\n'
                     elif arg.format == 'vcf.gz':
-                        contents += ' ' * 6 + 'secondaryFiles:\n'
-                        contents += ' ' * 8 + '- .tbi\n'
-
-                contents += ' '*6 + f'items: {arg_type}\n'
-                contents += ' '*6 + 'inputBinding:\n'
-                contents += ' '*8 + f'prefix: {arg.prefix.strip()}\n'
-                if arg.prefix.endswith(' '):
-                    contents += ' ' * 8 + 'separate: true\n'
-                else:
-                    contents += ' ' * 8 + 'separate: false\n'
-                contents += ' '*4 + 'inputBinding:\n'
-                contents += ' '*6 + f'position {pos}\n'
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .tbi\n'
             else:
                 contents += ' '*4 + f'type: {arg_type}\n'
-
                 # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
                 if arg.value is not None and arg.type == 'infile':
                     if arg.format == 'bam':
@@ -1196,13 +1195,14 @@ class Workflow:
 
                 contents += ' '*4 + 'inputBinding:\n'
                 contents += ' '*6 + f'position: {pos}\n'
-                contents += ' '*6 + f'prefix: {arg.prefix.strip()}\n'
                 if '[' in arg_type:
                     contents += ' '*6 + f'itemSeparator: "{arg.delimiter}"\n'
-                if arg.prefix.endswith(' '):
-                    contents += ' '*6 + 'separate: true\n'
-                else:
-                    contents += ' '*6 + 'separate: false\n'
+                if arg.prefix:
+                    contents += ' ' * 6 + f'prefix: {arg.prefix.strip()}\n'
+                    if arg.prefix.endswith(' '):
+                        contents += ' '*6 + 'separate: true\n'
+                    else:
+                        contents += ' '*6 + 'separate: false\n'
         contents += '\n'
 
         contents += 'outputs:\n'
