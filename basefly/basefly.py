@@ -1145,11 +1145,12 @@ class Workflow:
         pos = 0
         for arg_name, arg in cmd.args.items():
             # 如果arg_prefix是纯数字，需要加引号, 因此所有的都统一加引号
+            separate = "true" if arg.prefix.endswith(' ') else "false"
             if arg.prefix.strip():
                 if '"' in arg.prefix:
-                    arg.prefix = f"'{arg.prefix}'"
+                    arg.prefix = f"'{arg.prefix.strip()}'"
                 else:
-                    arg.prefix = f'"{arg.prefix}"'
+                    arg.prefix = f'"{arg.prefix.strip()}"'
             if arg.type == 'fix':
                 continue
             if arg_name in ('out', 'in', 'inputs', 'outputs'):
@@ -1176,10 +1177,10 @@ class Workflow:
                 if arg.prefix.strip():
                     contents += ' '*8 + 'inputBinding:\n'
                     contents += ' '*10 + f'prefix: {arg.prefix.strip()}\n'
-                    if arg.prefix.endswith(' '):
-                        contents += ' ' * 10 + 'separate: true\n'
-                    else:
-                        contents += ' ' * 10 + 'separate: false\n'
+                    contents += ' ' * 10 + f'separate: {separate}\n'
+                # 添加默认参数值
+                if arg.default and arg.level == 'required':
+                    contents += ' '*4 + f'default: {arg.default}\n'
                 contents += ' '*4 + 'inputBinding:\n'
                 contents += ' '*6 + f'position: {pos}\n'
                 # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
@@ -1192,6 +1193,8 @@ class Workflow:
                         contents += ' ' * 6 + '- .tbi\n'
             else:
                 contents += ' '*4 + f'type: {arg_type}\n'
+                if arg.default and arg.level == 'required':
+                    contents += ' '*4 + f'default: {arg.default}\n'
                 # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
                 if arg.value is not None and arg.type == 'infile':
                     if arg.format == 'bam':
@@ -1207,10 +1210,7 @@ class Workflow:
                     contents += ' '*6 + f'itemSeparator: "{arg.delimiter}"\n'
                 if arg.prefix:
                     contents += ' ' * 6 + f'prefix: {arg.prefix.strip()}\n'
-                    if arg.prefix.endswith(' '):
-                        contents += ' '*6 + 'separate: true\n'
-                    else:
-                        contents += ' '*6 + 'separate: false\n'
+                    contents += ' '*6 + f'separate: {separate}\n'
         contents += '\n'
 
         contents += 'outputs:\n'
