@@ -1102,9 +1102,12 @@ class Workflow:
                 f.write(line+'\n')
 
     def to_cwl_tool(self, cmd: Command):
+        # 如果arg_prefix是纯数字，需要加引号, 因此为方便起见，统一加引号
+        # prefix加引号后，不能存在空格，否则传cwltool在接受参数时会同时给prefix和value加上引号导致参数不可识别，如 gatk ’-a value'
         convert_type: dict[str, str] = {
             'str': 'string',
             'outstr': 'string',
+            'fix': 'string',
             'infile': 'File',
             'outfile': 'File',
             'indir': 'Directory',
@@ -1121,7 +1124,10 @@ class Workflow:
         for each in textwrap.wrap(cmd.meta.desc):
             contents += ' '*4 + each + '\n'
         contents += '\n'
-
+        contents += 'requirements:\n'
+        contents += ' '*2 + 'ShellCommandRequirement: {}\n'
+        contents += ' '*2 + 'InlineJavascriptRequirement: {}\n'
+        contents += '\n'
         contents += 'hints:\n'
         contents += ' '*2 + 'SoftwareRequirement:\n'
         contents += ' '*4 + 'packages:\n'
@@ -1141,23 +1147,54 @@ class Workflow:
         if base_cmd:
             contents += f'baseCommand: {base_cmd}\n'
 
+        def _get_default_value(arg: Argument):
+            default_value = None
+            if arg.type == 'fix':
+                default_value = f'"{arg.value.strip()}"'
+            elif (arg.default is not None) and (arg.level == 'required'):
+                # 有默认值的非必须参数不会在这里处理
+                if arg.default is False:
+                    # python中1==True, 0==False, 但1 is not True
+                    default_value = 'false'
+                elif arg.default is True:
+                    default_value = 'true'
+                elif type(arg.default) == str:
+                    default_value = f'"{arg.default}"'
+                else:
+                    default_value = arg.default
+            return default_value
+
         contents += 'inputs:\n'
         pos = 0
+        arguments_to_process = []
         for arg_name, arg in cmd.args.items():
-            # 如果arg_prefix是纯数字，需要加引号, 因此所有的都统一加引号
+            pos += 1
+            # separate 判断
             separate = "true" if arg.prefix.endswith(' ') else "false"
+            if '\\' in arg.delimiter:
+                arg.delimiter = '\\' + arg.delimiter
+
+            # 处理前缀比较特殊的参数
+            bind_input = True
             if arg.prefix.strip():
+                if '{' in arg.prefix:
+                    # 如果前缀中包含‘{}’格式，可以考虑argument来完成转化
+                    if arg.multi_times or arg.level == 'optional':
+                        print(f'{arg_name} of {cmd.meta.name} is not properly handled, please correct it in other ways')
+                    else:
+                        print(f'try to process argument of {cmd.meta.name} with complex prefix "{arg.prefix}", please do check it')
+                        # 在input部分不会设置binding，因此input只是接收参数值，留给后面的argument部分进行加工
+                        bind_input = False
+                        arguments_to_process.append((pos, arg_name, arg))
                 if '"' in arg.prefix:
                     arg.prefix = f"'{arg.prefix.strip()}'"
                 else:
                     arg.prefix = f'"{arg.prefix.strip()}"'
-            if arg.type == 'fix':
-                continue
+
             if arg_name in ('out', 'in', 'inputs', 'outputs'):
                 # arg名称和cwl保留字段冲突，加x以区别
                 arg_name = arg_name + 'x'
                 arg.name = arg_name
-            pos += 1
             contents += ' '*2 + f'{arg_name}:\n'
             arg_type = convert_type[arg.type]
             if arg.array and (not arg.multi_times):
@@ -1178,39 +1215,86 @@ class Workflow:
                     contents += ' '*8 + 'inputBinding:\n'
                     contents += ' '*10 + f'prefix: {arg.prefix.strip()}\n'
                     contents += ' ' * 10 + f'separate: {separate}\n'
+
                 # 添加默认参数值
-                if arg.default and arg.level == 'required':
-                    contents += ' '*4 + f'default: {arg.default}\n'
-                contents += ' '*4 + 'inputBinding:\n'
-                contents += ' '*6 + f'position: {pos}\n'
-                # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
-                if arg.value is not None and arg.type == 'infile':
-                    if arg.format == 'bam':
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .bai\n'
-                    elif arg.format == 'vcf.gz':
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .tbi\n'
-            else:
-                contents += ' '*4 + f'type: {arg_type}\n'
-                if arg.default and arg.level == 'required':
-                    contents += ' '*4 + f'default: {arg.default}\n'
-                # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
-                if arg.value is not None and arg.type == 'infile':
-                    if arg.format == 'bam':
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .bai\n'
-                    elif arg.format == 'vcf.gz':
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .tbi\n'
+                default_value = _get_default_value(arg)
+                if default_value:
+                    contents += ' ' * 4 + f'default: {default_value}\n'
 
                 contents += ' '*4 + 'inputBinding:\n'
                 contents += ' '*6 + f'position: {pos}\n'
-                if '[' in arg_type:
-                    contents += ' '*6 + f'itemSeparator: "{arg.delimiter}"\n'
-                if arg.prefix:
-                    contents += ' ' * 6 + f'prefix: {arg.prefix.strip()}\n'
-                    contents += ' '*6 + f'separate: {separate}\n'
+
+                # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
+                if arg.value is not None and arg.type == 'infile':
+                    if arg.format == 'bam':
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .bai\n'
+                    elif arg.format == 'vcf.gz':
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .tbi\n'
+                    elif arg.format in ('fasta', 'fa'):
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .fai\n'
+            else:
+                contents += ' '*4 + f'type: {arg_type}\n'
+
+                # 添加默认参数值
+                default_value = _get_default_value(arg)
+                if default_value:
+                    contents += ' ' * 4 + f'default: {default_value}\n'
+
+                # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
+                if arg.value is not None and arg.type == 'infile':
+                    if arg.format == 'bam':
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .bai\n'
+                    elif arg.format == 'vcf.gz':
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .tbi\n'
+                    elif arg.format in ('fasta', 'fa'):
+                        contents += ' ' * 4 + 'secondaryFiles:\n'
+                        contents += ' ' * 6 + '- .fai\n'
+
+                if bind_input:
+                    contents += ' '*4 + 'inputBinding:\n'
+                    contents += ' '*6 + f'position: {pos}\n'
+                    if '[' in arg_type:
+                        contents += ' '*6 + f'itemSeparator: "{arg.delimiter}"\n'
+                    if arg.prefix:
+                        contents += ' ' * 6 + f'prefix: {arg.prefix.strip()}\n'
+                        contents += ' '*6 + f'separate: {separate}\n'
+                    # if arg.type == 'fix':
+                    contents += ' '*6 + 'shellQuote: false\n'
+        contents += '\n'
+
+        # arguments模块加工前缀特殊的参数
+        if arguments_to_process:
+            contents += 'arguments:\n'
+        for pos, arg_name, arg in arguments_to_process:
+            # 去掉前面给prefix加上的引号
+            arg_prefix = arg.prefix[1:-1]
+            if arg.array:
+                if arg.type in ('infile', 'indir'):
+                    # 需要复杂的表达式才能实现
+                    arg_prefix_blocks = arg_prefix.strip().split('{}')
+                    cmd_str = '>\n'
+                    cmd_str += ' '*6 + '${\n'
+                    cmd_str += ' '*8 + f"var cmd = '{arg_prefix_blocks[0]}';\n"
+                    cmd_str += ' '*8 + f'cmd += inputs["{arg_name}"][0].path;\n'
+                    cmd_str += ' '*8 + f'for (var i = 1; i < inputs["{arg_name}"].length; i++)' + '{\n'
+                    cmd_str += ' '*10 + f'cmd += "{arg.delimiter}" + inputs["{arg_name}"][i].path' + '}\n'
+                    if len(arg_prefix_blocks) > 1:
+                        cmd_str += ' '*8 + f"cmd += '{arg_prefix_blocks[1]}';\n"
+                    cmd_str += ' '*8 + 'return cmd' + '\n'
+                    cmd_str += ' '*6 + '}'
+                    arg_prefix = cmd_str
+                else:
+                    arg_prefix = arg_prefix.replace('{}', f'$(inputs["{arg_name}"].join("{arg.delimiter}"))')
+            else:
+                arg_prefix = arg_prefix.replace('{}', f'$(inputs["{arg_name}"])')
+            contents += ' '*2 + f'- valueFrom: {arg_prefix}\n'
+            contents += ' '*4 + 'shellQuote: false\n'
+            contents += ' '*4 + f'position: {pos}\n'
         contents += '\n'
 
         contents += 'outputs:\n'
