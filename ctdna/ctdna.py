@@ -522,8 +522,8 @@ def VardictPaired():
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'vardict-java'
     cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
-    cmd.args['bam'] = Argument(prefix='-b "{}"', type='infile', array=True, delimiter='|', format='bam', desc='The indexed BAM files, tumor|normal')
-    cmd.args['genome'] = Argument(prefix='-G ', type='infile', desc='The reference fasta. Should be indexed (.fai).')
+    cmd.args['bam'] = Argument(prefix='-b ', type='infile', array=True, delimiter='\\|', format='bam', desc='The indexed BAM files, tumor|normal')
+    cmd.args['genome'] = Argument(prefix='-G ', type='infile', format='fasta', desc='The reference fasta. Should be indexed (.fai).')
     cmd.args['threads'] = Argument(prefix='-th ', default=8, desc='Threads count.')
     cmd.args['min-freq'] = Argument(prefix='-f ', default="0.0001", desc='The threshold for allele frequency')
     cmd.args['chromosome'] = Argument(prefix='-c ', default=1, desc='The column of chromosome')
@@ -540,7 +540,7 @@ def VardictPaired():
     cmd.args['count_overlap_by_forward_read'] = Argument(prefix='-u', type='bool', default=True, desc='Indicate unique mode, which when mate pairs overlap, the overlapping part will be counted only once using foward read only')
     cmd.args['bed'] = Argument(prefix='', type='infile', desc='region or bed file')
     cmd.args['_fix'] = Argument(type='fix', value='| var2vcf_paired.pl -A -p 5 -q 22.5 -d 5 -v 2 -f 0.00001 ', desc='pipe to another script')
-    cmd.args['names'] = Argument(prefix='-N "{}"', array=True, delimiter='|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
+    cmd.args['names'] = Argument(prefix='-N ', array=True, delimiter='\\|', desc='The sample name(s).  If only one name is given, the matched will be simply names as "name-match".')
     cmd.args['output'] = Argument(prefix='> ', type='outstr', desc='output vcf name')
     cmd.outputs['out'] = Output(value='{output}', format='bam')
     return cmd
