@@ -357,6 +357,10 @@ class Task:
             if hasattr(each, 'task_id'):
                 self.depends[ind] = each.task_id
         self.depends = [x for x in self.depends if x is not None]
+        # 添加工作路径作为outputs的对象之一
+        if '_OutDir' in self.outputs:
+            print('_OutDir is used by Basefly as task working directory, you should not use this output name')
+        self.outputs['_wkDir'] = Output(value=self.wkdir, type='outdir', name='_wkDir', task_id=self.task_id)
 
     def argo_template(self, wf_tasks):
         # 仅输入文件需要作处理，其他参数如数字或字符串已经在command中硬编码好了
@@ -468,7 +472,7 @@ class Workflow:
 
         if parameters.to_cwl:
             self.to_cwl_workflow(outdir)
-
+            return
         if parameters.rerun_steps:
             rerun_steps = self.get_all_depends(parameters.rerun_steps)
             print('rerun the following steps:', rerun_steps)
@@ -706,6 +710,7 @@ class Workflow:
             raise Exception(f'{task.name} duplicated, please rename it')
         # 更新工作目录
         task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
+        task.outputs['_wkDir'].value = task.wkdir
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
@@ -1332,6 +1337,23 @@ class Workflow:
             'int': 'int',
             'float': 'float',
         }
+
+        # 统一参数名和处理不合适的参数名
+        for task_id, task in self.tasks.items():
+            # 参数赋值
+            for arg_name, arg in task.cmd.args.items():
+                if arg_name in ('out', 'in', 'inputs', 'outputs'):
+                    # arg名称和cwl保留字段冲突，加x以区别
+                    arg.name = arg_name + 'x'
+                else:
+                    arg.name = arg_name
+            for out_name, out_obj in task.cmd.outputs.items():
+                if out_name in ('out', 'in', 'inputs', 'outputs'):
+                    # arg名称和cwl保留字段冲突，加x以区别
+                    out_obj.name =  out_name + 'x'
+                else:
+                    out_obj.name = out_name
+
         contents = '#!/usr/bin/env cwl-runner\n'
         contents += 'cwlVersion: v1.0\n'
         contents += 'class: Workflow\n'
@@ -1350,21 +1372,32 @@ class Workflow:
 
         contents += 'steps:\n'
         for task_id, task in self.tasks.items():
-            contents += ' '*2 + f'{task.name}\n'
+            contents += ' '*2 + f'{task.name}:\n'
             contents += ' '*4 + f'run: {task.cmd.meta.name}.tool.cwl\n'
             contents += ' '*4 + 'in:\n'
             # 参数赋值
-            for arg_name, arg in task.cmd.args.items():
-                if type(arg.value) == TopVar:
-                    contents += ' ' * 6 + f'{arg_name}: {arg.value.name}\n'
-                if type(arg.value) in {Output}:
-                    contents += ' '*6 + f'{arg_name}:\n'
-                    depend_task_name = self.tasks[arg.value.task_id].name
-                    contents += ' '*8 + f'source: {depend_task_name}/{arg.value.name}\n'
+            for _, arg in task.cmd.args.items():
+                arg_name = arg.name
+                arg_values = arg.value if type(arg.value) == list else [arg.value]
+                top_var_values = []
+                out_var_values = []
+                for arg_value in arg_values:
+                    if type(arg_value) == TopVar:
+                        top_var_values.append(arg_value.name)
+                    elif type(arg_value) in {Output}:
+                        depend_task_name = self.tasks[arg_value.task_id].name
+                        out_var_values.append(f'{depend_task_name}/{arg_value.name}')
+                    else:
+                        pass
+                if top_var_values:
+                    contents += ' ' * 6 + f'{arg_name}: {top_var_values}\n'
+                if out_var_values:
+                    contents += ' ' * 6 + f'{arg_name}:\n'
+                    contents += ' ' * 8 + f'source: {out_var_values}\n'
             # 定义输出
             out_names = []
-            for out_name, out_obj in task.cmd.outputs.items():
-                out_names.append(out_name)
+            for _, out_obj in task.cmd.outputs.items():
+                out_names.append(out_obj.name)
             contents += ' '*4 + f'out: [{",".join(out_names)}]\n'
             contents += '\n'
 
@@ -1372,6 +1405,7 @@ class Workflow:
         outfile = os.path.join(outdir, f'{self.meta.name}.wf.cwl')
         with open(outfile, 'w') as f:
             f.write(contents)
+
         # 输出tools
         added_tools = []
         for task_id, task in self.tasks.items():

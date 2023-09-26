@@ -1869,6 +1869,28 @@ def pipeline():
     sam2fastq_task_dict = dict()
     fastp_task_dict = dict()
     groupumi_task_dict = dict()
+
+    # ---fastq信息添加到topvar 方便流程转化---
+    for sample, reads in fastq_info.items():
+        if len(reads) == 2:
+            r1s, r2s = reads
+        else:
+            r1s = reads[0]
+            r2s = [None] * len(r1s)
+        new_r1s = []
+        new_r2s = []
+        for ind, (r1, r2) in enumerate(zip(r1s, r2s), start=1):
+            r1_name = sample+f'_R1_{ind}'
+            r1_topvar = TopVar(value=r1, name=r1_name)
+            new_r1s.append(r1_topvar)
+            r2_name = sample+f'_R2_{ind}'
+            r2_topvar = TopVar(value=r2, name=r2_name)
+            new_r2s.append(r2_topvar)
+            wf.topvars[r1_name] = r1_topvar
+            wf.topvars[r2_name] = r2_topvar
+        fastq_info[sample] = [new_r1s, new_r2s]
+    # ----end of fastq info adding to topvars----
+
     for sample, reads in fastq_info.items():
         # 跳过不需要分析的样本
         if sample in wf.args.exclude_samples:
@@ -2373,7 +2395,8 @@ def pipeline():
     if 'FastqToSam' not in wf.args.skip:
         multiqc_task.depends += list(groupumi_task_dict.values())
     multiqc_task.depends += list(bam_task_dict.values())
-    input_dirs = [x.wkdir for x in multiqc_task.depends]
+    # input_dirs = [x.wkdir for x in multiqc_task.depends]
+    input_dirs = [x.outputs['_wkDir'] for x in multiqc_task.depends]
     args['indirs'].value = input_dirs
     # end
 
