@@ -6,6 +6,7 @@ import sys
 import re
 import argparse
 import textwrap
+import configparser
 from functools import partial
 from uuid import uuid4, UUID
 from dataclasses import dataclass, field
@@ -405,13 +406,20 @@ class TopVar:
     value: Any
     name: str = 'notNamed'
     type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
-
+    format: str = None
     def __post_init__(self):
         if self.type in ['infile', 'indir']:
             # 对输入文件的路径进行绝对化
             if self.value is not None:
                 if os.path.exists(self.value):
                     self.value = os.path.abspath(self.value)
+                    if self.format is None and self.type == 'infile':
+                        if self.value.endswith('.bam'):
+                            self.format = 'bam'
+                        elif self.value.endswith(('.fasta', '.fa')):
+                            self.format = 'fasta'
+                        elif self.value.endswith('vcf.gz'):
+                            self.format = 'vcf.gz'
                 else:
                     raise FileExistsError(self.value)
 
@@ -459,131 +467,34 @@ class Workflow:
         生成类config格式的workflow(->wf.ini)并且允许直接本地执行
         """
         self.finalize()
-        import configparser
-        wf = configparser.ConfigParser()
-        wf.optionxform = str
-        parameters = self.argparser.parse_args()
-        outdir = os.path.abspath(parameters.outdir)
-        self.wkdir = outdir
-        self.parameters = parameters
+        parameters = self.parameters
+        outdir = self.wkdir
 
-        if parameters.skip:
-            self.skip_steps(parameters.skip, skip_depend=not parameters.no_skip_depend)
+        if parameters.update_args:
+            self.update_args(parameters.update_args)
 
         if parameters.to_cwl:
             self.to_cwl_workflow(outdir)
             return
+
         if parameters.rerun_steps:
             rerun_steps = self.get_all_depends(parameters.rerun_steps)
             print('rerun the following steps:', rerun_steps)
         else:
             rerun_steps = tuple()
 
-        if parameters.update_args:
-            self.update_args(parameters.update_args)
-
-        if parameters.assume_success_steps:
-            all_task_names = set(x.name for x in self.tasks.values())
-            all_cmd_names = set(x.cmd.meta.name for x in self.tasks.values())
-            assume_success_tasks = set()
-            for each in parameters.assume_success_steps:
-                matched = []
-                if each in all_task_names:
-                    matched.append(assume_success_tasks)
-                elif each.endswith('*'):
-                    matched += [x for x in all_task_names if x.startswith(each[:-1])]
-                elif each in all_cmd_names:
-                    matched += [x for x in self.tasks.values() if x.cmd.meta.name == each]
-                if not matched:
-                    raise Exception(f'{each} matches no task, you may check the task name by "--list_task"')
-                assume_success_tasks.update(matched)
-        else:
-            assume_success_tasks = set()
-
-        wf['mode'] = dict(
-            outdir=outdir,
-            threads=parameters.threads,
-            retry=parameters.retry,
-            monitor_resource=parameters.monitor_resource,
-            monitor_time_step=3,
-            check_resource_before_run=not parameters.no_check_resource_before_run,
-        )
-
-        for task_id, task in self.tasks.items():
-            cmd_wkdir = os.path.join("${mode:outdir}", task.parent_wkdir, task.name)
-            task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
-            mount_vols = {cmd_wkdir}
-
-            # format output
-            value_dict = dict()
-            for k, v in task.cmd.args.items():
-                value_dict[k] = v.value or v.default
-            for _, out in task.outputs.items():
-                out.value = out.value.replace('~', '').format(**value_dict)
-
-            if task.name in assume_success_tasks:
-                task.depends = None
-                wf[task.name] = dict(
-                    depend='',
-                    cmd="using previous result",
-                    mem=task.cmd.runtime.memory,
-                    cpu=task.cmd.runtime.cpu,
-                    max_mem=task.cmd.runtime.max_memory,
-                    max_cpu=task.cmd.runtime.max_cpu,
-                    timeout=task.cmd.runtime.timeout,
-                    image='' if not parameters.docker else (task.cmd.runtime.image or ''),
-                    wkdir=cmd_wkdir,
-                    mount_vols=';'.join(mount_vols)
-                )
-                continue
-
-            # 参数赋值处理
-            for k, v in task.cmd.args.items():
-                if type(v) != Argument:
-                    raise Exception(f'Wrong assignment of value to {k} with {v}')
-                if v.level == 'required' and v.value is None:
-                    v.value = v.default
-                if type(v.value) in [list, tuple]:
-                    values = v.value
-                else:
-                    values = [v.value]
-                for value in values:
-                    if type(value) == Output and value.type in ['outfile', 'outdir']:
-                        if not value.value.startswith('${{mode:'):
-                            try:
-                                value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].parent_wkdir, self.tasks[value.task_id].name, value.value)
-                            except Exception as e:
-                                print(e, value, task.name)
-                                print(f'you may skip this step {task.name} by --assume_success_step')
-                        # mount_vols.add(os.path.join(outdir, self.tasks[value.task_id].name))
-                        mount_vols.add(os.path.join("${mode:outdir}", self.tasks[value.task_id].parent_wkdir, self.tasks[value.task_id].name))
-
-                    elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir'] and value.value is not None:
-                        if value.type == 'infile':
-                            file_dir = os.path.dirname(value.value)
-                            mount_vols.add(os.path.abspath(file_dir))
-                        elif value.type == 'indir':
-                            mount_vols.add(os.path.abspath(value.value))
-                    elif v.type in ['infile', 'indir'] and type(value) == str:
-                        # 直接从参数的类型来判定输入文件，这样，即使没有定义TopVar或者TmpVar等对象，也可以顺利生成nestcmd
-                        if v.type == 'infile':
-                            mount_vols.add(os.path.abspath(os.path.dirname(value)))
-                        elif v.type == 'indir':
-                            mount_vols.add(os.path.abspath(value))
-
-            wf[task.name] = dict(
-                depend=','.join(self.tasks[x].name for x in task.depends) if task.depends else '',
-                cmd=task.cmd.format_cmd(self.tasks),
-                mem=task.cmd.runtime.memory,
-                cpu=task.cmd.runtime.cpu,
-                max_mem=task.cmd.runtime.max_memory,
-                max_cpu=task.cmd.runtime.max_cpu,
-                timeout=task.cmd.runtime.timeout,
-                image='' if not parameters.docker else (task.cmd.runtime.image or ''),
-                docker_cmd_prefix=task.cmd.runtime.docker_cmd_prefix,
-                wkdir=cmd_wkdir,
-                mount_vols=';'.join(mount_vols)
-            )
+        def logging_run_cmd():
+            with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
+                args = []
+                for each in sys.argv:
+                    if {'(', '{', ';'} & set(each):
+                        args.append('"' + each + '"')
+                    else:
+                        args.append(each)
+                f.write('python ' + ' '.join(args) + '\n')
+                # print(sys.argv)
+                f.write('>>>Argument Detail\n')
+                f.write('{}\n'.format(dict(parameters.__dict__.items())))
 
         if parameters.list_cmd:
             self.list_cmd()
@@ -595,44 +506,27 @@ class Workflow:
             os.makedirs(outdir, exist_ok=True)
             self.generate_docs(os.path.join(outdir, f'{self.meta.name}.ReadMe.md'))
             self.dump_args(out=os.path.join(outdir, 'wf.static.args.json'))
-            with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
-                args = []
-                for each in sys.argv:
-                    if {'(', '{', ';'} & set(each):
-                        args.append('"' + each + '"')
-                    else:
-                        args.append(each)
-                f.write('python ' + ' '.join(args) + '\n')
-                # print(sys.argv)
-                f.write('>>>Argument Detail\n')
-                f.write('{}\n'.format(dict(parameters.__dict__.items())))
+            logging_run_cmd()
+            # 生成config格式的流程
             outfile = os.path.join(outdir, f'{self.meta.name}.ini')
             with open(outfile, 'w') as configfile:
-                wf.write(configfile)
+                self.convert_to_config_wf()
+                self.wf.write(configfile)
             # 仅仅为了生成流程图
             RunCommands(outfile, draw_state_graph=True)
         elif parameters.run:
             os.makedirs(outdir, exist_ok=True)
             self.dump_args(out=os.path.join(outdir, 'wf.static.args.json'))
-            with open(os.path.join(outdir, "wf.run.cmd.txt"), 'w') as f:
-                args = []
-                for each in sys.argv:
-                    if {'(', '{', ';'} & set(each):
-                        args.append('"' + each + '"')
-                    else:
-                        args.append(each)
-                f.write('python ' + ' '.join(args) + '\n')
-                # print(sys.argv)
-                f.write('>>>Argument Detail\n')
-                f.write('{}\n'.format(dict(parameters.__dict__.items())))
+            logging_run_cmd()
             outfile = os.path.join(outdir, f'{self.meta.name}.ini')
             with open(outfile, 'w') as configfile:
-                wf.write(configfile)
+                self.convert_to_config_wf()
+                self.wf.write(configfile)
 
             wf = run_wf(
                 outfile,
                 timeout=parameters.wait_resource_time,
-                assume_success_steps=tuple(assume_success_tasks),
+                assume_success_steps=tuple(self.assume_successed),
                 plot=parameters.plot,
                 rerun_steps=rerun_steps
             )
@@ -692,7 +586,123 @@ class Workflow:
                 else:
                     print('Failed to found expected output: ', src_dir)
         else:
-            print('No actions, you may provide one action parameter: --run, --dry_run, --list_cmd, --list_task, -show_cmd')
+            print('No actions, you may provide one action parameter: --run, --dry_run, --list_cmd, --list_task, -show_cmd, --to_cwl')
+
+    def convert_to_config_wf(self):
+        outdir = self.wkdir
+        parameters = self.parameters
+        # 处理假设已经成功运行的步骤，这些步骤将不再运行，不论是否真的成功
+        # 但后续如果有依赖他们的步骤，运行时直接读取这些步骤的结果就可以了，如果结果不存在就会报错
+        if parameters.assume_success_steps:
+            all_task_names = set(x.name for x in self.tasks.values())
+            all_cmd_names = set(x.cmd.meta.name for x in self.tasks.values())
+            assume_success_tasks = set()
+            for each in parameters.assume_success_steps:
+                matched = []
+                if each in all_task_names:
+                    matched.append(assume_success_tasks)
+                elif each.endswith('*'):
+                    matched += [x for x in all_task_names if x.startswith(each[:-1])]
+                elif each in all_cmd_names:
+                    matched += [x for x in self.tasks.values() if x.cmd.meta.name == each]
+                if not matched:
+                    raise Exception(f'{each} matches no task, you may check the task name by "--list_task"')
+                assume_success_tasks.update(matched)
+        else:
+            assume_success_tasks = set()
+        self.assume_successed = assume_success_tasks
+
+        # 开始流程转化
+        wf = configparser.ConfigParser()
+        wf.optionxform = str
+        self.wf = wf
+        wf['mode'] = dict(
+            outdir=outdir,
+            threads=parameters.threads,
+            retry=parameters.retry,
+            monitor_resource=parameters.monitor_resource,
+            monitor_time_step=3,
+            check_resource_before_run=not parameters.no_check_resource_before_run,
+        )
+
+        for task_id, task in self.tasks.items():
+            cmd_wkdir = os.path.join("${mode:outdir}", task.parent_wkdir, task.name)
+            task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
+            mount_vols = {cmd_wkdir}
+
+            # format output
+            value_dict = dict()
+            for k, v in task.cmd.args.items():
+                value_dict[k] = v.value or v.default
+            for _, out in task.outputs.items():
+                out.value = out.value.replace('~', '').format(**value_dict)
+
+            if task.name in assume_success_tasks:
+                task.depends = None
+                wf[task.name] = dict(
+                    depend='',
+                    cmd="using previous result",
+                    mem=task.cmd.runtime.memory,
+                    cpu=task.cmd.runtime.cpu,
+                    max_mem=task.cmd.runtime.max_memory,
+                    max_cpu=task.cmd.runtime.max_cpu,
+                    timeout=task.cmd.runtime.timeout,
+                    image='' if not parameters.docker else (task.cmd.runtime.image or ''),
+                    wkdir=cmd_wkdir,
+                    mount_vols=';'.join(mount_vols)
+                )
+                continue
+
+            # 参数赋值处理
+            for k, v in task.cmd.args.items():
+                if type(v) != Argument:
+                    raise Exception(f'Wrong assignment of value to {k} with {v}')
+                if v.level == 'required' and v.value is None:
+                    v.value = v.default
+                if type(v.value) in [list, tuple]:
+                    values = v.value
+                else:
+                    values = [v.value]
+                for value in values:
+                    if type(value) == Output and value.type in ['outfile', 'outdir']:
+                        if not value.value.startswith('${{mode:'):
+                            try:
+                                value.value = os.path.join("${{mode:outdir}}", self.tasks[value.task_id].parent_wkdir,
+                                                           self.tasks[value.task_id].name, value.value)
+                            except Exception as e:
+                                print(e, value, task.name)
+                                print(f'you may skip this step {task.name} by --assume_success_step')
+                        # mount_vols.add(os.path.join(outdir, self.tasks[value.task_id].name))
+                        mount_vols.add(os.path.join("${mode:outdir}", self.tasks[value.task_id].parent_wkdir,
+                                                    self.tasks[value.task_id].name))
+
+                    elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile',
+                                                                                             'indir'] and value.value is not None:
+                        if value.type == 'infile':
+                            file_dir = os.path.dirname(value.value)
+                            mount_vols.add(os.path.abspath(file_dir))
+                        elif value.type == 'indir':
+                            mount_vols.add(os.path.abspath(value.value))
+                    elif v.type in ['infile', 'indir'] and type(value) == str:
+                        # 直接从参数的类型来判定输入文件，这样，即使没有定义TopVar或者TmpVar等对象，也可以顺利生成nestcmd
+                        if v.type == 'infile':
+                            mount_vols.add(os.path.abspath(os.path.dirname(value)))
+                        elif v.type == 'indir':
+                            mount_vols.add(os.path.abspath(value))
+
+            wf[task.name] = dict(
+                depend=','.join(self.tasks[x].name for x in task.depends) if task.depends else '',
+                cmd=task.cmd.format_cmd(self.tasks),
+                mem=task.cmd.runtime.memory,
+                cpu=task.cmd.runtime.cpu,
+                max_mem=task.cmd.runtime.max_memory,
+                max_cpu=task.cmd.runtime.max_cpu,
+                timeout=task.cmd.runtime.timeout,
+                image='' if not parameters.docker else (task.cmd.runtime.image or ''),
+                docker_cmd_prefix=task.cmd.runtime.docker_cmd_prefix,
+                wkdir=cmd_wkdir,
+                mount_vols=';'.join(mount_vols)
+            )
 
     def add_topvars(self, var_dict):
         for k, v in var_dict.items():
@@ -888,8 +898,8 @@ class Workflow:
         self.wkdir = self.args.outdir
 
     def finalize(self):
+        # depends统一转为task_id
         for task_id, task in self.tasks.items():
-            # depends统一转为task_id
             for ind, each in enumerate(task.depends):
                 if hasattr(each, 'task_id'):
                     task.depends[ind] = each.task_id
@@ -900,7 +910,7 @@ class Workflow:
             for k, v in task.cmd.args.items():
                 if type(v.value) == Output:
                     if v.value.task_id not in task.depends:
-                        # print(f'You may forgot to add dependency {self.tasks[v.value.task_id].name} for {task.name}. We will fixed it.')
+                        # print(f'You may forget to add dependency {self.tasks[v.value.task_id].name} for {task.name}. We will fixed it.')
                         task.depends.append(v.value.task_id)
                 elif type(v.value) == list:
                     for each in v.value:
@@ -909,15 +919,15 @@ class Workflow:
                                 task.depends.append(each.task_id)
                 else:
                     pass
-            # 为了生成cwl，下面的代码移动到run中
-            # # format output
-            # value_dict = dict()
-            # for k, v in task.cmd.args.items():
-            #     value_dict[k] = v.value or v.default
-            # for _, out in task.outputs.items():
-            #     out.value = out.value.replace('~', '').format(**value_dict)
+        # 优先处理跳过的步骤
+        parameters = self.argparser.parse_args()
+        self.wkdir = os.path.abspath(parameters.outdir)
+        self.parameters = parameters
+        if parameters.skip:
+            self.skip_steps(parameters.skip, skip_depend=not parameters.no_skip_depend)
 
-            # 添加workflow的output
+        # 处理完跳过的步骤后，根据输出参数的report标签更新流程的outputs
+        for task_id, task in self.tasks.items():
             for _name, out in task.outputs.items():
                 if out.report:
                     self.outputs[task.name+'.'+_name] = out
@@ -1106,7 +1116,22 @@ class Workflow:
             for line in lines:
                 f.write(line+'\n')
 
-    def to_cwl_tool(self, cmd: Command):
+    def _cwl_add_secondary_files(self, arg: Argument or Output or TopVar):
+        # 所有secondary都设置为optional
+        contents = ''
+        if (arg.value is not None) and arg.type in ('infile', 'outfile'):
+            if arg.format == 'bam':
+                contents += ' ' * 4 + 'secondaryFiles:\n'
+                contents += ' ' * 6 + '- .bai?\n'
+            elif arg.format == 'vcf.gz':
+                contents += ' ' * 4 + 'secondaryFiles:\n'
+                contents += ' ' * 6 + '- .tbi?\n'
+            elif arg.format in ('fasta', 'fa'):
+                contents += ' ' * 4 + 'secondaryFiles:\n'
+                contents += ' ' * 6 + '- .fai?\n'
+        return contents
+
+    def to_cwl_tool(self, cmd: Command, version='v1.2'):
         # 如果arg_prefix是纯数字，需要加引号, 因此为方便起见，统一加引号
         # prefix加引号后，不能存在空格，否则传cwltool在接受参数时会同时给prefix和value加上引号导致参数不可识别，如 gatk ’-a value'
         convert_type: dict[str, str] = {
@@ -1122,11 +1147,11 @@ class Workflow:
             'float': 'float',
         }
         contents = '#!/usr/bin/env cwl-runner\n'
-        contents += 'cwlVersion: v1.0\n'
+        contents += f'cwlVersion: {version}\n'
         contents += 'class: CommandLineTool\n'
         contents += f'label: "{cmd.meta.name}"\n'
         contents += f'doc: |\n'
-        for each in textwrap.wrap(cmd.meta.desc):
+        for each in textwrap.wrap(cmd.meta.desc.strip().replace('  ', '')):
             contents += ' '*4 + each + '\n'
         contents += '\n'
         contents += 'requirements:\n'
@@ -1144,7 +1169,7 @@ class Workflow:
         contents += ' '*2 + "ResourceRequirement:\n"
         contents += ' '*4 + f"coresMin: {cmd.runtime.cpu}\n"
         # RAM的单位为M
-        contents += ' '*4 + f"ramMin: {int(cmd.runtime.memory/1024)}\n"
+        contents += ' '*4 + f"ramMin: {int(cmd.runtime.memory/1024/1024)}\n"
 
         contents += '\n'
         base_cmd = cmd.runtime.tool_dir + cmd.runtime.tool
@@ -1164,7 +1189,10 @@ class Workflow:
                 elif arg.default is True:
                     default_value = 'true'
                 elif type(arg.default) == str:
-                    default_value = f'"{arg.default}"'
+                    if '"' in arg.default:
+                        default_value = f"'{arg.default}'"
+                    else:
+                        default_value = f'"{arg.default}"'
                 else:
                     default_value = arg.default
             return default_value
@@ -1225,41 +1253,16 @@ class Workflow:
                 default_value = _get_default_value(arg)
                 if default_value:
                     contents += ' ' * 4 + f'default: {default_value}\n'
-
+                contents += self._cwl_add_secondary_files(arg)
                 contents += ' '*4 + 'inputBinding:\n'
                 contents += ' '*6 + f'position: {pos}\n'
-
-                # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
-                if arg.value is not None and arg.type == 'infile':
-                    if arg.format == 'bam':
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .bai\n'
-                    elif arg.format == 'vcf.gz':
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .tbi\n'
-                    elif arg.format in ('fasta', 'fa'):
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .fai\n'
             else:
                 contents += ' '*4 + f'type: {arg_type}\n'
-
                 # 添加默认参数值
                 default_value = _get_default_value(arg)
                 if default_value:
                     contents += ' ' * 4 + f'default: {default_value}\n'
-
-                # 当输入的文件是bam文件或vcf.gz文件时，需要加secondaryFiles
-                if arg.value is not None and arg.type == 'infile':
-                    if arg.format == 'bam':
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .bai\n'
-                    elif arg.format == 'vcf.gz':
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .tbi\n'
-                    elif arg.format in ('fasta', 'fa'):
-                        contents += ' ' * 4 + 'secondaryFiles:\n'
-                        contents += ' ' * 6 + '- .fai\n'
-
+                contents += self._cwl_add_secondary_files(arg)
                 if bind_input:
                     contents += ' '*4 + 'inputBinding:\n'
                     contents += ' '*6 + f'position: {pos}\n'
@@ -1309,6 +1312,7 @@ class Workflow:
                 out_name = out_name + 'x'
             contents += ' '*2 + f'{out_name}:\n'
             contents += ' '*4 + f'type: {convert_type[out_obj.type]}\n'
+            contents += self._cwl_add_secondary_files(out_obj)
             contents += ' '*4 + 'outputBinding:\n'
             out_expr = out_obj.value
             # 目前仅考支持输出表达式包含一个参数名称变量
@@ -1319,11 +1323,13 @@ class Workflow:
                     out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs["'+matched_arg_name+'x"])')
                 else:
                     out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs["'+matched_arg_name+'"])')
+            if out_name == '_wkDir':
+                out_expr = '$(runtime.outdir)'
             contents += ' '*6 + f'glob: {out_expr}\n'
 
         return contents
 
-    def to_cwl_workflow(self, outdir):
+    def to_cwl_workflow(self, outdir, version='v1.2'):
         # 生成流程草稿
         os.makedirs(outdir, exist_ok=True)
         convert_type: dict[str, str] = {
@@ -1355,19 +1361,35 @@ class Workflow:
                     out_obj.name = out_name
 
         contents = '#!/usr/bin/env cwl-runner\n'
-        contents += 'cwlVersion: v1.0\n'
+        contents += f'cwlVersion: {version}\n'
         contents += 'class: Workflow\n'
 
         contents += 'inputs:\n'
         for name, top_var in self.topvars.items():
-            contents += ' '*2 + f'{name}: {convert_type[top_var.type]}\n'
+            contents += ' '*2 + f'{name}:\n'
+            var_type = convert_type[top_var.type]
+            if top_var.value is None:
+                var_type += '?'
+            contents += ' '*4 + f'type: {var_type}\n'
+            if top_var.value is not None:
+                if top_var.type in ['infile', 'indir']:
+                    contents += ' '*4 + f'default:\n'
+                    contents += ' '*6 + f'class: {var_type}\n'
+                    contents += ' '*6 + f'path: {top_var.value}\n'
+                else:
+                    contents += ' ' * 4 + f'default: {top_var.value}\n'
+            contents += self._cwl_add_secondary_files(top_var)
         contents += '\n'
 
         contents += 'outputs:\n'
         for name, out_obj in self.outputs.items():
             contents += ' ' * 2 + f'{name}:\n'
             contents += ' ' * 4 + f'type: {convert_type[out_obj.type]}\n'
-            contents += ' ' * 4 + f'outputSource: {name.replace(".", "/", 1)}\n'
+            step_name, out_name = name.rsplit('.', 1)
+            if out_name in ('out', 'in', 'inputs', 'outputs'):
+                # arg名称和cwl保留字段冲突，加x以区别
+                out_name += 'x'
+            contents += ' ' * 4 + f'outputSource: {step_name}/{out_name}\n'
         contents += '\n'
 
         contents += 'steps:\n'
@@ -1377,23 +1399,43 @@ class Workflow:
             contents += ' '*4 + 'in:\n'
             # 参数赋值
             for _, arg in task.cmd.args.items():
+                if arg.type == 'fix':
+                    continue
                 arg_name = arg.name
                 arg_values = arg.value if type(arg.value) == list else [arg.value]
                 top_var_values = []
                 out_var_values = []
+                flow_var_values = []
                 for arg_value in arg_values:
-                    if type(arg_value) == TopVar:
+                    if type(arg_value) in (TopVar, TmpVar):
                         top_var_values.append(arg_value.name)
                     elif type(arg_value) in {Output}:
                         depend_task_name = self.tasks[arg_value.task_id].name
                         out_var_values.append(f'{depend_task_name}/{arg_value.name}')
                     else:
-                        pass
+                        # value和默认值不一样，那么就在这里添加上
+                        if (arg_value is not None) and (arg_value != arg.default):
+                            if type(arg_value) == str:
+                                if arg_value.endswith('"'):
+                                    arg_value = f"'{arg_value}'"
+                                else:
+                                    arg_value = f'"{arg_value}"'
+                            flow_var_values.append(arg_value)
                 if top_var_values:
+                    if len(top_var_values) == 1:
+                        top_var_values = top_var_values[0]
                     contents += ' ' * 6 + f'{arg_name}: {top_var_values}\n'
+                if flow_var_values:
+                    if len(flow_var_values) == 1:
+                        flow_var_values = flow_var_values[0]
+                    contents += ' ' * 6 + f'{arg_name}: \n'
+                    contents += ' ' * 8 + f'default: {flow_var_values}\n'
                 if out_var_values:
+                    if len(out_var_values) == 1:
+                        out_var_values = out_var_values[0]
                     contents += ' ' * 6 + f'{arg_name}:\n'
                     contents += ' ' * 8 + f'source: {out_var_values}\n'
+
             # 定义输出
             out_names = []
             for _, out_obj in task.cmd.outputs.items():
