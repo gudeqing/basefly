@@ -113,7 +113,7 @@ def SamToFastq():
     cmd.args['read2'] = Argument(prefix='-2 ', desc='write paired reads flagged READ2 to FILE')
     cmd.args['tags'] = Argument(prefix='-T ', level='optional', array=True, delimiter=',', desc='copy arbitrary tags to the FASTQ header line')
     cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='Number of additional threads to use')
-    cmd.args['bam'] = Argument(prefix='', type='outstr', desc='input bam file')
+    cmd.args['bam'] = Argument(prefix='', type='infile', desc='input bam file')
     cmd.outputs['read1'] = Output(value='{read1}')
     cmd.outputs['read2'] = Output(value='{read2}')
     return cmd
