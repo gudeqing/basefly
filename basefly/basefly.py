@@ -1363,6 +1363,8 @@ class Workflow:
         contents = '#!/usr/bin/env cwl-runner\n'
         contents += f'cwlVersion: {version}\n'
         contents += 'class: Workflow\n'
+        contents += 'requirements:\n'
+        contents += ' '*2 + 'MultipleInputFeatureRequirement: {}\n'
 
         contents += 'inputs:\n'
         for name, top_var in self.topvars.items():
