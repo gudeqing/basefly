@@ -135,6 +135,7 @@ class RunTime:
     # docker cmd prefix
     docker_cmd_prefix2: str = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash'
     docker_cmd_prefix: str = 'docker run --rm --privileged -i --entrypoint /bin/bash'
+    docker_local_user: bool = False
 
 
 @dataclass()
@@ -718,6 +719,8 @@ class Workflow:
         existed_names = {x.name for x in self.tasks.values()}
         if task.name in existed_names:
             raise Exception(f'{task.name} duplicated, please rename it')
+        if task.cmd.runtime.docker_local_user:
+            task.cmd.runtime.docker_cmd_prefix = task.cmd.runtime.docker_cmd_prefix2
         # 更新工作目录
         task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
         task.outputs['_wkDir'].value = task.wkdir
