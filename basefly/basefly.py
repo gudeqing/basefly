@@ -911,6 +911,9 @@ class Workflow:
 
             # 根据输入数据矫正忘了添加的依赖
             for k, v in task.cmd.args.items():
+                # 如果某个参数是必须参数，而且有默认值，但是没有赋值，那么将value=default
+                if (v.level == 'required') and (v.default is not None) and (v.value is None):
+                    v.value = v.default
                 if type(v.value) == Output:
                     if v.value.task_id not in task.depends:
                         # print(f'You may forget to add dependency {self.tasks[v.value.task_id].name} for {task.name}. We will fixed it.')
@@ -1207,24 +1210,28 @@ class Workflow:
             contents += f'baseCommand: {base_cmd}\n'
 
         def _get_default_value(arg: Argument):
-            default_value = None
+            value = None
+            if arg.type == 'outstr':
+                # print('类型为outstr', 定义tool时不给默认值)
+                arg.default = None
+                return value
             if arg.type == 'fix':
-                default_value = f'"{arg.value.strip()}"'
+                value = f'"{arg.value.strip()}"'
             elif (arg.default is not None) and (arg.level == 'required'):
                 # 有默认值的非必须参数不会在这里处理
                 if arg.default is False:
                     # python中1==True, 0==False, 但1 is not True
-                    default_value = 'false'
+                    value = 'false'
                 elif arg.default is True:
-                    default_value = 'true'
+                    value = 'true'
                 elif type(arg.default) == str:
                     if '"' in arg.default:
-                        default_value = f"'{arg.default}'"
+                        value = f"'{arg.default}'"
                     else:
-                        default_value = f'"{arg.default}"'
+                        value = f'"{arg.default}"'
                 else:
-                    default_value = arg.default
-            return default_value
+                    value = arg.default
+            return value
 
         contents += 'inputs:\n'
         pos = 0
@@ -1432,6 +1439,9 @@ class Workflow:
             for _, arg in task.cmd.args.items():
                 if arg.type == 'fix':
                     continue
+                if arg.type == 'outstr':
+                    # 特殊处理，该类型变量归为动态变量
+                    arg.default = None
                 arg_name = arg.name
                 arg_values = arg.value if type(arg.value) == list else [arg.value]
                 top_var_values = []
