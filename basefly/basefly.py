@@ -1129,6 +1129,16 @@ class Workflow:
             elif arg.format in ('fasta', 'fa'):
                 contents += ' ' * 4 + 'secondaryFiles:\n'
                 contents += ' ' * 6 + '- .fai?\n'
+                if type(arg) == TopVar:
+                    if os.path.exists(arg.value+'.ann'):
+                        contents += ' ' * 6 + '- .dict?\n'
+                        contents += ' ' * 6 + '- ".0123?"\n'
+                        contents += ' ' * 6 + '- .ann?\n'
+                        contents += ' ' * 6 + '- .bwt.2bit.64?\n'
+                        contents += ' ' * 6 + '- .pac?\n'
+                        contents += ' ' * 6 + '- .amb?\n'
+                        contents += ' ' * 6 + '- .bwt?\n'
+                        contents += ' ' * 6 + '- .sa?\n'
         return contents
 
     def to_cwl_tool(self, cmd: Command, version='v1.2'):
