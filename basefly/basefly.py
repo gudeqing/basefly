@@ -1123,6 +1123,22 @@ class Workflow:
         # 所有secondary都设置为optional
         contents = ''
         if (arg.value is not None) and arg.type in ('infile', 'outfile'):
+            if type(arg.value) == str:
+                arg_value = arg.value
+            else:
+                if type(arg.value) == list:
+                    arg_value = arg.value[0]
+                else:
+                    arg_value = arg.value
+                if arg_value and hasattr(arg_value, 'value'):
+                    arg_value = arg_value.value
+
+            if arg_value.endswith('.bam'):
+                arg.format = 'bam'
+            elif arg_value.endswith('.vcf.gz'):
+                arg.format = 'vcf.gz'
+            elif arg_value.endswith(('.fa', '.fasta')):
+                arg.format = 'fasta'
             if arg.format == 'bam':
                 contents += ' ' * 4 + 'secondaryFiles:\n'
                 contents += ' ' * 6 + '- .bai?\n'
@@ -1132,9 +1148,9 @@ class Workflow:
             elif arg.format in ('fasta', 'fa'):
                 contents += ' ' * 4 + 'secondaryFiles:\n'
                 contents += ' ' * 6 + '- .fai?\n'
+                contents += ' ' * 6 + '- ^.dict?\n'
                 if type(arg) == TopVar:
                     if os.path.exists(arg.value+'.ann'):
-                        contents += ' ' * 6 + '- .dict?\n'
                         contents += ' ' * 6 + '- ".0123?"\n'
                         contents += ' ' * 6 + '- .ann?\n'
                         contents += ' ' * 6 + '- .bwt.2bit.64?\n'
