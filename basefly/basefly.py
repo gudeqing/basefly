@@ -1437,13 +1437,16 @@ class Workflow:
             contents += ' '*4 + 'in:\n'
             # 参数赋值
             for _, arg in task.cmd.args.items():
-                if arg.type == 'fix':
+                if arg.type == 'fix' or (arg.value is None):
                     continue
                 if arg.type == 'outstr':
                     # 特殊处理，该类型变量归为动态变量
                     arg.default = None
+                if arg.default == arg.value:
+                    # 如果参数的默认值和赋值一致，则不写进流程
+                    continue
                 arg_name = arg.name
-                arg_values = arg.value if type(arg.value) == list else [arg.value]
+                arg_values = arg.value if (arg.array or arg.multi_times) else [arg.value]
                 top_var_values = []
                 out_var_values = []
                 flow_var_values = []
@@ -1454,8 +1457,8 @@ class Workflow:
                         depend_task_name = self.tasks[arg_value.task_id].name
                         out_var_values.append(f'{depend_task_name}/{arg_value.name}')
                     else:
-                        # value和默认值不一样，那么就在这里添加上
-                        if (arg_value is not None) and (arg_value != arg.default):
+                        if arg_value is not None:
+                            # 处理字符串参数
                             if type(arg_value) == str:
                                 if arg_value.endswith('"'):
                                     arg_value = f"'{arg_value}'"
