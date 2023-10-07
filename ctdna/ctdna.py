@@ -1766,7 +1766,7 @@ def pipeline():
                     help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.add_argument('-bed', help="bed file for target region")
-    wf.add_argument('-bgzip_bed', help="The BED file must be bgzip-compressed and tabix-indexed, which is required by Manta")
+    wf.add_argument('-bgzip_bed', required=False, help="The BED file must be bgzip-compressed and tabix-indexed, which is required by Manta")
     wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
     wf.add_argument('-umi', required=True, help='A string describes the read structural. Such as “1S3M3S143T,1S3M3S143T” denotes UMIs locate at 2-4bp of read1 and read2')
     wf.add_argument('--call_duplex', default=False, action='store_true', help='Calls duplex consensus sequences from reads generated from the same double-stranded source molecule.')
@@ -1784,14 +1784,14 @@ def pipeline():
     # 收集参数
     wf.parse_args()
     top_vars = dict(
-        ref=TopVar(value=os.path.abspath(wf.args.ref), type='infile'),
-        bed=TopVar(value=os.path.abspath(wf.args.bed), type='infile'),
-        bgzip_bed=TopVar(value=os.path.abspath(wf.args.bgzip_bed), type='infile'),
-        vep_cache=TopVar(value=os.path.abspath(wf.args.vep_cache), type='indir'),
-        vep_plugin=TopVar(value=os.path.abspath(wf.args.vep_plugin) if wf.args.vep_plugin else None, type='indir'),
-        pair_info=TopVar(value=os.path.abspath(wf.args.pair) if wf.args.pair else None),
-        germline_vcf=TopVar(value=os.path.abspath(wf.args.germline_vcf), type='infile'),
-        bwaMemIndexImage=TopVar(value=os.path.abspath(wf.args.bwaMemIndexImage) if wf.args.bwaMemIndexImage else None, type='infile'),
+        ref=TopVar(value=wf.args.ref, type='infile'),
+        bed=TopVar(value=wf.args.bed, type='infile'),
+        bgzip_bed=TopVar(value=wf.args.bgzip_bed, type='infile'),
+        vep_cache=TopVar(value=wf.args.vep_cache, type='indir'),
+        vep_plugin=TopVar(value=wf.args.vep_plugin, type='indir'),
+        pair_info=TopVar(value=wf.args.pair, type='infile'),
+        germline_vcf=TopVar(value=wf.args.germline_vcf, type='infile'),
+        bwaMemIndexImage=TopVar(value=wf.args.bwaMemIndexImage, type='infile'),
     )
     wf.add_topvars(top_vars)
 
@@ -1880,10 +1880,10 @@ def pipeline():
         new_r2s = []
         for ind, (r1, r2) in enumerate(zip(r1s, r2s), start=1):
             r1_name = sample+f'_R1_{ind}'
-            r1_topvar = TopVar(value=r1, name=r1_name)
+            r1_topvar = TopVar(value=r1, name=r1_name, type='str')
             new_r1s.append(r1_topvar)
             r2_name = sample+f'_R2_{ind}'
-            r2_topvar = TopVar(value=r2, name=r2_name)
+            r2_topvar = TopVar(value=r2, name=r2_name, type='str')
             new_r2s.append(r2_topvar)
             wf.topvars[r1_name] = r1_topvar
             wf.topvars[r2_name] = r2_topvar
