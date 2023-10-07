@@ -359,10 +359,10 @@ class Task:
             if hasattr(each, 'task_id'):
                 self.depends[ind] = each.task_id
         self.depends = [x for x in self.depends if x is not None]
-        # 添加工作路径作为outputs的对象之一
-        if '_OutDir' in self.outputs:
-            print('_OutDir is used by Basefly as task working directory, you should not use this output name')
-        self.outputs['_wkDir'] = Output(value=self.wkdir, type='outdir', name='_wkDir', task_id=self.task_id)
+        # 永远添加工作路径作为outputs的对象之一
+        if '_wkdir_' in self.outputs:
+            raise Exception('"_wkdir_" is used by Basefly as task working directory, you should not use this name')
+        self.outputs['_wkdir_'] = Output(value=self.wkdir, type='outdir', name='_wkdir_', task_id=self.task_id)
 
     def argo_template(self, wf_tasks):
         # 仅输入文件需要作处理，其他参数如数字或字符串已经在command中硬编码好了
@@ -723,7 +723,7 @@ class Workflow:
             task.cmd.runtime.docker_cmd_prefix = task.cmd.runtime.docker_cmd_prefix2
         # 更新工作目录
         task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
-        task.outputs['_wkDir'].value = task.wkdir
+        task.outputs['_wkdir_'].value = task.wkdir
         self.tasks[task.task_id] = task
         return task, task.cmd.args
 
@@ -1359,7 +1359,7 @@ class Workflow:
                     out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs["'+matched_arg_name+'x"])')
                 else:
                     out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs["'+matched_arg_name+'"])')
-            if out_name == '_wkDir':
+            if out_name == '_wkdir_':
                 out_expr = '$(runtime.outdir)'
             contents += ' '*6 + f'glob: {out_expr}\n'
 
@@ -1421,7 +1421,7 @@ class Workflow:
 
         contents += 'outputs:\n'
         for name, out_obj in self.outputs.items():
-            contents += ' ' * 2 + f'{name}:\n'
+            contents += ' ' * 2 + f'{name.replace(".", "_").replace("-", "_")}:\n'
             contents += ' ' * 4 + f'type: {convert_type[out_obj.type]}\n'
             step_name, out_name = name.rsplit('.', 1)
             if out_name in ('out', 'in', 'inputs', 'outputs'):
@@ -1502,7 +1502,8 @@ class Workflow:
                 outfile = os.path.join(outdir, f'{name}.tool.cwl')
                 with open(outfile, 'w') as f:
                     f.write(self.to_cwl_tool(cmd))
-        # 新建2个空文件
+
+        # 因特殊需要，新建2个空文件
         for each in ['LICENSE', 'R.md']:
             outfile = os.path.join(outdir, each)
             with open(outfile, 'w') as f:

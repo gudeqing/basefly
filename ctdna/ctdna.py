@@ -1781,7 +1781,6 @@ def pipeline():
     wf.add_argument('-germline_vcf', default='/home/hxbio04/dbs/hg19/af-only-gnomad.raw.sites.b37.vcf.gz', help='for Mutect2 input, will be used for germline variant filtering')
     wf.add_argument('-bwaMemIndexImage', required=False, help='bwa-mem-index-mage for artifact alignment filtering. you may created it with tool BwaMemIndexImageCreator with only fasta as input')
 
-
     # 收集参数
     wf.parse_args()
     top_vars = dict(
