@@ -118,6 +118,7 @@ class Argument:
             self.editable = False
 
 
+@dataclass()
 class RunTime:
     image: str = None
     # 软件所在目录
