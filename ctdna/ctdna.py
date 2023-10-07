@@ -2395,7 +2395,7 @@ def pipeline():
         multiqc_task.depends += list(groupumi_task_dict.values())
     multiqc_task.depends += list(bam_task_dict.values())
     # input_dirs = [x.wkdir for x in multiqc_task.depends]
-    input_dirs = [x.outputs['_wkDir'] for x in multiqc_task.depends]
+    input_dirs = [x.outputs['_wkdir_'] for x in multiqc_task.depends]
     args['indirs'].value = input_dirs
     # end
 
