@@ -1400,7 +1400,7 @@ class Workflow:
             for out_name, out_obj in task.cmd.outputs.items():
                 if out_name in ('out', 'in', 'inputs', 'outputs'):
                     # arg名称和cwl保留字段冲突，加x以区别
-                    out_obj.name =  out_name + 'x'
+                    out_obj.name = out_name + 'x'
                 else:
                     out_obj.name = out_name
 
@@ -1481,7 +1481,12 @@ class Workflow:
                     if len(flow_var_values) == 1:
                         flow_var_values = flow_var_values[0]
                     contents += ' ' * 6 + f'{arg_name}: \n'
-                    contents += ' ' * 8 + f'default: {flow_var_values}\n'
+                    if arg.type in ['infile', 'indir']:
+                        contents += ' ' * 8 + 'default:\n'
+                        contents += ' ' * 10 + f'class: {convert_type[arg.type]}\n'
+                        contents += ' ' * 10 + f'path: {flow_var_values}\n'
+                    else:
+                        contents += ' ' * 8 + f'default: {flow_var_values}\n'
                 if out_var_values:
                     if len(out_var_values) == 1:
                         out_var_values = out_var_values[0]
