@@ -86,7 +86,7 @@ class Argument:
             self.type = 'float'
         elif type(self.default) == bool:
             self.type = 'bool'
-        elif type(self.default) == list:
+        elif type(self.default) in {list, tuple}:
             if type(self.default[0]) == int and self.type == 'str':
                 # print(f'{self.name}: type of default value is not agree with type specified!')
                 self.type = 'int'
