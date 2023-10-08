@@ -154,7 +154,26 @@ def MarkIlluminaAdapters():
     return cmd
 
 
+def Bam2Fastq():
+    cmd = Command()
+    cmd.meta.name = 'Bam2Fastq'
+    cmd.meta.desc = 'bam to fastq'
+    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.memory = 10*1024**3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'gatk SamToFastq'
+    cmd.args['input'] = Argument(prefix='-I ', type='infile', desc='input ubam file')
+    cmd.args['CLIPPING_ATTRIBUTE'] = Argument(prefix='--CLIPPING_ATTRIBUTE ', level='optional', desc='The attribute that stores the position at which the SAM record should be clipped ')
+    cmd.args['CLIPPING_ACTION'] = Argument(prefix='--CLIPPING_ACTION ', level='optional', desc="The action that should be taken with clipped reads: 'X' means the reads and qualities should be trimmed at the clipped position; 'N' means the bases should be changed to Ns in the clipped region; and any integer means that the base qualities should be set to that value in the clipped region. ")
+    cmd.args['read1'] = Argument(prefix='-F ', type='outstr', default='output read1 fastq')
+    cmd.args['read2'] = Argument(prefix='-F2 ', type='outstr', default='output read2 fastq')
+    cmd.outputs['read1'] = Output(value="{read1}", format='fastq', type='outfile')
+    cmd.outputs['read2'] = Output(value="{read2}", format='fastq', type='outfile')
+    return cmd
+
+
 def Bam2FastqBwaMem(sample):
+    # 如果把这个工具转化为cwl，使用cwltool运行时，由于设置了--net=none会导致错误的结果
     cmd = Command()
     cmd.meta.name = 'Bam2FastqBwaMem'
     cmd.meta.desc = 'bam to fastq and then mapping'
@@ -178,7 +197,7 @@ def Bam2FastqBwaMem(sample):
     return cmd
 
 
-def bwa_mem(sample, platform):
+def BwaMem2(sample, platform):
     cmd = Command()
     cmd.meta.name = 'BwaMem2'
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
@@ -264,7 +283,7 @@ def GroupReadsByUmi(sample):
     cmd.args['assign-tag'] = Argument(prefix='-T ', default='MI', desc='The output tag for UMI grouping.')
     cmd.args['min-map-q'] = Argument(prefix='-m ', default=1, desc='Minimum mapping quality for mapped reads.')
     cmd.outputs['out'] = Output(value='{output}', format='bam')
-    cmd.outputs['family_size'] = Output(value=f'{sample}.family.size.txt')
+    cmd.outputs['family_size'] = Output(value='{family-size-histogram}')
     return cmd
 
 
@@ -471,7 +490,7 @@ def Bamdst():
     cmd.args['outdir'] = Argument(prefix='-o ', type='outstr', default='.', desc='output directory')
     cmd.args['flank'] = Argument(prefix='-f ', default=100, desc='calculate the coverage of flank region')
     cmd.args['input'] = Argument(prefix='', type='infile', format='bam', desc='input bam file')
-    cmd.outputs['outdir'] = Output(value='{outdir}', report=True)
+    cmd.outputs['outdir'] = Output(value='{outdir}', report=True, type='outdir')
     cmd.outputs['coverage_report'] = Output(value='{outdir}/coverage.report')
     cmd.outputs['depth_file'] = Output(value='{outdir}/depth.tsv.gz')
     return cmd
@@ -1932,7 +1951,7 @@ def pipeline():
             fastp_task_dict[uniq_tag] = fastp_task
 
             if 'FastqToSam' in wf.args.skip:
-                map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag='fastp-'+sample, depends=[fastp_task])
+                map_task, args = wf.add_task(BwaMem2(sample, 'Illumina'), tag='fastp-' + sample, depends=[fastp_task])
                 args['read1'].value = fastp_task.outputs['out1']
                 args['read2'].value = fastp_task.outputs['out2']
                 args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
@@ -1958,12 +1977,24 @@ def pipeline():
             args['metrics'].value = uniq_tag + '.markadapters.metircs.txt'
             args['output'].value = uniq_tag + '.markadapters.ubam'
 
-            # bwa alignment
-            bwa_task, args = wf.add_task(Bam2FastqBwaMem(uniq_tag), tag=uniq_tag, depends=[index_task, markadapter_task])
+            # 一步进行: bam to fastq and bwa alignment
+            # bwa_task, args = wf.add_task(Bam2FastqBwaMem(uniq_tag), tag=uniq_tag, depends=[index_task, markadapter_task])
+            # args['input'].value = markadapter_task.outputs['out']
+            # args['CLIPPING_ATTRIBUTE'].value = 'XT'
+            # # 为了在mergeBamAlignment时和markIlluminaAdapters的输入保持一致，建议下面的设置为‘N'
+            # args['CLIPPING_ACTION'].value = 'N'
+            # args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+
+            # 为了cwltool正常运行，尝试将上述分开2步进行：bam to fastq and bwa alignment
+            bam2fq_task, args = wf.add_task(Bam2Fastq(), tag=uniq_tag)
             args['input'].value = markadapter_task.outputs['out']
             args['CLIPPING_ATTRIBUTE'].value = 'XT'
-            # 为了在mergeBamAlignment时和markIlluminaAdapters的输入保持一致，建议下面的设置为‘N'
             args['CLIPPING_ACTION'].value = 'N'
+            args['read1'].value = uniq_tag + '.R1.fq.gz'
+            args['read2'].value = uniq_tag + '.R2.fq.gz'
+            bwa_task, args = wf.add_task(BwaMem2(uniq_tag, 'Illumina'), tag='First-' + uniq_tag)
+            args['read1'].value = bam2fq_task.outputs['read1']
+            args['read2'].value = bam2fq_task.outputs['read2']
             args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
 
             # merge mapped bam and unmapped bam
@@ -2053,7 +2084,7 @@ def pipeline():
         args['out2'].value = sample + '.consensus.bq_correct.R2.fq.gz'
         sam2fastq_task_dict[sample] = reformat_task
 
-        map_task, args = wf.add_task(bwa_mem(sample, 'Illumina'), tag=sample, depends=[reformat_task])
+        map_task, args = wf.add_task(BwaMem2(sample, 'Illumina'), tag=sample, depends=[reformat_task])
         args['read1'].value = reformat_task.outputs['read1']
         args['read2'].value = reformat_task.outputs['read2']
         args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
