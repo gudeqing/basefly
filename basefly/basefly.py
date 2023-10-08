@@ -86,6 +86,15 @@ class Argument:
             self.type = 'float'
         elif type(self.default) == bool:
             self.type = 'bool'
+        elif type(self.default) == list:
+            if type(self.default[0]) == int and self.type == 'str':
+                # print(f'{self.name}: type of default value is not agree with type specified!')
+                self.type = 'int'
+            elif type(self.default[0]) == float and self.type == 'str':
+                # print(f'{self.name}: type of default value is not agree with type specified!')
+                self.type = 'float'
+            elif type(self.default[0]) == bool:
+                self.type = 'bool'
 
         if self.type == 'bool':
             # 对于布尔参数，其一定为必要参数类型,可选范围为True或False
