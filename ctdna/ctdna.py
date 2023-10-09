@@ -887,7 +887,7 @@ def mutscan():
     cmd.args['support'] = Argument(prefix='--support ', default=2, desc='min read support for reporting a mutation')
     cmd.outputs['json'] = Output(value='{json}')
     cmd.outputs['html'] = Output(value='{html}')
-    cmd.outputs['outdir'] = Output(value='.', report=True)
+    cmd.outputs['outdir'] = Output(value='.', report=True, type='outdir')
     return cmd
 
 

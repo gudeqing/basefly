@@ -1464,6 +1464,7 @@ class Workflow:
         output_content = contents
 
         contents = 'steps:\n'
+        more_input_contents = dict()
         for task_id, task in self.tasks.items():
             contents += ' ' * 2 + f'{task.name}:\n'
             contents += ' ' * 4 + f'run: {task.cmd.meta.name}.tool.cwl\n'
@@ -1475,7 +1476,7 @@ class Workflow:
                 if arg.type == 'outstr':
                     # 特殊处理，该类型变量归为动态变量
                     arg.default = None
-                if arg.default == arg.value:
+                if arg.default == arg.value and arg.type not in ['infile', 'indir']:
                     # 如果参数的默认值和赋值一致，则不写进流程
                     continue
                 arg_name = arg.name
@@ -1505,24 +1506,33 @@ class Workflow:
                 if flow_var_values:
                     if len(flow_var_values) == 1:
                         flow_var_values = flow_var_values[0]
-                    # 对于输入文件或目录需要特殊处理
                     if arg.type in ['infile', 'indir']:
+                        # 对于输入文件或目录需要特殊处理
                         input_var_name = task.name + '_' + arg_name
                         input_var_name = input_var_name.replace('-', '_')
+                        path = f'path: {flow_var_values}\n'.replace('"', '').replace("'", '')
+                        if path in more_input_contents:
+                            # 通过文件路径本身去重，在input模块仅仅定义一次输入，变量名称以第一个为主
+                            input_var_name = more_input_contents[path]['input_var_name']
+                        # 传递参数
                         contents += ' ' * 6 + f'{arg_name}: {input_var_name}\n'
                         # 输入文件的定义放在流程的inputs板块
                         if type(flow_var_values) == str:
-                            input_content += ' ' * 2 + f'{input_var_name}:\n'
-                            input_content += ' ' * 4 + f'type: {convert_type[arg.type]}\n'
-                            input_content += ' ' * 4 + 'default:\n'
-                            input_content += ' ' * 6 + f'class: {convert_type[arg.type]}\n'
-                            input_content += ' ' * 6 + f'path: {flow_var_values}\n'.replace('"', '').replace("'", '')
+                            more_input_contents[path] = {
+                                'name': f'{input_var_name}:\n',
+                                'type': f'type: {convert_type[arg.type]}\n',
+                                'default': 'default:\n',
+                                'class': f'class: {convert_type[arg.type]}\n',
+                                'input_var_name': input_var_name
+                            }
                         elif type(flow_var_values) == list:
-                            input_content += ' ' * 2 + f'{input_var_name}:\n'
-                            input_content += ' ' * 4 + f'type: {convert_type[arg.type]}[]\n'
-                            input_content += ' ' * 4 + 'default:\n'
-                            input_content += ' ' * 6 + f'class: {convert_type[arg.type]}[]\n'
-                            input_content += ' ' * 6 + f'path: {flow_var_values}\n'.replace('"', '').replace("'", '')
+                            more_input_contents[path] = {
+                                'name': f'{input_var_name}:\n',
+                                'type': f'type: {convert_type[arg.type]}[]\n',
+                                'default': 'default:\n',
+                                'class': f'class: {convert_type[arg.type]}[]\n',
+                                'input_var_name': input_var_name
+                            }
                     else:
                         contents += ' ' * 6 + f'{arg_name}: \n'
                         contents += ' ' * 8 + f'default: {flow_var_values}\n'
@@ -1531,7 +1541,6 @@ class Workflow:
                         out_var_values = out_var_values[0]
                     contents += ' ' * 6 + f'{arg_name}:\n'
                     contents += ' ' * 8 + f'source: {out_var_values}\n'
-
             # 定义输出
             out_names = []
             for _, out_obj in task.cmd.outputs.items():
@@ -1539,6 +1548,15 @@ class Workflow:
             contents += ' ' * 4 + f'out: [{",".join(out_names)}]\n'
             contents += '\n'
         step_content = contents
+
+        # 增加input_contents:
+        for path, content_dict in more_input_contents.items():
+            input_content += ' ' * 2 + content_dict['name']
+            input_content += ' ' * 4 + content_dict['type']
+            input_content += ' ' * 4 + content_dict['default']
+            input_content += ' ' * 6 + content_dict['class']
+            input_content += ' ' * 6 + path
+
         # 输出流程
         outfile = os.path.join(outdir, f'{self.meta.name}.wf.cwl')
         with open(outfile, 'w') as f:
