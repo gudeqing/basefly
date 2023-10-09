@@ -720,7 +720,7 @@ def stat_context_seq_error():
     cmd.args['center_size'] = Argument(prefix='-center_size ', default=(1, 1), array=True, desc='extending size around ref base during background noise estimating')
     cmd.args['out_prefix'] = Argument(prefix='-out_prefix ', type='outstr', desc='output file prefix')
     cmd.outputs['stat_per_site'] = Output(value='{out_prefix}.each_site.txt', report=True)
-    cmd.outputs['context_error_rate'] = Output(value='{out_prefix}.centered*_site.json', report=True, format='bam')
+    cmd.outputs['context_error_rate'] = Output(value='{out_prefix}.centered*_site.json', report=True, format='json')
     return cmd
 
 
