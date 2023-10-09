@@ -1792,7 +1792,7 @@ def pipeline():
     wf.add_argument('--call_duplex', default=False, action='store_true', help='Calls duplex consensus sequences from reads generated from the same double-stranded source molecule.')
     wf.add_argument('--markdup', default=False, action='store_true', help='mark duplication reads, this option can only be used when FastqToSam is skipped, and enables non-umi based variant calling')
     wf.add_argument('-scatter', default=10, help='scatter number used for interval splitting of mutect2 variant calling steps')
-    wf.add_argument('-min_af', default=0.001, help='Minimum Variant Frequency Cutoff')
+    wf.add_argument('-min_af', default=0.001, type=float, help='Minimum Variant Frequency Cutoff')
 
     # 参考数据库参数
     wf.add_argument('-ref', default='/home/hxbio04/dbs/hg19/hs37d5.fa', help='reference fasta file')

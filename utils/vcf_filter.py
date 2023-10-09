@@ -74,7 +74,7 @@ from collections import Counter
 import pysam
 from pysam import FastaFile, VariantFile, AlignmentFile, VariantHeader, VariantRecord
 from Bio import Align
-from stat_3bases_error import estimate_context_seq_error
+# from stat_3bases_error import estimate_context_seq_error
 __author__ = 'gdq'
 """
 要求vcf每一行只包含一个突变，这个可以通过bcftools norm 快速实现
