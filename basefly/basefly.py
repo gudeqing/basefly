@@ -10,6 +10,7 @@ import configparser
 from functools import partial
 from uuid import uuid4, UUID
 from dataclasses import dataclass, field
+
 try:
     from typing import Any, List, Dict, Literal
 except:
@@ -37,7 +38,7 @@ __author__ = 'gdq'
 4. 定义workflow对象： 
     1. 由task对象可构成workflow对象，workflow = dict(task1=task_body, task2=task_body, ...)
     2. 当然也可以给workflow对象添加outputs对象, task的outputs继承自Command的outputs
-    
+
 5. 定义方法: 依据Task对象生成具体的cmd信息。
 6. 定义方法: 将Command/Task对象转换成wdl脚本
 7. 定义方法将workflow转换成wdl流程等（放弃）、argo_workflow（待完善）、自定义的流程(不妨命名为basefly)
@@ -141,7 +142,7 @@ class RunTime:
     max_memory: int = 0
     max_cpu: int = 0
     # 运行时间上限默认7天
-    timeout: int = 3600*24*7
+    timeout: int = 3600 * 24 * 7
     # docker cmd prefix
     docker_cmd_prefix2: str = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash'
     docker_cmd_prefix: str = 'docker run --rm --privileged -i --entrypoint /bin/bash'
@@ -186,10 +187,11 @@ class Command:
     args: Dict[str, Argument] = field(default_factory=dict)
     # 下面支持用wdl的定义’~‘符号, 当前脚本要求所有命令行的输出皆为文件
     outputs: Dict[str, Output] = field(default_factory=dict)
-    
+
     def __post_init__(self):
         # other_args是本设计自留的特殊参数,可以用来传递用户从来没有定义但是软件本身确实包含的参数
-        self.args['other_args'] = Argument(prefix='', default='', level='optional', desc='This argument is designed to provide any arguments that are not wrapped in Command')
+        self.args['other_args'] = Argument(prefix='', default='', level='optional',
+                                           desc='This argument is designed to provide any arguments that are not wrapped in Command')
 
     def format_cmd(self, wf_tasks=None):
         # 该函数应该在参数被具体赋值后才能调用
@@ -393,20 +395,20 @@ class Task:
                         lines += [' ' * 8 + f'path: {v.value}']
 
         # container info
-        lines += [' '*2 + 'container:']
-        lines += [' '*4 + f'image: {self.cmd.runtime.image}']
-        lines += [' '*4 + 'command: [sh, -c]']
-        lines += [' '*4 + f'args: ["{self.cmd.format_cmd(wf_tasks=wf_tasks)}"]']
+        lines += [' ' * 2 + 'container:']
+        lines += [' ' * 4 + f'image: {self.cmd.runtime.image}']
+        lines += [' ' * 4 + 'command: [sh, -c]']
+        lines += [' ' * 4 + f'args: ["{self.cmd.format_cmd(wf_tasks=wf_tasks)}"]']
 
         # outputs
         if self.cmd.outputs:
             value_dict = {k: v.value or v.default for k, v in self.cmd.args.items()}
-            lines += [' '*2 + 'outputs:']
-            lines += [' '*4 + 'artifacts:']
+            lines += [' ' * 2 + 'outputs:']
+            lines += [' ' * 4 + 'artifacts:']
             for k, v in self.cmd.outputs.items():
                 lines += [' ' * 6 + f'- name: {k}']
                 lines += [' ' * 8 + f'path: {v.value.format(**value_dict)}']
-        return [' '*2+x for x in lines]
+        return [' ' * 2 + x for x in lines]
 
 
 @dataclass()
@@ -418,6 +420,7 @@ class TopVar:
     name: str = 'notNamed'
     type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
     format: str = None
+
     def __post_init__(self):
         if self.type in ['infile', 'indir']:
             # 对输入文件的路径进行绝对化
@@ -547,7 +550,8 @@ class Workflow:
             outputs_dir = os.path.join(outdir, 'Outputs')
             os.makedirs(outputs_dir, exist_ok=True)
             shutil.copyfile(outfile, os.path.join(outputs_dir, f'{self.meta.name}.ini'))
-            shutil.copyfile(os.path.join(outdir, 'wf.static.args.json'), os.path.join(outputs_dir, 'wf.static.args.json'))
+            shutil.copyfile(os.path.join(outdir, 'wf.static.args.json'),
+                            os.path.join(outputs_dir, 'wf.static.args.json'))
             shutil.copyfile(os.path.join(outdir, 'wf.run.cmd.txt'), os.path.join(outputs_dir, 'wf.run.cmd.txt'))
             shutil.copyfile(os.path.join(outdir, 'state.svg'), os.path.join(outputs_dir, 'state.svg'))
             for name, out in self.outputs.items():
@@ -687,8 +691,7 @@ class Workflow:
                         mount_vols.add(os.path.join("${mode:outdir}", self.tasks[value.task_id].parent_wkdir,
                                                     self.tasks[value.task_id].name))
 
-                    elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile',
-                                                                                             'indir'] and value.value is not None:
+                    elif (type(value) == TopVar or type(value) == TmpVar) and value.type in ['infile', 'indir'] and value.value is not None:
                         if value.type == 'infile':
                             file_dir = os.path.dirname(value.value)
                             mount_vols.add(os.path.abspath(file_dir))
@@ -723,7 +726,7 @@ class Workflow:
                 v.value = os.path.abspath(v.value)
         self.topvars.update(var_dict)
 
-    def add_task(self, cmd: Command, depends: list = [], parent_wkdir: str ='', name: str = None, tag: str = None):
+    def add_task(self, cmd: Command, depends: list = [], parent_wkdir: str = '', name: str = None, tag: str = None):
         self.task_order += 1
         task = Task(cmd=cmd, depends=depends.copy(), name=name, tag=tag, parent_wkdir=parent_wkdir)
         existed_names = {x.name for x in self.tasks.values()}
@@ -881,22 +884,33 @@ class Workflow:
         )
         wf_args = parser.add_argument_group('Arguments for controlling running mode')
         wf_args.add_argument('-outdir', metavar='workdir', default=os.path.join(os.getcwd(), 'Result'), help='结果目录')
-        wf_args.add_argument('--run', default=False, action='store_true', help="默认不运行流程, 仅生成流程; 如果outdir目录已经存在cmd_state.txt文件，则自动续跑")
+        wf_args.add_argument('--run', default=False, action='store_true',
+                             help="默认不运行流程, 仅生成流程; 如果outdir目录已经存在cmd_state.txt文件，则自动续跑")
         wf_args.add_argument('--docker', default=False, action='store_true', help="指示是否使用docker镜像创造运行环境")
-        wf_args.add_argument('--plot', default=False, action='store_true', help="该参数用于通知是否对分析流程进行实时绘图，生成的流程图可以显示任务之间的依赖关系,也可以显示每个任务的参数信息，同时还能根据每个节点的颜色判断任务的运行状态以及任务完成需要的时间'")
+        wf_args.add_argument('--plot', default=False, action='store_true',
+                             help="该参数用于通知是否对分析流程进行实时绘图，生成的流程图可以显示任务之间的依赖关系,也可以显示每个任务的参数信息，同时还能根据每个节点的颜色判断任务的运行状态以及任务完成需要的时间'")
         wf_args.add_argument('-threads', metavar='max-workers', default=3, type=int, help="允许的最大并行的任务数量, 默认3")
-        wf_args.add_argument('-update_args', metavar='update-args', required=False, help="输入参数配置文件, json格式. 流程每次运行时都会输出wf.args.json, 由于其中包含一些样本信息参数，不可直接使用，但可以根据此模板修改")
-        wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+', help='指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
-        wf_args.add_argument('--no_skip_depend', default=False, action='store_true', help="当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤")
-        wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+', help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可能是: 重新设置了命令参数. 使用--list_task可查看候选,可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task")
-        wf_args.add_argument('-assume_success_steps', metavar=('task_name', 'task_cmd_name'), default=list(), nargs='+', help="假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果(需要把之前的运行结果放到当前结果目录). 使用--list_task可查看候选, 可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task,也可以使用cmd.meata.name")
-        wf_args.add_argument('-retry', metavar='max-retry', default=1, type=int, help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
+        wf_args.add_argument('-update_args', metavar='update-args', required=False,
+                             help="输入参数配置文件, json格式. 流程每次运行时都会输出wf.args.json, 由于其中包含一些样本信息参数，不可直接使用，但可以根据此模板修改")
+        wf_args.add_argument('-skip', metavar=('step1', 'task3'), default=list(), nargs='+',
+                             help='指定要跳过的步骤或具体task,空格分隔,默认程序会自动跳过依赖他们的步骤, 使用--list_cmd or --list_task可查看候选')
+        wf_args.add_argument('--no_skip_depend', default=False, action='store_true',
+                             help="当使用skip参数时, 如果同时指定该参数，则不会自动跳过依赖的步骤")
+        wf_args.add_argument('-rerun_steps', metavar=('task3', 'task_prefix'), default=list(), nargs='+',
+                             help="指定需要重跑的步骤，不论其是否已经成功完成，空格分隔, 这样做的可能原因可能是: 重新设置了命令参数. 使用--list_task可查看候选,可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task")
+        wf_args.add_argument('-assume_success_steps', metavar=('task_name', 'task_cmd_name'), default=list(), nargs='+',
+                             help="假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果(需要把之前的运行结果放到当前结果目录). 使用--list_task可查看候选, 可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task,也可以使用cmd.meata.name")
+        wf_args.add_argument('-retry', metavar='max-retry', default=1, type=int,
+                             help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
         wf_args.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 不会显示指定跳过的步骤")
         wf_args.add_argument('-show_cmd', metavar='cmd-query', help="提供一个cmd名称,输出该cmd的样例")
         wf_args.add_argument('--list_task', default=False, action="store_true", help="仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤")
-        wf_args.add_argument('--monitor_resource', default=False, action='store_true', help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
-        wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=900, type=int, help="等待资源的时间上限, 默认每次等待时间为900秒, 等待时间超过这个时间且资源不足时判定任务失败")
-        wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true', help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
+        wf_args.add_argument('--monitor_resource', default=False, action='store_true',
+                             help='是否监控每一步运行时的资源消耗, 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
+        wf_args.add_argument('-wait_resource_time', metavar='wait-time', default=900, type=int,
+                             help="等待资源的时间上限, 默认每次等待时间为900秒, 等待时间超过这个时间且资源不足时判定任务失败")
+        wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true',
+                             help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
         wf_args.add_argument('--dry_run', default=False, action='store_true', help='不运行流程，仅仅输出markdown格式的流程说明文档和流程配置文件')
         wf_args.add_argument('--to_cwl', default=False, action='store_true', help='输出cwl格式的流程草稿')
         self.argparser = parser
@@ -946,7 +960,7 @@ class Workflow:
         for task_id, task in self.tasks.items():
             for _name, out in task.outputs.items():
                 if out.report:
-                    self.outputs[task.name+'.'+_name] = out
+                    self.outputs[task.name + '.' + _name] = out
 
     def generate_docs(self, out):
         """
@@ -1025,7 +1039,7 @@ class Workflow:
                     contents += [f'+ 描述: {arg.desc}']
             contents += [f'### 模块普通参数']
             for name, arg in tool.args.items():
-                if not name.startswith('_') and  (arg.type not in ['infile', 'indir']):
+                if not name.startswith('_') and (arg.type not in ['infile', 'indir']):
                     contents += [f'#### {name}']
                     contents += [f'+ 类型: {arg.type}']
                     contents += [f'+ 默认值: {arg.default}']
@@ -1066,7 +1080,7 @@ class Workflow:
         lines += [' ' * 2 + f'generateName: {self.meta.name.lower()}']
         lines += ['spec:']
         # entry point
-        lines += [' '*2 + 'entrypoint: main']
+        lines += [' ' * 2 + 'entrypoint: main']
         artifacts = [k for k, v in self.topvars.items() if v.type in ['infile', 'indir']]
         if artifacts:
             lines += [' ' * 2 + 'arguments:']
@@ -1082,22 +1096,22 @@ class Workflow:
 
         # DAG templates
         lines += ['']
-        lines += [' '*2 + 'templates:']
-        lines += [' '*2 + '- name: main']
-        lines += [' '*4 + 'dag:']
-        lines += [' '*6 + 'tasks:']
+        lines += [' ' * 2 + 'templates:']
+        lines += [' ' * 2 + '- name: main']
+        lines += [' ' * 4 + 'dag:']
+        lines += [' ' * 6 + 'tasks:']
         for task_id, task in self.tasks.items():
             task.name = task.name.replace('_', '-')
-            lines += [' '*6 + f'- name: {task.name}']
+            lines += [' ' * 6 + f'- name: {task.name}']
             if task.depends:
-                lines += [' '*8 + 'dependencies: ' + str([self.tasks[x].name for x in task.depends]).replace("'", '')]
-            lines += [' '*8 + f'template: {task.name}']
+                lines += [' ' * 8 + 'dependencies: ' + str([self.tasks[x].name for x in task.depends]).replace("'", '')]
+            lines += [' ' * 8 + f'template: {task.name}']
             args = task.cmd.args
             # 通过TopVar或者Output传递的文件参数
             artifacts = [k for k, v in args.items() if (v.type == 'infile' or v.type == 'indir')]
             if artifacts:
-                lines += [' '*8 + f'arguments:']
-                lines += [' '*10 + f'artifacts:']
+                lines += [' ' * 8 + f'arguments:']
+                lines += [' ' * 10 + f'artifacts:']
                 for each in artifacts:
                     if type(args[each].value) != list:
                         lines += [' ' * 10 + f'- name: {each}']
@@ -1118,7 +1132,8 @@ class Workflow:
                             elif type(v) == Output:
                                 depend_task = self.tasks[v.task_id].name
                                 depend_name = v.name
-                                lines += [' ' * 12 + f'from: "{{{{tasks.{depend_task}.outputs.artifacts.{depend_name}}}}}"']
+                                lines += [
+                                    ' ' * 12 + f'from: "{{{{tasks.{depend_task}.outputs.artifacts.{depend_name}}}}}"']
                             else:
                                 # 只能假设来自topVar了
                                 lines += [' ' * 12 + f'from: "{{{{workflow.artifacts.{each}_{i}}}}}"']
@@ -1130,7 +1145,7 @@ class Workflow:
         # write argo workflow
         with open(outfile, 'w') as f:
             for line in lines:
-                f.write(line+'\n')
+                f.write(line + '\n')
 
     def _cwl_add_secondary_files(self, arg: Argument or Output or TopVar):
         # 所有secondary都设置为optional
@@ -1192,24 +1207,24 @@ class Workflow:
         contents += f'label: "{cmd.meta.name}"\n'
         contents += f'doc: |\n'
         for each in textwrap.wrap(cmd.meta.desc.strip().replace('  ', '')):
-            contents += ' '*4 + each + '\n'
+            contents += ' ' * 4 + each + '\n'
         contents += '\n'
         contents += 'requirements:\n'
-        contents += ' '*2 + 'ShellCommandRequirement: {}\n'
-        contents += ' '*2 + 'InlineJavascriptRequirement: {}\n'
+        contents += ' ' * 2 + 'ShellCommandRequirement: {}\n'
+        contents += ' ' * 2 + 'InlineJavascriptRequirement: {}\n'
         contents += '\n'
         contents += 'hints:\n'
-        contents += ' '*2 + 'SoftwareRequirement:\n'
-        contents += ' '*4 + 'packages:\n'
-        contents += ' '*6 + f'{cmd.meta.name}:\n'
-        contents += ' '*8 + f'specs: ["{cmd.meta.source}"]\n'
-        contents += ' '*8 + f'version: ["{cmd.meta.version}"]\n'
-        contents += ' '*2 + 'DockerRequirement:\n'
+        contents += ' ' * 2 + 'SoftwareRequirement:\n'
+        contents += ' ' * 4 + 'packages:\n'
+        contents += ' ' * 6 + f'{cmd.meta.name}:\n'
+        contents += ' ' * 8 + f'specs: ["{cmd.meta.source}"]\n'
+        contents += ' ' * 8 + f'version: ["{cmd.meta.version}"]\n'
+        contents += ' ' * 2 + 'DockerRequirement:\n'
         contents += ' ' * 4 + f"dockerPull: {cmd.runtime.image}\n"
-        contents += ' '*2 + "ResourceRequirement:\n"
-        contents += ' '*4 + f"coresMin: {cmd.runtime.cpu}\n"
+        contents += ' ' * 2 + "ResourceRequirement:\n"
+        contents += ' ' * 4 + f"coresMin: {cmd.runtime.cpu}\n"
         # RAM的单位为M
-        contents += ' '*4 + f"ramMin: {int(cmd.runtime.memory/1024/1024)}\n"
+        contents += ' ' * 4 + f"ramMin: {int(cmd.runtime.memory / 1024 / 1024)}\n"
 
         contents += '\n'
         base_cmd = cmd.runtime.tool_dir + cmd.runtime.tool
@@ -1272,25 +1287,25 @@ class Workflow:
                 # arg名称和cwl保留字段冲突，加x以区别
                 arg_name = arg_name + 'x'
                 arg.name = arg_name
-            contents += ' '*2 + f'{arg_name}:\n'
+            contents += ' ' * 2 + f'{arg_name}:\n'
             arg_type = convert_type[arg.type]
             if arg.array and (not arg.multi_times):
                 arg_type += '[]'
             if arg.level == 'optional':
-               arg_type += '?'
+                arg_type += '?'
 
             if arg.multi_times:
                 # 对于可以重复使用的参数
                 if arg.array:
                     print('! 对于多值且可以重复使用的参数，可能生成结果存在问题')
-                contents += ' '*4 + 'type:\n'
+                contents += ' ' * 4 + 'type:\n'
                 if arg.level == 'optional':
-                    contents += ' '*6 + '- "null"\n'
-                contents += ' '*6 + '- type: array\n'
-                contents += ' '*8 + f'items: {arg_type.replace("?", "")}\n'
+                    contents += ' ' * 6 + '- "null"\n'
+                contents += ' ' * 6 + '- type: array\n'
+                contents += ' ' * 8 + f'items: {arg_type.replace("?", "")}\n'
                 if arg.prefix.strip():
-                    contents += ' '*8 + 'inputBinding:\n'
-                    contents += ' '*10 + f'prefix: {arg.prefix.strip()}\n'
+                    contents += ' ' * 8 + 'inputBinding:\n'
+                    contents += ' ' * 10 + f'prefix: {arg.prefix.strip()}\n'
                     contents += ' ' * 10 + f'separate: {separate}\n'
 
                 # 添加默认参数值
@@ -1298,25 +1313,25 @@ class Workflow:
                 if default_value:
                     contents += ' ' * 4 + f'default: {default_value}\n'
                 contents += self._cwl_add_secondary_files(arg)
-                contents += ' '*4 + 'inputBinding:\n'
-                contents += ' '*6 + f'position: {pos}\n'
+                contents += ' ' * 4 + 'inputBinding:\n'
+                contents += ' ' * 6 + f'position: {pos}\n'
             else:
-                contents += ' '*4 + f'type: {arg_type}\n'
+                contents += ' ' * 4 + f'type: {arg_type}\n'
                 # 添加默认参数值
                 default_value = _get_default_value(arg)
                 if default_value:
                     contents += ' ' * 4 + f'default: {default_value}\n'
                 contents += self._cwl_add_secondary_files(arg)
                 if bind_input:
-                    contents += ' '*4 + 'inputBinding:\n'
-                    contents += ' '*6 + f'position: {pos}\n'
+                    contents += ' ' * 4 + 'inputBinding:\n'
+                    contents += ' ' * 6 + f'position: {pos}\n'
                     if '[' in arg_type:
-                        contents += ' '*6 + f'itemSeparator: "{arg.delimiter}"\n'
+                        contents += ' ' * 6 + f'itemSeparator: "{arg.delimiter}"\n'
                     if arg.prefix:
                         contents += ' ' * 6 + f'prefix: {arg.prefix.strip()}\n'
-                        contents += ' '*6 + f'separate: {separate}\n'
+                        contents += ' ' * 6 + f'separate: {separate}\n'
                     # if arg.type == 'fix':
-                    contents += ' '*6 + 'shellQuote: false\n'
+                    contents += ' ' * 6 + 'shellQuote: false\n'
         contents += '\n'
 
         # arguments模块加工前缀特殊的参数
@@ -1330,23 +1345,23 @@ class Workflow:
                     # 需要复杂的表达式才能实现
                     arg_prefix_blocks = arg_prefix.strip().split('{}')
                     cmd_str = '>\n'
-                    cmd_str += ' '*6 + '${\n'
-                    cmd_str += ' '*8 + f"var cmd = '{arg_prefix_blocks[0]}';\n"
-                    cmd_str += ' '*8 + f'cmd += inputs["{arg_name}"][0].path;\n'
-                    cmd_str += ' '*8 + f'for (var i = 1; i < inputs["{arg_name}"].length; i++)' + '{\n'
-                    cmd_str += ' '*10 + f'cmd += "{arg.delimiter}" + inputs["{arg_name}"][i].path' + '}\n'
+                    cmd_str += ' ' * 6 + '${\n'
+                    cmd_str += ' ' * 8 + f"var cmd = '{arg_prefix_blocks[0]}';\n"
+                    cmd_str += ' ' * 8 + f'cmd += inputs["{arg_name}"][0].path;\n'
+                    cmd_str += ' ' * 8 + f'for (var i = 1; i < inputs["{arg_name}"].length; i++)' + '{\n'
+                    cmd_str += ' ' * 10 + f'cmd += "{arg.delimiter}" + inputs["{arg_name}"][i].path' + '}\n'
                     if len(arg_prefix_blocks) > 1:
-                        cmd_str += ' '*8 + f"cmd += '{arg_prefix_blocks[1]}';\n"
-                    cmd_str += ' '*8 + 'return cmd' + '\n'
-                    cmd_str += ' '*6 + '}'
+                        cmd_str += ' ' * 8 + f"cmd += '{arg_prefix_blocks[1]}';\n"
+                    cmd_str += ' ' * 8 + 'return cmd' + '\n'
+                    cmd_str += ' ' * 6 + '}'
                     arg_prefix = cmd_str
                 else:
                     arg_prefix = arg_prefix.replace('{}', f'$(inputs["{arg_name}"].join("{arg.delimiter}"))')
             else:
                 arg_prefix = arg_prefix.replace('{}', f'$(inputs["{arg_name}"])')
-            contents += ' '*2 + f'- valueFrom: {arg_prefix}\n'
-            contents += ' '*4 + 'shellQuote: false\n'
-            contents += ' '*4 + f'position: {pos}\n'
+            contents += ' ' * 2 + f'- valueFrom: {arg_prefix}\n'
+            contents += ' ' * 4 + 'shellQuote: false\n'
+            contents += ' ' * 4 + f'position: {pos}\n'
         contents += '\n'
 
         contents += 'outputs:\n'
@@ -1354,22 +1369,22 @@ class Workflow:
             if out_name in ('out', 'in', 'inputs', 'outputs'):
                 # arg名称和cwl保留字段冲突，加x以区别
                 out_name = out_name + 'x'
-            contents += ' '*2 + f'{out_name}:\n'
-            contents += ' '*4 + f'type: {convert_type[out_obj.type]}\n'
+            contents += ' ' * 2 + f'{out_name}:\n'
+            contents += ' ' * 4 + f'type: {convert_type[out_obj.type]}\n'
             contents += self._cwl_add_secondary_files(out_obj)
-            contents += ' '*4 + 'outputBinding:\n'
+            contents += ' ' * 4 + 'outputBinding:\n'
             out_expr = out_obj.value
             # 目前仅考支持输出表达式包含一个参数名称变量
             matched_arg_name = re.findall('{(.*?)}', out_expr)
             if matched_arg_name:
                 matched_arg_name = matched_arg_name[0]
                 if matched_arg_name in ('out', 'in', 'inputs', 'outputs'):
-                    out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs["'+matched_arg_name+'x"])')
+                    out_expr = out_expr.replace('{' + matched_arg_name + '}', '$(inputs["' + matched_arg_name + 'x"])')
                 else:
-                    out_expr = out_expr.replace('{'+matched_arg_name+'}', '$(inputs["'+matched_arg_name+'"])')
+                    out_expr = out_expr.replace('{' + matched_arg_name + '}', '$(inputs["' + matched_arg_name + '"])')
             if out_name == '_wkdir_':
                 out_expr = '$(runtime.outdir)'
-            contents += ' '*6 + f'glob: {out_expr}\n'
+            contents += ' ' * 6 + f'glob: {out_expr}\n'
 
         return contents
 
@@ -1397,6 +1412,8 @@ class Workflow:
                     arg.name = arg_name + 'x'
                 else:
                     arg.name = arg_name
+                if type(arg.default) == tuple:
+                    arg.default = list(arg.default)
             for out_name, out_obj in task.cmd.outputs.items():
                 if out_name in ('out', 'in', 'inputs', 'outputs'):
                     # arg名称和cwl保留字段冲突，加x以区别
@@ -1408,26 +1425,28 @@ class Workflow:
         contents += f'cwlVersion: {version}\n'
         contents += 'class: Workflow\n'
         contents += 'requirements:\n'
-        contents += ' '*2 + 'MultipleInputFeatureRequirement: {}\n'
+        contents += ' ' * 2 + 'MultipleInputFeatureRequirement: {}\n'
+        header_content = contents
 
-        contents += 'inputs:\n'
+        contents = 'inputs:\n'
         for name, top_var in self.topvars.items():
-            contents += ' '*2 + f'{name}:\n'
+            contents += ' ' * 2 + f'{name}:\n'
             var_type = convert_type[top_var.type]
             if top_var.value is None:
                 var_type += '?'
-            contents += ' '*4 + f'type: {var_type}\n'
+            contents += ' ' * 4 + f'type: {var_type}\n'
             if top_var.value is not None:
                 if top_var.type in ['infile', 'indir']:
-                    contents += ' '*4 + f'default:\n'
-                    contents += ' '*6 + f'class: {var_type}\n'
-                    contents += ' '*6 + f'path: {top_var.value}\n'
+                    contents += ' ' * 4 + f'default:\n'
+                    contents += ' ' * 6 + f'class: {var_type}\n'
+                    contents += ' ' * 6 + f'path: {top_var.value}\n'
                 else:
                     contents += ' ' * 4 + f'default: {top_var.value}\n'
             contents += self._cwl_add_secondary_files(top_var)
         contents += '\n'
+        input_content = contents
 
-        contents += 'outputs:\n'
+        contents = 'outputs:\n'
         for name, out_obj in self.outputs.items():
             contents += ' ' * 2 + f'{name.replace(".", "_").replace("-", "_")}:\n'
             contents += ' ' * 4 + f'type: {convert_type[out_obj.type]}\n'
@@ -1437,12 +1456,13 @@ class Workflow:
                 out_name += 'x'
             contents += ' ' * 4 + f'outputSource: {step_name}/{out_name}\n'
         contents += '\n'
+        output_content = contents
 
-        contents += 'steps:\n'
+        contents = 'steps:\n'
         for task_id, task in self.tasks.items():
-            contents += ' '*2 + f'{task.name}:\n'
-            contents += ' '*4 + f'run: {task.cmd.meta.name}.tool.cwl\n'
-            contents += ' '*4 + 'in:\n'
+            contents += ' ' * 2 + f'{task.name}:\n'
+            contents += ' ' * 4 + f'run: {task.cmd.meta.name}.tool.cwl\n'
+            contents += ' ' * 4 + 'in:\n'
             # 参数赋值
             for _, arg in task.cmd.args.items():
                 if arg.type == 'fix' or (arg.value is None):
@@ -1480,12 +1500,26 @@ class Workflow:
                 if flow_var_values:
                     if len(flow_var_values) == 1:
                         flow_var_values = flow_var_values[0]
-                    contents += ' ' * 6 + f'{arg_name}: \n'
+                    # 对于输入文件或目录需要特殊处理
                     if arg.type in ['infile', 'indir']:
-                        contents += ' ' * 8 + 'default:\n'
-                        contents += ' ' * 10 + f'class: {convert_type[arg.type]}\n'
-                        contents += ' ' * 10 + f'path: {flow_var_values}\n'
+                        input_var_name = task.name + '_' + arg_name
+                        input_var_name = input_var_name.replace('-', '_')
+                        contents += ' ' * 6 + f'{arg_name}: {input_var_name}\n'
+                        # 输入文件的定义放在流程的inputs板块
+                        if type(flow_var_values) == str:
+                            input_content += ' ' * 2 + f'{input_var_name}:\n'
+                            input_content += ' ' * 4 + f'type: {convert_type[arg.type]}\n'
+                            input_content += ' ' * 4 + 'default:\n'
+                            input_content += ' ' * 6 + f'class: {convert_type[arg.type]}\n'
+                            input_content += ' ' * 6 + f'path: {flow_var_values}\n'.replace('"', '').replace("'", '')
+                        elif type(flow_var_values) == list:
+                            input_content += ' ' * 2 + f'{input_var_name}:\n'
+                            input_content += ' ' * 4 + f'type: {convert_type[arg.type]}[]\n'
+                            input_content += ' ' * 4 + 'default:\n'
+                            input_content += ' ' * 6 + f'class: {convert_type[arg.type]}[]\n'
+                            input_content += ' ' * 6 + f'path: {flow_var_values}\n'.replace('"', '').replace("'", '')
                     else:
+                        contents += ' ' * 6 + f'{arg_name}: \n'
                         contents += ' ' * 8 + f'default: {flow_var_values}\n'
                 if out_var_values:
                     if len(out_var_values) == 1:
@@ -1497,13 +1531,13 @@ class Workflow:
             out_names = []
             for _, out_obj in task.cmd.outputs.items():
                 out_names.append(out_obj.name)
-            contents += ' '*4 + f'out: [{",".join(out_names)}]\n'
+            contents += ' ' * 4 + f'out: [{",".join(out_names)}]\n'
             contents += '\n'
-
+        step_content = contents
         # 输出流程
         outfile = os.path.join(outdir, f'{self.meta.name}.wf.cwl')
         with open(outfile, 'w') as f:
-            f.write(contents)
+            f.write(header_content + input_content + '\n' + output_content + step_content)
 
         # 输出tools
         added_tools = []
@@ -1806,10 +1840,10 @@ class ToWdlWorkflow(object):
         cmd_used_times = dict()
         lines = ''
         if scatter:
-            lines += ' '*4 + 'scatter (each in keys(getFastqInfo.fastq_info)) { \n'
-            lines += ' '*8 + "String sample = each\n"
-            lines += ' '*8 + "File read1 = getFastqInfo.fastq_info[each][0][0]\n"
-            lines += ' '*8 + "File read2 = getFastqInfo.fastq_info[each][1][0]\n"
+            lines += ' ' * 4 + 'scatter (each in keys(getFastqInfo.fastq_info)) { \n'
+            lines += ' ' * 8 + "String sample = each\n"
+            lines += ' ' * 8 + "File read1 = getFastqInfo.fastq_info[each][0][0]\n"
+            lines += ' ' * 8 + "File read2 = getFastqInfo.fastq_info[each][1][0]\n"
             space_increase = 2
         else:
             lines = ''
@@ -1820,21 +1854,21 @@ class ToWdlWorkflow(object):
             cmd_used_times[task_name] += 1
             if cmd_used_times[task_name] > 1:
                 task_name = task_name + str(cmd_used_times[task_name])
-            lines += ' '*4*space_increase + f'call {task_name} ' + '{\n'
-            lines += ' '*4*(space_increase+1) + 'input: \n'
+            lines += ' ' * 4 * space_increase + f'call {task_name} ' + '{\n'
+            lines += ' ' * 4 * (space_increase + 1) + 'input: \n'
             for arg_name, detail in cmd.args.items():
                 if hasattr(detail, 'wdl'):
                     if '~' in detail.wdl:
-                        lines += ' '*4*(space_increase+1) + arg_name + ' = "' + detail.wdl + '"' + ',\n'
+                        lines += ' ' * 4 * (space_increase + 1) + arg_name + ' = "' + detail.wdl + '"' + ',\n'
                     else:
-                        lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.wdl + ',\n'
+                        lines += ' ' * 4 * (space_increase + 1) + arg_name + ' = ' + detail.wdl + ',\n'
                 # 如果参数的value为output对象，则需要转换成wdl形式
                 elif type(detail.value) == Output:
                     task_name = self.wf.tasks[detail.value.task_id].cmd.meta.name
                     detail.wdl = task_name + '.' + detail.value.name
-                    lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.wdl + ',\n'
+                    lines += ' ' * 4 * (space_increase + 1) + arg_name + ' = ' + detail.wdl + ',\n'
                 elif type(detail.value) == TopVar or type(detail.value) == TmpVar:
-                    lines += ' '*4*(space_increase+1) + arg_name + ' = ' + detail.value.name + ',\n'
+                    lines += ' ' * 4 * (space_increase + 1) + arg_name + ' = ' + detail.value.name + ',\n'
                 elif type(detail.value) == list:
                     # print(detail.value)
                     wdl_str_set = set()
@@ -1853,9 +1887,9 @@ class ToWdlWorkflow(object):
                     lines += ' ' * 4 * (space_increase + 1) + arg_name + ' = ' + str(wdl_str_lst) + ',\n'
 
             lines = lines[:-2] + '\n'
-            lines += ' '*4*space_increase + '}\n\n'
+            lines += ' ' * 4 * space_increase + '}\n\n'
         if scatter:
-            lines += ' '*4 + '}\n\n'
+            lines += ' ' * 4 + '}\n\n'
         return lines
 
     def write_wdl(self, outfile):
@@ -1863,7 +1897,7 @@ class ToWdlWorkflow(object):
         wdl += 'workflow pipeline {\n'
 
         # 这一部分是针对fastq数据特殊设计的
-        wdl += " "*4 + "input {\n"
+        wdl += " " * 4 + "input {\n"
         if self.wf.topvars:
             for k, v in self.wf.topvars.items():
                 var_value = v.value
@@ -1890,10 +1924,10 @@ class ToWdlWorkflow(object):
                     # print('warn: wdl目前不支持给Directory变量赋默认值')
                     wdl += ' ' * 4 * 2 + f'{var_type} {k}\n'
                 else:
-                    wdl += ' '*4*2 + f'{var_type} {k} = {var_value}\n'
+                    wdl += ' ' * 4 * 2 + f'{var_type} {k} = {var_value}\n'
 
-        wdl += ' '*4 + '}\n\n'
-        wdl += ' '*4*1 + 'call getFastqInfo{}\n'
+        wdl += ' ' * 4 + '}\n\n'
+        wdl += ' ' * 4 * 1 + 'call getFastqInfo{}\n'
 
         all_cmds = []
         scattered = []
@@ -1906,12 +1940,12 @@ class ToWdlWorkflow(object):
                                 f'did you forget to give a group name for cmd that called in the same loop? '
                                 f'Or, you should rename cmd for different tasks !')
             all_cmds += cmd_lst
-            scattered += [True]*len(cmd_lst) if len(tids) > 1 else [False]*len(cmd_lst)
+            scattered += [True] * len(cmd_lst) if len(tids) > 1 else [False] * len(cmd_lst)
 
         # add workflow meta
-        wdl += ' '*4 + 'meta {\n'
+        wdl += ' ' * 4 + 'meta {\n'
         for k, v in self.wf.meta.__dict__.items():
-            wdl += ' ' * 4*2 + f'{k}: "{v}"' + '\n'
+            wdl += ' ' * 4 * 2 + f'{k}: "{v}"' + '\n'
         wdl += ' ' * 4 + '}\n\n'
 
         # add output section
@@ -1919,12 +1953,14 @@ class ToWdlWorkflow(object):
         for cmd, is_scattered in zip(all_cmds, scattered):
             name = cmd.meta.name
             if is_scattered:
-                output_lst += [f'Array[{self.type_conv_dict[v.type]}] {(name+"_"+k).replace(".", "_")} = {name}.{k}' for k, v in cmd.outputs.items()]
+                output_lst += [f'Array[{self.type_conv_dict[v.type]}] {(name + "_" + k).replace(".", "_")} = {name}.{k}'
+                               for k, v in cmd.outputs.items()]
             else:
-                output_lst += [f'{self.type_conv_dict[v.type]} {(name+"_"+k).replace(".", "_")} = {name}.{k}' for k, v in cmd.outputs.items()]
+                output_lst += [f'{self.type_conv_dict[v.type]} {(name + "_" + k).replace(".", "_")} = {name}.{k}' for
+                               k, v in cmd.outputs.items()]
         wdl += ' ' * 4 + 'output{\n'
         for line in output_lst:
-            wdl += ' ' * 4*2 + line + '\n'
+            wdl += ' ' * 4 * 2 + line + '\n'
         wdl += ' ' * 4 + '}\n\n'
 
         # end of workflow
@@ -1953,7 +1989,7 @@ class ToWdlWorkflow(object):
             String r2_name = '(.*).read2.fastq.gz'
             String docker = 'gudeqing/getfastqinfo:1.0'
         }
-    
+
         command <<<
             set -e
             python /get_fastq_info.py \\
@@ -1963,16 +1999,16 @@ class ToWdlWorkflow(object):
                 -r2_name '~{r2_name}' \\
                 -out fastq.info.json
         >>>
-    
+
         output {
             Map[String, Array[Array[File]]] fastq_info = read_json("fastq.info.json")
             File fastq_info_json = "fastq.info.json"
         }
-    
+
         runtime {
             docker: docker
         }
-    
+
         parameter_meta {
             fastq_dirs: {desc: "directory list, target fastq files should be in these directories. All target files in 'fastq_files' or 'fastq_dirs' will be used", level: "optional", type: "indir", range: "", default: ""}
             fastq_files: {desc: "target fastq file list. 'fastq_files' or 'fastq_dirs' must be provided.", level: "optional", type: "infile", range: "", default: ""}
