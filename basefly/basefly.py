@@ -1320,7 +1320,12 @@ class Workflow:
                 # 添加默认参数值
                 default_value = _get_default_value(arg)
                 if default_value:
-                    contents += ' ' * 4 + f'default: {default_value}\n'
+                    if arg.type not in ('infile', 'indir'):
+                        contents += ' ' * 4 + f'default: {default_value}\n'
+                    else:
+                        contents += ' ' * 4 + f'default:\n'
+                        contents += ' ' * 6 + f'class: {arg_type}\n'
+                        contents += ' ' * 6 + f'path: {default_value}\n'
                 contents += self._cwl_add_secondary_files(arg)
                 if bind_input:
                     contents += ' ' * 4 + 'inputBinding:\n'

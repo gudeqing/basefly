@@ -628,6 +628,7 @@ def bcftools_norm():
     cmd.meta.name = 'VcfLeftNorm'
     cmd.meta.desc = "Left-align and normalize indels; check if REF alleles match the reference; split multiallelic sites into multiple rows; recover multiallelics from multiple rows"
     cmd.runtime.image = 'dceoy/bcftools:latest'
+    cmd.runtime.image = 'gudeqing/bcftools:1.17'
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = "bcftools norm"
