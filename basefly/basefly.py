@@ -1363,7 +1363,10 @@ class Workflow:
                 else:
                     arg_prefix = arg_prefix.replace('{}', f'$(inputs["{arg_name}"].join("{arg.delimiter}"))')
             else:
-                arg_prefix = arg_prefix.replace('{}', f'$(inputs["{arg_name}"])')
+                if arg.type in ('infile', 'indir'):
+                    arg_prefix = arg_prefix.replace('{}', f'$(inputs["{arg_name}"]["path"])')
+                else:
+                    arg_prefix = arg_prefix.replace('{}', f'$(inputs["{arg_name}"])')
             contents += ' ' * 2 + f'- valueFrom: {arg_prefix}\n'
             contents += ' ' * 4 + 'shellQuote: false\n'
             contents += ' ' * 4 + f'position: {pos}\n'
