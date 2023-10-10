@@ -1523,7 +1523,8 @@ class Workflow:
                                 'type': f'type: {convert_type[arg.type]}\n',
                                 'default': 'default:\n',
                                 'class': f'class: {convert_type[arg.type]}\n',
-                                'input_var_name': input_var_name
+                                'input_var_name': input_var_name,
+                                'Arg': arg
                             }
                         elif type(flow_var_values) == list:
                             more_input_contents[path] = {
@@ -1531,7 +1532,8 @@ class Workflow:
                                 'type': f'type: {convert_type[arg.type]}[]\n',
                                 'default': 'default:\n',
                                 'class': f'class: {convert_type[arg.type]}[]\n',
-                                'input_var_name': input_var_name
+                                'input_var_name': input_var_name,
+                                'Arg': arg
                             }
                     else:
                         contents += ' ' * 6 + f'{arg_name}: \n'
@@ -1556,6 +1558,7 @@ class Workflow:
             input_content += ' ' * 4 + content_dict['default']
             input_content += ' ' * 6 + content_dict['class']
             input_content += ' ' * 6 + path
+            input_content += self._cwl_add_secondary_files(content_dict['Arg'])
 
         # 输出流程
         outfile = os.path.join(outdir, f'{self.meta.name}.wf.cwl')
