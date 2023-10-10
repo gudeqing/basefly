@@ -488,7 +488,7 @@ class Workflow:
             self.update_args(parameters.update_args)
 
         if parameters.to_cwl:
-            self.to_cwl_workflow(outdir)
+            self.to_cwl_workflow(outdir, image_map=parameters.image_map)
             return
 
         if parameters.rerun_steps:
@@ -913,6 +913,7 @@ class Workflow:
                              help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
         wf_args.add_argument('--dry_run', default=False, action='store_true', help='不运行流程，仅仅输出markdown格式的流程说明文档和流程配置文件')
         wf_args.add_argument('--to_cwl', default=False, action='store_true', help='输出cwl格式的流程草稿')
+        wf_args.add_argument('-image_map', required=False, help='容器镜像地址映射文件，第一列是旧镜像地址，第二列是新镜像地址，目前仅在cwl流程转化时用到')
         self.argparser = parser
         # for user defined arguments
         # self.add_argument = partial(self.argparser.add_argument, required=True)
@@ -1186,7 +1187,7 @@ class Workflow:
                 contents += ' ' * 6 + '- .sa?\n'
         return contents
 
-    def to_cwl_tool(self, cmd: Command, version='v1.2'):
+    def to_cwl_tool(self, cmd: Command, version='v1.2', image_map_dict=None):
         # 如果arg_prefix是纯数字，需要加引号, 因此为方便起见，统一加引号
         # prefix加引号后，不能存在空格，否则传cwltool在接受参数时会同时给prefix和value加上引号导致参数不可识别，如 gatk ’-a value'
         convert_type: dict[str, str] = {
@@ -1220,7 +1221,10 @@ class Workflow:
         contents += ' ' * 8 + f'specs: ["{cmd.meta.source}"]\n'
         contents += ' ' * 8 + f'version: ["{cmd.meta.version}"]\n'
         contents += ' ' * 2 + 'DockerRequirement:\n'
-        contents += ' ' * 4 + f"dockerPull: {cmd.runtime.image}\n"
+        image = cmd.runtime.image
+        if image_map_dict and (image in image_map_dict):
+            image = image_map_dict[image]
+        contents += ' ' * 4 + f"dockerPull: {image}\n"
         contents += ' ' * 2 + "ResourceRequirement:\n"
         contents += ' ' * 4 + f"coresMin: {cmd.runtime.cpu}\n"
         # RAM的单位为M
@@ -1396,7 +1400,8 @@ class Workflow:
 
         return contents
 
-    def to_cwl_workflow(self, outdir, version='v1.2'):
+    def to_cwl_workflow(self, outdir, version='v1.2', image_map=None):
+        image_map_dict = dict(x.strip().split()[:2] for x in open(image_map)) if image_map else None
         # 生成流程草稿
         os.makedirs(outdir, exist_ok=True)
         convert_type: dict[str, str] = {
@@ -1577,7 +1582,7 @@ class Workflow:
                 added_tools.append(name)
                 outfile = os.path.join(outdir, f'{name}.tool.cwl')
                 with open(outfile, 'w') as f:
-                    f.write(self.to_cwl_tool(cmd))
+                    f.write(self.to_cwl_tool(cmd, version='v1.2', image_map_dict=image_map_dict))
 
         # 因特殊需要，新建2个空文件
         for each in ['LICENSE', 'R.md']:

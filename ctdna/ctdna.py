@@ -1899,10 +1899,10 @@ def pipeline():
         new_r1s = []
         new_r2s = []
         for ind, (r1, r2) in enumerate(zip(r1s, r2s), start=1):
-            r1_name = sample+f'_R1_{ind}'
+            r1_name = sample+f'_R1_{ind}' if len(r1s) > 1 else sample+'_R1'
             r1_topvar = TopVar(value=r1, name=r1_name, type='infile')
             new_r1s.append(r1_topvar)
-            r2_name = sample+f'_R2_{ind}'
+            r2_name = sample+f'_R2_{ind}' if len(r1s) > 1 else sample+'_R2'
             r2_topvar = TopVar(value=r2, name=r2_name, type='infile')
             new_r2s.append(r2_topvar)
             wf.topvars[r1_name] = r1_topvar
