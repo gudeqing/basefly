@@ -1439,6 +1439,8 @@ class Workflow:
         contents += 'class: Workflow\n'
         contents += 'requirements:\n'
         contents += ' ' * 2 + 'MultipleInputFeatureRequirement: {}\n'
+        contents += ' ' * 2 + 'StepInputExpressionRequirement: {}\n'
+        contents += ' ' * 2 + 'InlineJavascriptRequirement: {}\n'
         header_content = contents
 
         contents = 'inputs:\n'
@@ -1572,6 +1574,27 @@ class Workflow:
         outfile = os.path.join(outdir, f'{self.meta.name}.wf.cwl')
         with open(outfile, 'w') as f:
             f.write(header_content + input_content + '\n' + output_content + step_content)
+
+        # 特殊处理
+        # 把默认值中的tumor和normal都替换成变量
+        with open(outfile, 'r') as fr, open(outfile+'.modified.cwl', 'w') as fw:
+            for line in fr:
+                if "default:" not in line:
+                    fw.write(line)
+                else:
+                    if 'tumor' in line or 'normal' in line:
+                        # 先把顶层变量用source导入，然后通过self引用
+                        fw.write(' '*8 + 'source: [tumor_name, normal_name]\n')
+                        line = line.replace('default:', 'valueFrom:')
+                        if line.strip().endswith(']'):
+                            line = line.replace('[', '${return [')
+                            line = line.replace(']', ']}')
+                            line = line.replace('tumor', 'self[0]')
+                            line = line.replace('normal', 'self[1]')
+                        else:
+                            line = line.replace('tumor', '$(self[0])')
+                            line = line.replace('normal', '$(self[1])')
+                    fw.write(line)
 
         # 输出tools
         added_tools = []
