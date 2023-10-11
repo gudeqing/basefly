@@ -552,10 +552,11 @@ class Workflow:
             outputs_dir = os.path.join(outdir, 'Outputs')
             os.makedirs(outputs_dir, exist_ok=True)
             shutil.copyfile(outfile, os.path.join(outputs_dir, f'{self.meta.name}.ini'))
-            shutil.copyfile(os.path.join(outdir, 'wf.static.args.json'),
-                            os.path.join(outputs_dir, 'wf.static.args.json'))
+            shutil.copyfile(os.path.join(outdir, 'wf.static.args.json'), os.path.join(outputs_dir, 'wf.static.args.json'))
             shutil.copyfile(os.path.join(outdir, 'wf.run.cmd.txt'), os.path.join(outputs_dir, 'wf.run.cmd.txt'))
-            shutil.copyfile(os.path.join(outdir, 'state.svg'), os.path.join(outputs_dir, 'state.svg'))
+            state_svg = os.path.join(outputs_dir, 'state.svg')
+            if os.path.exists(state_svg):
+                shutil.copyfile(os.path.join(outdir, 'state.svg'), state_svg)
             for name, out in self.outputs.items():
                 if '${{' in out.value:
                     src_dir = out.value.replace('${{mode:outdir}}', outdir)
