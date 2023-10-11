@@ -90,14 +90,14 @@ Arguments for controlling running mode:
    > 参数前缀，如‘-i ’， ‘--i’
 4. type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix', 'outstr'] = 'str'
    > 描述参数类型, type is one of ['str', 'outstr', 'int', 'float', 'bool', 'infile', 'indir', 'fix']
-   >> + str: 字符串类型
-   >> + outstr: 字符串类型,表示该参数是用于形成输出文件名或路径的参数，归类为动态赋值的参数，引入该类型的目的是为了输出的wf.args.json时避免输出这类参数,同时方便cwl流程的准确转化
-   >> + int: 整数类型
-   >> + float: 浮点数类型
-   >> + bool: bool类型，如果其值设置为True，则命令行中将出现该参数的前缀，否则不出现
-   >> + infile：表示参数对应的值是输入文件路径
-   >> + indir：表示参数对应的只是输入文件目录
-   >> + fix： 表示该参数并不是真正的参数，其为固定的字符串，写command时需要给value直接赋值. 例如其可以用来表示管道符如‘| samtools sort’，如此可以让一个command可以串联执行多个程序
+   > + str: 字符串类型
+   > + outstr: 字符串类型,表示该参数是用于形成输出文件名或路径的参数，归类为动态赋值的参数，引入该类型的目的是为了输出的wf.args.json时避免输出这类参数,同时方便cwl流程的准确转化
+   > + int: 整数类型
+   > + float: 浮点数类型
+   > + bool: bool类型，如果其值设置为True，则命令行中将出现该参数的前缀，否则不出现
+   > + infile：表示参数对应的值是输入文件路径
+   > + indir：表示参数对应的只是输入文件目录
+   > + fix： 表示该参数并不是真正的参数，其为固定的字符串，写command时需要给value直接赋值. 例如其可以用来表示管道符如‘| samtools sort’，如此可以让一个command可以串联执行多个程序
 5. level: Literal['required', 'optional'] = 'required'
    > 描述参数是否为必需参数
 6. default: Any = None
