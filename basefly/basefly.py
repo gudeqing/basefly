@@ -490,7 +490,9 @@ class Workflow:
         if parameters.to_cwl:
             self.to_cwl_workflow(outdir, image_map=parameters.image_map)
             return
-
+        if parameters.to_wdl:
+            self.to_wdl_workflow(self.meta.name + '.wdl')
+            return
         if parameters.rerun_steps:
             rerun_steps = self.get_all_depends(parameters.rerun_steps)
             print('rerun the following steps:', rerun_steps)
@@ -912,7 +914,8 @@ class Workflow:
         wf_args.add_argument('--no_check_resource_before_run', default=False, action='store_true',
                              help="指示运行某步骤前检测指定的资源是否足够, 如不足, 则该步骤失败; 如果设置该参数, 则运行前不检查资源. 如需对某一步设置不同的值,可运行前修改pipeline.ini. 如需更改指定的资源, 可在运行流程前修改pipeline.ini")
         wf_args.add_argument('--dry_run', default=False, action='store_true', help='不运行流程，仅仅输出markdown格式的流程说明文档和流程配置文件')
-        wf_args.add_argument('--to_cwl', default=False, action='store_true', help='输出cwl格式的流程草稿')
+        wf_args.add_argument('--to_cwl', default=False, action='store_true', help='输出CWL格式的流程草稿')
+        wf_args.add_argument('--to_wdl', default=False, action='store_true', help='输出WDL格式的流程草稿')
         wf_args.add_argument('-image_map', required=False, help='容器镜像地址映射文件，第一列是旧镜像地址，第二列是新镜像地址，目前仅在cwl流程转化时用到')
         self.argparser = parser
         # for user defined arguments
