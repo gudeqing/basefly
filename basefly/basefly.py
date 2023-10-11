@@ -548,61 +548,63 @@ class Workflow:
             )
             self.success = wf.failed == 0
 
-            # 通过软连接汇总输出目录
-            outputs_dir = os.path.join(outdir, 'Outputs')
-            os.makedirs(outputs_dir, exist_ok=True)
-            shutil.copyfile(outfile, os.path.join(outputs_dir, f'{self.meta.name}.ini'))
-            shutil.copyfile(os.path.join(outdir, 'wf.static.args.json'), os.path.join(outputs_dir, 'wf.static.args.json'))
-            shutil.copyfile(os.path.join(outdir, 'wf.run.cmd.txt'), os.path.join(outputs_dir, 'wf.run.cmd.txt'))
-            state_svg = os.path.join(outputs_dir, 'state.svg')
-            if os.path.exists(state_svg):
-                shutil.copyfile(os.path.join(outdir, 'state.svg'), state_svg)
-            for name, out in self.outputs.items():
-                if '${{' in out.value:
-                    src_dir = out.value.replace('${{mode:outdir}}', outdir)
-                else:
-                    if out.task_id in self.tasks:
-                        src_dir = os.path.join(self.tasks[out.task_id].wkdir, out.value)
-                        if src_dir.endswith('/.'):
-                            src_dir = src_dir[:-1]
+            # 汇总流程的outputs
+            if (parameters.report == "success" and self.success) or (parameters.report == 'any'):
+                print('Organizing workflow outputs: hard-link output files or soft-link output directories to "Report"')
+                outputs_dir = os.path.join(outdir, 'Report')
+                os.makedirs(outputs_dir, exist_ok=True)
+                shutil.copyfile(outfile, os.path.join(outputs_dir, f'{self.meta.name}.ini'))
+                shutil.copyfile(os.path.join(outdir, 'wf.static.args.json'), os.path.join(outputs_dir, 'wf.static.args.json'))
+                shutil.copyfile(os.path.join(outdir, 'wf.run.cmd.txt'), os.path.join(outputs_dir, 'wf.run.cmd.txt'))
+                state_svg = os.path.join(outputs_dir, 'state.svg')
+                if os.path.exists(state_svg):
+                    shutil.copyfile(os.path.join(outdir, 'state.svg'), state_svg)
+                for name, out in self.outputs.items():
+                    if '${{' in out.value:
+                        src_dir = out.value.replace('${{mode:outdir}}', outdir)
                     else:
-                        continue
-                scan_dir = glob.glob(src_dir)
-                if scan_dir:
-                    src_dir = scan_dir[0]
-                if os.path.exists(src_dir):
-                    targets = [src_dir]
-                    parent_dir = self.tasks[out.task_id].wkdir
-                    if os.path.isfile(src_dir):
-                        tmp_lst = os.listdir(parent_dir)
-                        if 'cmd.sh' in tmp_lst:
-                            targets.append(os.path.join(parent_dir, 'cmd.sh'))
-                        if 'docker.cmd.sh' in tmp_lst:
-                            targets.append(os.path.join(parent_dir, 'docker.cmd.sh'))
-                    for src_dir in targets:
-                        # print('Found expected output: ', src_dir)
-                        final_out_dir = os.path.join(outdir, 'Outputs', self.tasks[out.task_id].name)
-                        os.makedirs(final_out_dir, exist_ok=True)
-                        dst_path = os.path.join(final_out_dir, os.path.basename(src_dir))
-                        if dst_path.endswith('/.'):
-                            dst_path = dst_path[:-1]
-                        dst_path = dst_path.rstrip('/')
-                        # 删除已经存在的结果
-                        if os.path.exists(dst_path):
-                            if os.path.isfile(dst_path):
-                                os.remove(dst_path)
-                            else:
-                                if not os.path.islink(dst_path):
-                                    shutil.rmtree(dst_path)
-                                else:
-                                    os.remove(dst_path)
-                        # 如果输出结果是文件，则创建硬链接，否则软连接
-                        if os.path.isfile(src_dir):
-                            os.link(src_dir, dst_path)
+                        if out.task_id in self.tasks:
+                            src_dir = os.path.join(self.tasks[out.task_id].wkdir, out.value)
+                            if src_dir.endswith('/.'):
+                                src_dir = src_dir[:-1]
                         else:
-                            os.symlink(src_dir.rstrip('/'), dst_path)
-                else:
-                    print('Failed to found expected output: ', src_dir)
+                            continue
+                    scan_dir = glob.glob(src_dir)
+                    if scan_dir:
+                        src_dir = scan_dir[0]
+                    if os.path.exists(src_dir):
+                        targets = [src_dir]
+                        parent_dir = self.tasks[out.task_id].wkdir
+                        if os.path.isfile(src_dir):
+                            tmp_lst = os.listdir(parent_dir)
+                            if 'cmd.sh' in tmp_lst:
+                                targets.append(os.path.join(parent_dir, 'cmd.sh'))
+                            if 'docker.cmd.sh' in tmp_lst:
+                                targets.append(os.path.join(parent_dir, 'docker.cmd.sh'))
+                        for src_dir in targets:
+                            # print('Found expected output: ', src_dir)
+                            final_out_dir = os.path.join(outdir, 'Outputs', self.tasks[out.task_id].name)
+                            os.makedirs(final_out_dir, exist_ok=True)
+                            dst_path = os.path.join(final_out_dir, os.path.basename(src_dir))
+                            if dst_path.endswith('/.'):
+                                dst_path = dst_path[:-1]
+                            dst_path = dst_path.rstrip('/')
+                            # 删除已经存在的结果
+                            if os.path.exists(dst_path):
+                                if os.path.isfile(dst_path):
+                                    os.remove(dst_path)
+                                else:
+                                    if not os.path.islink(dst_path):
+                                        shutil.rmtree(dst_path)
+                                    else:
+                                        os.remove(dst_path)
+                            # 如果输出结果是文件，则创建硬链接，否则软连接
+                            if os.path.isfile(src_dir):
+                                os.link(src_dir, dst_path)
+                            else:
+                                os.symlink(src_dir.rstrip('/'), dst_path)
+                    else:
+                        print('Failed to found expected output: ', src_dir)
         else:
             print('No actions, you may provide one action parameter: --run, --dry_run, --list_cmd, --list_task, -show_cmd, --to_cwl')
 
@@ -905,6 +907,8 @@ class Workflow:
                              help="假定哪些步骤已经成功运行，不论其是否真的已经成功完成，空格分隔, 这样做的可能原因: 利用之前已经成功运行的结果(需要把之前的运行结果放到当前结果目录). 使用--list_task可查看候选, 可使用task的前缀，并且以'*'结尾，将自动匹配符合前缀条件的所有task,也可以使用cmd.meata.name")
         wf_args.add_argument('-retry', metavar='max-retry', default=1, type=int,
                              help='某步骤运行失败后再尝试运行的次数, 默认1次. 如需对某一步设置不同的值, 可在运行流程前修改pipeline.ini')
+        wf_args.add_argument('-report', default='success',
+                             help='赋值是success时，则仅当流程成功运行时才整理输出结果, 赋值为any时，则无论流程是否运行成功都会整理输出结果，赋值为其他时，则不整理结果')
         wf_args.add_argument('--list_cmd', default=False, action="store_true", help="仅仅显示当前流程包含的主步骤, 不会显示指定跳过的步骤")
         wf_args.add_argument('-show_cmd', metavar='cmd-query', help="提供一个cmd名称,输出该cmd的样例")
         wf_args.add_argument('--list_task', default=False, action="store_true", help="仅仅显示当前流程包含的详细步骤, 且已经排除指定跳过的步骤")
