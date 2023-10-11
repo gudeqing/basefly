@@ -1507,7 +1507,9 @@ class Workflow:
                                 if arg_value.endswith('"'):
                                     arg_value = f"'{arg_value}'"
                                 else:
-                                    arg_value = f'"{arg_value}"'
+                                    # 对于列表赋值，后续将列表字符串时会自动加上单引号的
+                                    if len(arg_values) == 1:
+                                        arg_value = f'"{arg_value}"'
                             flow_var_values.append(arg_value)
                 if top_var_values:
                     if len(top_var_values) == 1:
@@ -1575,18 +1577,28 @@ class Workflow:
         with open(outfile, 'w') as f:
             f.write(header_content + input_content + '\n' + output_content + step_content)
 
-        # 特殊处理
+        # 特殊处理，得到样本名称变为输入变量的流程
         # 把默认值中的tumor和normal都替换成变量
         with open(outfile, 'r') as fr, open(outfile+'.modified.cwl', 'w') as fw:
             for line in fr:
                 if "default:" not in line:
                     fw.write(line)
+                    # 对于inputs 模块增加2个样本变量
+                    if line.startswith('inputs:'):
+                        # 加上特殊的样本名称变量
+                        contents = ''
+                        for name_var, sample_name in zip(['tumor_name', 'normal_name'], ['tumor', 'normal']):
+                            contents += ' ' * 2 + f'{name_var}:\n'
+                            contents += ' ' * 4 + f'type: string\n'
+                            contents += ' ' * 4 + f'default: "{sample_name}"\n'
+                        fw.write(contents)
                 else:
                     if 'tumor' in line or 'normal' in line:
                         # 先把顶层变量用source导入，然后通过self引用
                         fw.write(' '*8 + 'source: [tumor_name, normal_name]\n')
                         line = line.replace('default:', 'valueFrom:')
                         if line.strip().endswith(']'):
+                            line = line.replace("'", '')
                             line = line.replace('[', '${return [')
                             line = line.replace(']', ']}')
                             line = line.replace('tumor', 'self[0]')
