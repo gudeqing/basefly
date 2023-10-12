@@ -13,7 +13,7 @@ def creat_ref_dict():
     cmd = Command()
     cmd.meta.name = 'CreateSequenceDictionary'
     cmd.meta.desc = 'Creates a sequence dictionary for a reference sequence. This tool creates a sequence dictionary file (with ".dict" extension) from a reference sequence provided in FASTA format, which is required by many processing and analysis tools. '
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.args['copy_input_mode'] = Argument(prefix=f'cp -', default='L', range=['L', 'l', 's'], desc='indicate how to copy input fasta into work directory, "L": copy, "l": hard link, "s": softlink, do not use this if docker is used')
     cmd.args['ref_fasta'] = Argument(prefix='', type='infile', desc='reference fasta to index')
@@ -30,7 +30,7 @@ def creat_ref_dict():
 def BedToIntervalList():
     cmd = Command()
     cmd.meta.name = 'BedToIntervalList'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.runtime.tool = 'gatk BedToIntervalList'
     cmd.args['bed'] = Argument(prefix='-I ', type='infile', desc='input bed file')
@@ -44,7 +44,7 @@ def SplitIntervals(scatter_number):
     cmd = Command()
     cmd.meta.name = 'SplitIntervals'
     cmd.meta.desc = 'This tool takes in intervals via the standard arguments of IntervalArgumentCollection and splits them into interval files for scattering. The resulting files contain equal number of bases.'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.runtime.tool = 'gatk SplitIntervals'
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -64,7 +64,7 @@ def build_bwa_index():
     cmd.meta.name = 'buildBwaIndex'
     cmd.meta.desc = 'bwa index and create sequence dictionary and fasta fai file'
     cmd.meta.version = '0.7.17'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 30 * 1024 ** 3
     cmd.args['copy_input_mode'] = Argument(prefix=f'cp -', default='s', range=['L', 'l', 's'], desc='indicate how to copy input fasta into work directory, "L": copy, "l": hard link, "s": softlink')
     cmd.args['ref_fasta'] = Argument(prefix='', type='infile', desc='reference fasta to index')
@@ -85,7 +85,7 @@ def FastqToSam(sample):
     cmd = Command()
     cmd.meta.name = 'FastqToSam'
     cmd.meta.desc = 'convert fastq to sam'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'gatk FastqToSam'
@@ -105,7 +105,7 @@ def SamToFastq():
     cmd = Command()
     cmd.meta.name = 'SamToFastq'
     cmd.meta.desc = 'Use samtools to convert sam to Fastq. This tool enables user to copy tag to fastq header line'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'samtools fastq'
@@ -142,7 +142,7 @@ def ExtractUmisFromBam():
 def MarkIlluminaAdapters():
     cmd = Command()
     cmd.meta.name = 'MarkIlluminaAdapters'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'gatk MarkIlluminaAdapters'
@@ -158,7 +158,7 @@ def Bam2Fastq():
     cmd = Command()
     cmd.meta.name = 'Bam2Fastq'
     cmd.meta.desc = 'bam to fastq'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'gatk SamToFastq'
@@ -177,7 +177,7 @@ def Bam2FastqBwaMem(sample):
     cmd = Command()
     cmd.meta.name = 'Bam2FastqBwaMem'
     cmd.meta.desc = 'bam to fastq and then mapping'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 15*1024**3
     cmd.runtime.cpu = 8
     cmd.args['_fix0'] = Argument(type='fix', value='gatk SamToFastq')
@@ -200,7 +200,7 @@ def Bam2FastqBwaMem(sample):
 def BwaMem2(sample, platform):
     cmd = Command()
     cmd.meta.name = 'BwaMem2'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.tool = '/opt/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -M -Y -v 3'
     cmd.runtime.memory = 15 * 1024 ** 3
     cmd.runtime.cpu = 8
@@ -221,7 +221,7 @@ def MergeBamAlignment(sample):
     cmd = Command()
     cmd.meta.name = 'MergeBamAlignment'
     cmd.meta.desc = 'merge bam alignment'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'gatk MergeBamAlignment'
@@ -254,7 +254,7 @@ def MergeSamFiles():
     cmd = Command()
     cmd.meta.name = 'MergeSamFiles'
     cmd.meta.desc = 'Merges multiple SAM and/or BAM files into a single file.'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'gatk MergeSamFiles'
@@ -405,7 +405,7 @@ def SortAndIndexBam():
     cmd.meta.name = 'SortAndIndexBam'
     cmd.meta.source = 'https://www.htslib.org/doc/samtools-sort.html'
     cmd.meta.desc = "sort and index bam using samtools"
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'samtools sort'
@@ -449,7 +449,7 @@ def gencore():
     cmd.meta.source = ''
     cmd.meta.desc = ''
     cmd.meta.version = '0.17.2'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'gencore'
@@ -569,7 +569,7 @@ def add_vcf_contig():
     cmd = Command()
     cmd.meta.name = 'AddVcfContig'
     cmd.meta.desc = 'Add contig info for vardict output vcf'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 2 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
@@ -587,7 +587,7 @@ def Mutect2(prefix):
     cmd.meta.name = 'Mutect2'
     cmd.meta.desc = 'Call somatic short mutations via local assembly of haplotypes. Short mutations include single nucleotide (SNA) and insertion and deletion (indel) alterations.'
     cmd.meta.source = 'https://github.com/broadinstitute/gatk'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 5*1024**3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'gatk Mutect2'
@@ -709,7 +709,7 @@ def stat_context_seq_error():
     cmd = Command()
     cmd.meta.name = 'StatSeqError'
     cmd.meta.desc = '假设大部分低频突变是测序错误，基于bam文件估计测序错误率'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 2 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
@@ -729,7 +729,7 @@ def VcfFilter():
     cmd = Command()
     cmd.meta.name = 'VcfFilter'
     cmd.meta.desc = 'filtering vcf, 输出符合室间质评的格式结果'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 2 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
@@ -762,7 +762,7 @@ def MergeVcfs(sample):
     cmd = Command()
     cmd.meta.name = 'MergeVcfs'
     cmd.meta.desc = 'Combines multiple variant files into a single variant file.'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360056969852-MergeVcfs-Picard-'
     cmd.runtime.tool = 'gatk MergeVcfs'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input vcf list', format='vcf.gz')
@@ -774,7 +774,7 @@ def MergeVcfs(sample):
 def LearnReadOrientationModel(sample):
     cmd = Command()
     cmd.meta.name = 'LearnReadOrientationModel'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.meta.desc = 'Learn the prior probability of read orientation artifact from the output of CollectF1R2Counts of Mutect2'
     cmd.runtime.tool = 'gatk LearnReadOrientationModel'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='One or more .tar.gz containing outputs of CollectF1R2Counts')
@@ -788,7 +788,7 @@ def FilterMutectCalls(sample):
     cmd.meta.name = 'FilterMutectCalls'
     cmd.meta.desc = 'FilterMutectCalls applies filters to the raw output of Mutect2'
     cmd.runtime.tool = 'gatk FilterMutectCalls'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', format='vcf.gz', desc='A VCF file containing variants')
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', format='bam', level='optional', desc=' BAM/SAM/CRAM file containing reads')
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', format='fasta', desc='reference fasta file')
@@ -820,7 +820,7 @@ def FilterAlignmentArtifacts(sample):
     cmd.meta.desc = 'Alignment artifacts can occur whenever there is sufficient sequence similarity between two or more regions in the genome to confuse the alignment algorithm. This can occur when the aligner for whatever reason overestimate how uniquely a read maps, thereby assigning it too high of a mapping quality. It can also occur through no fault of the aligner due to gaps in the reference, which can also hide the true position to which a read should map. By using a good alignment algorithm (the GATK wrapper of BWA-MEM), giving it sensitive settings (which may have been impractically slow for the original bam alignment) and mapping to the best available reference we can avoid these pitfalls. The last point is especially important: one can (and should) use a BWA-MEM index image corresponding to the best reference, regardless of the reference to which the bam was aligned.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4418051467035-FilterAlignmentArtifacts-EXPERIMENTAL-'
     cmd.runtime.tool = 'gatk FilterAlignmentArtifacts'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', format='vcf.gz', desc='A VCF file containing variants')
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', format='bam', desc='input bam file')
@@ -833,7 +833,7 @@ def FilterAlignmentArtifacts(sample):
 def MergeMutectStats(sample):
     cmd = Command()
     cmd.meta.name = 'MergeMutectStats'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.tool = 'gatk MergeMutectStats'
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', multi_times=True)
     cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.vcf.stats', desc='output merged stat files')
@@ -873,7 +873,7 @@ def mutscan():
     cmd = Command()
     cmd.meta.name = 'Mutscan'
     cmd.meta.source = 'https://github.com/OpenGene/MutScan'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'mutscan'
@@ -926,7 +926,7 @@ def fastp():
     cmd.meta.name = 'Fastp'
     cmd.meta.source = 'https://github.com/OpenGene/fastp'
     cmd.meta.version = '0.23.4'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fastp'
@@ -1107,7 +1107,7 @@ def MarkDuplicates(sample):
     cmd = Command()
     cmd.meta.name = 'MarkDuplicates'
     cmd.meta.desc = 'merge bam alignment and mark duplicate reads'
-    cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.tool = 'gatk MarkDuplicates'
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', format='bam', multi_times=True, desc='input bam file list')

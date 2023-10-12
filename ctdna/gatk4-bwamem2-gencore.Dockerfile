@@ -11,5 +11,13 @@ RUN curl -L -O http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp 
 # install excel related packages for python \
 RUN pip install openpyxl
 
+# install bwa-0.7.17
+RUN apt-get update && apt install -y zlib1g-dev
+RUN curl -L http://sourceforge.net/projects/bio-bwa/files/bwa-0.7.17.tar.bz2 | tar -jxvf - -C /opt/  \
+    && cd /opt/bwa-0.7.17 && make
+
+# 设置环境变量
+ENV PATH=/opt/bwa-0.7.17:/opt/bwa-mem2-2.2.1_x64-linux:$PATH
+
 # 支持中文
 ENV LANG=C.UTF-8
