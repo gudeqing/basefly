@@ -351,15 +351,21 @@ class StateGraph(object):
                     state_dict[lst[0]] = dict(zip(header[1:], lst[1:]))
             state = state_dict
         self.state = state
-        self.graph = pgv.AGraph(directed=True, rankdir='LR')
+        # rank dir: LR(left->right), RL, TB, BT(bottom->top)
+        node_names = [x for x in state.keys() if '-' in x]
+        sample_names = {x.split('-')[1] for x in node_names if len(x.split('-')) == 2}
+        if len(sample_names) <= 3:
+            self.graph = pgv.AGraph(directed=True, rankdir='TB')
+        else:
+            self.graph = pgv.AGraph(directed=True, rankdir='LR')
         self.used_colors = dict()
         self.color_dict = dict(
-            success='#7FFF00',
+            success='#98FB98',
             failed='#FFD700',
             running='#9F79EE',
             queueing='#87CEFF',
             killed='red',
-            outdoor='#A8A8A8',
+            outdoor='#D3D3D3',
         )
 
     def _add_nodes(self):
@@ -369,7 +375,7 @@ class StateGraph(object):
             if status in self.color_dict:
                 color = self.color_dict[status]
             else:
-                color = '#A8A8A8'
+                color = '#D3D3D3'
             self.used_colors[status] = color
             used_time = cmd_info['used_time']
             if isinstance(used_time, str):
@@ -414,6 +420,8 @@ class StateGraph(object):
                 self.graph.add_edge('Input', target, color='green')
 
     def _add_legend(self):
+        if len(self.used_colors) == 1 and list(self.used_colors.keys())[0] == 'unknown':
+            return
         subgraph = self.graph.add_subgraph(name='cluster_sub', label='Color Legend', rank='max')
         subgraph.graph_attr['color'] = 'lightgrey'
         subgraph.graph_attr['style'] = 'filled'
