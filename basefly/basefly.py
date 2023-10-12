@@ -1601,7 +1601,7 @@ class Workflow:
                             contents += ' ' * 4 + f'default: "{sample_name}"\n'
                         fw.write(contents)
                 else:
-                    if 'tumor' in line or 'normal' in line:
+                    if 'tumor' in line and 'normal' in line:
                         # 先把顶层变量用source导入，然后通过self引用
                         fw.write(' '*8 + 'source: [tumor_name, normal_name]\n')
                         line = line.replace('default:', 'valueFrom:')
@@ -1614,6 +1614,28 @@ class Workflow:
                         else:
                             line = line.replace('tumor', '$(self[0])')
                             line = line.replace('normal', '$(self[1])')
+                    elif 'tumor' in line and ('normal' not in line):
+                        # 先把顶层变量用source导入，然后通过self引用
+                        fw.write(' '*8 + 'source: tumor_name\n')
+                        line = line.replace('default:', 'valueFrom:')
+                        if line.strip().endswith(']'):
+                            line = line.replace("'", '')
+                            line = line.replace('[', '${return [')
+                            line = line.replace(']', ']}')
+                            line = line.replace('tumor', 'self')
+                        else:
+                            line = line.replace('tumor', '$(self)')
+                    elif ('tumor' not in line) and ('normal' in line):
+                        # 先把顶层变量用source导入，然后通过self引用
+                        fw.write(' '*8 + 'source: normal_name\n')
+                        line = line.replace('default:', 'valueFrom:')
+                        if line.strip().endswith(']'):
+                            line = line.replace("'", '')
+                            line = line.replace('[', '${return [')
+                            line = line.replace(']', ']}')
+                            line = line.replace('normal', 'self')
+                        else:
+                            line = line.replace('normal', '$(self)')
                     fw.write(line)
 
         # 输出tools
