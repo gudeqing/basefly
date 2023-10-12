@@ -4,6 +4,7 @@ import sys; sys.path.append(script_path)
 from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 
 
+# 定义如下函数时，最好不要带参数, 如果带参数，在给参数赋值时，建议使用value而不是default
 def stepA():
     cmd = Command()
     cmd.meta.name = 'Module-A'
@@ -16,7 +17,7 @@ def stepA():
     return cmd
 
 
-def stepB():
+def stepB(out_prefix='outfile2'):
     cmd = Command()
     cmd.meta.name = 'Module-B'
     cmd.meta.desc = 'This tool is used to get ouput2'
@@ -24,7 +25,7 @@ def stepB():
     cmd.runtime.image = 'docker/whalesay'
     cmd.runtime.tool = 'cat'
     cmd.args['infile'] = Argument(prefix='', type='infile', desc='input file')
-    cmd.args['outfile'] = Argument(prefix='> ', type='outstr', default='outfile2.txt', desc='output file')
+    cmd.args['outfile'] = Argument(prefix='> ', type='outstr', value=f'{out_prefix}.txt', desc='output file')
     cmd.outputs['outfile'] = Output(type='outfile', value='~{outfile}')
     return cmd
 

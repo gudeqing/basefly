@@ -91,10 +91,10 @@ def FastqToSam(sample):
     cmd.runtime.tool = 'gatk FastqToSam'
     cmd.args['read1'] = Argument(prefix='-F1 ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-F2 ', level='optional', type='infile', editable=False, desc='read2 fastq file')
-    cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.unmapped.bam', type='outstr', format='ubam', desc='output sam file')
-    cmd.args['read_group_name'] = Argument(prefix='--READ_GROUP_NAME ', default=sample, editable=False, desc='read group name')
-    cmd.args['sample_name'] = Argument(prefix='--SAMPLE_NAME ', default=sample, editable=False, desc='sample name')
-    cmd.args['library_name'] = Argument(prefix='--LIBRARY_NAME ', default=sample, editable=False, desc='library name')
+    cmd.args['out'] = Argument(prefix='-O ', value=f'{sample}.unmapped.bam', type='outstr', format='ubam', desc='output sam file')
+    cmd.args['read_group_name'] = Argument(prefix='--READ_GROUP_NAME ', value=sample, editable=False, desc='read group name')
+    cmd.args['sample_name'] = Argument(prefix='--SAMPLE_NAME ', value=sample, editable=False, desc='sample name')
+    cmd.args['library_name'] = Argument(prefix='--LIBRARY_NAME ', value=sample, editable=False, desc='library name')
     cmd.args['platform'] = Argument(prefix='--PLATFORM ', default='illumina', desc='sequencing platform name')
     cmd.args['tmpdir'] = Argument(prefix='--TMP_DIR ', default='.', editable=False, desc='directorie with space available to be used by this program for temporary storage of working files')
     cmd.outputs['out'] = Output(value='{out}', format='ubam')
@@ -230,7 +230,7 @@ def MergeBamAlignment(sample):
     cmd.args['ATTRIBUTES_TO_RETAIN'] = Argument(prefix='--ATTRIBUTES_TO_RETAIN ', default='X0')
     cmd.args['ALIGNED_BAM'] = Argument(prefix='--ALIGNED_BAM ', type='infile', desc='SAM or BAM file', format='bam')
     cmd.args['UNMAPPED_BAM'] = Argument(prefix='--UNMAPPED_BAM ', type='infile', desc='unmapped bam file', format='ubam')
-    cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', type='outstr', default=f'{sample}.merged.bam', desc='output bam file')
+    cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', type='outstr', value=f'{sample}.merged.bam', desc='output bam file')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='--REFERENCE_SEQUENCE ', type='infile', format='fasta', desc='reference fasta file')
     cmd.args['SORT_ORDER'] = Argument(prefix='--SORT_ORDER ', default='coordinate', desc='The order in which the merged reads should be output.  Default value: coordinate. Possible values: {unsorted, queryname, coordinate, duplicate, unknown}')
     cmd.args['CREATE_INDEX'] = Argument(prefix='--CREATE_INDEX ', default='true', desc='Whether to create a BAM index when writing a coordinate-sorted BAM file')
@@ -276,9 +276,9 @@ def GroupReadsByUmi(sample):
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'fgbio --compression 1 GroupReadsByUmi'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
-    cmd.args['output'] = Argument(prefix='-o ', type='outstr', default=f'{sample}.umi_grouped.bam', desc='The output BAM file.')
+    cmd.args['output'] = Argument(prefix='-o ', type='outstr', value=f'{sample}.umi_grouped.bam', desc='The output BAM file.')
     cmd.args['strategy'] = Argument(prefix='-s ', default="adjacency", desc='The UMI assignment strategy. edit: reads are clustered into groups such that each read within a group has at least one other read in the group with <= edits differences and there are inter-group pairings with <= edits differences. Effective when there are small numbers of reads per UMI, but breaks down at very high coverage of UMIs. 3.adjacency: a version of the directed adjacency method described in umi_tools that allows for errors between UMIs but only when there is a count gradient.')
-    cmd.args['family-size-histogram'] = Argument(prefix='-f ', type='outstr', default=f'{sample}.family.size.txt', desc='Optional output of tag family size counts.')
+    cmd.args['family-size-histogram'] = Argument(prefix='-f ', type='outstr', value=f'{sample}.family.size.txt', desc='Optional output of tag family size counts.')
     cmd.args['raw-tag'] = Argument(prefix='-t ', default='RX', desc='The tag containing the raw UMI.')
     cmd.args['assign-tag'] = Argument(prefix='-T ', default='MI', desc='The output tag for UMI grouping.')
     cmd.args['min-map-q'] = Argument(prefix='-m ', default=1, desc='Minimum mapping quality for mapped reads.')
@@ -657,7 +657,7 @@ def vep(sample):
     # 明确输入格式时，当vcf实际为空时程序不会报错
     cmd.args['format'] = Argument(prefix='--format ', default='vcf',  desc='Input file format - one of "ensembl", "vcf", "hgvs", "id", "region", "spdi".')
     cmd.args['fasta'] = Argument(prefix='--fasta ', type='infile', desc="Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache).")
-    cmd.args['output_file'] = Argument(prefix='-o ', type='outstr', default=f'{sample}.vep.vcf.gz', desc='output file')
+    cmd.args['output_file'] = Argument(prefix='-o ', type='outstr', value=f'{sample}.vep.vcf.gz', desc='output file')
     cmd.args['output_format'] = Argument(prefix='--', range={'vcf', 'json', 'tab'}, default='vcf', desc="If we choose to write output in VCF format. Consequences are added in the INFO field of the VCF file, using the key 'CSQ'. Data fields are encoded separated by '|'; the order of fields is written in the VCF header. Output fields in the 'CSQ' INFO field can be selected by using --fields.")
     cmd.args['compress_output'] = Argument(prefix='--compress_output ', default='bgzip', desc="Writes output compressed using either gzip or bgzip")
     cmd.args['force_overwrite'] = Argument(prefix="--force_overwrite ", type='bool', default=True, desc="Force overwriting of output file")
@@ -667,7 +667,7 @@ def vep(sample):
     # docker有可能报读写权限问题,可以考虑chmod -R a+rwx $HOME/vep_data，实际上需要用其他用户身份进入容器才有权限，比如用-u指定用户身份
     cmd.args['dir_cache'] = Argument(prefix='--dir_cache ', type='indir', desc='Specify the cache directory to use')
     cmd.args['dir_plugins'] = Argument(prefix='--dir_plugins ', type='indir', level='optional', desc='Specify the plugin directory to use')
-    cmd.args['stats_file'] = Argument(prefix='--stats_file ', type='outstr', default=f'{sample}.vep.summary.html', desc='Summary stats file name. This is an HTML file containing a summary of the VEP run - the file name must end with <.html>.')
+    cmd.args['stats_file'] = Argument(prefix='--stats_file ', type='outstr', value=f'{sample}.vep.summary.html', desc='Summary stats file name. This is an HTML file containing a summary of the VEP run - the file name must end with <.html>.')
     cmd.args['max_sv_size'] = Argument(prefix='--max_sv_size ', default=50000000, desc='Max sv size allowed for annotation')
     cmd.args['cache'] = Argument(prefix='--cache ', type='bool', default=True, desc='Enables use of cache')
     cmd.args['offline'] = Argument(prefix='--offline ', type='bool', default=True, desc='Enables offline mode. No database connections, and a cache file or GFF/GTF file is required for annotation')
@@ -766,7 +766,7 @@ def MergeVcfs(sample):
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360056969852-MergeVcfs-Picard-'
     cmd.runtime.tool = 'gatk MergeVcfs'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input vcf list', format='vcf.gz')
-    cmd.args['out'] = Argument(prefix='-O ', type='outstr', default=f'{sample}.vcf.gz', desc='The merged VCF or BCF file. File format is determined by file extension.')
+    cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.vcf.gz', desc='The merged VCF or BCF file. File format is determined by file extension.')
     cmd.outputs['out'] = Output(value='{out}', format='vcf.gz')
     return cmd
 
@@ -778,7 +778,7 @@ def LearnReadOrientationModel(sample):
     cmd.meta.desc = 'Learn the prior probability of read orientation artifact from the output of CollectF1R2Counts of Mutect2'
     cmd.runtime.tool = 'gatk LearnReadOrientationModel'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='One or more .tar.gz containing outputs of CollectF1R2Counts')
-    cmd.args['out'] = Argument(prefix='-O ', type='outstr', default=f'{sample}.artifact-priors.tar.gz', desc='tar.gz of artifact prior tables')
+    cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.artifact-priors.tar.gz', desc='tar.gz of artifact prior tables')
     cmd.outputs['out'] = Output(value='{out}')
     return cmd
 
@@ -792,12 +792,12 @@ def FilterMutectCalls(sample):
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', format='vcf.gz', desc='A VCF file containing variants')
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', format='bam', level='optional', desc=' BAM/SAM/CRAM file containing reads')
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', format='fasta', desc='reference fasta file')
-    cmd.args['out'] = Argument(prefix='-O ', type='outstr', default=f'{sample}.filtered.vcf.gz', desc='output vcf file')
+    cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.filtered.vcf.gz', desc='output vcf file')
     cmd.args['contamination-table'] = Argument(prefix='--contamination-table ', level='optional', type='infile')
     cmd.args['tumor-segmentation'] = Argument(prefix='--tumor-segmentation ', level='optional', type='infile')
     cmd.args['ob-priors'] = Argument(prefix='--ob-priors ', type='infile', level='optional')
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', level='optional')
-    cmd.args['filtering-stats'] = Argument(prefix='--filtering-stats ', type='outstr', default=f'{sample}.filtering.stats', desc='output filtering stat file')
+    cmd.args['filtering-stats'] = Argument(prefix='--filtering-stats ', type='outstr', value=f'{sample}.filtering.stats', desc='output filtering stat file')
     # hard filer args
     cmd.args['max-alt-allele-count'] = Argument(prefix='--max-alt-allele-count ', default=3, desc='filter variants with too many alt alleles')
     cmd.args['max-events-in-region'] = Argument(prefix='--max-events-in-region ', default=3, desc='Variants coming from an assembly region with more than this many events are filtered')
@@ -825,7 +825,7 @@ def FilterAlignmentArtifacts(sample):
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', format='bam', desc='input bam file')
     cmd.args['bwa-mem-index-image'] = Argument(prefix='--bwa-mem-index-image ', type='infile', desc='BWA-mem index image')
-    cmd.args['out'] = Argument(prefix='-O ', type='outstr', default=f'{sample}.align_artifacts_filtered.vcf.gz', desc='output vcf file')
+    cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.align_artifacts_filtered.vcf.gz', desc='output vcf file')
     cmd.outputs['out'] = Output(value='{out}', format='vcf.gz')
     return cmd
 
@@ -836,7 +836,7 @@ def MergeMutectStats(sample):
     cmd.runtime.image = 'gudeqing/gatk-bwamem2-gencore:1.0'
     cmd.runtime.tool = 'gatk MergeMutectStats'
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', multi_times=True)
-    cmd.args['out'] = Argument(prefix='-O ', type='outstr', default=f'{sample}.vcf.stats', desc='output merged stat files')
+    cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.vcf.stats', desc='output merged stat files')
     cmd.outputs['out'] = Output(value='{out}')
     return cmd
 
@@ -1111,8 +1111,8 @@ def MarkDuplicates(sample):
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.tool = 'gatk MarkDuplicates'
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', format='bam', multi_times=True, desc='input bam file list')
-    cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', default=f'{sample}.unsorted.dup_marked.bam', desc='output bam file')
-    cmd.args['METRICS_FILE'] = Argument(prefix='--METRICS_FILE ', default=f'{sample}.dup_metrics.txt')
+    cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', value=f'{sample}.unsorted.dup_marked.bam', desc='output bam file')
+    cmd.args['METRICS_FILE'] = Argument(prefix='--METRICS_FILE ', value=f'{sample}.dup_metrics.txt')
     cmd.args['VALIDATION_STRINGENCY'] = Argument(prefix='--VALIDATION_STRINGENCY ', default='SILENT')
     cmd.args['OPTICAL_DUPLICATE_PIXEL_DISTANCE'] = Argument(prefix='--OPTICAL_DUPLICATE_PIXEL_DISTANCE ', default=2500, desc='The maximum offset between two duplicate clusters in order to consider them optical duplicates. The default is appropriate for unpatterned versions of the Illumina platform. For the patterned flowcell models, 2500 is moreappropriate. For other platforms and models, users should experiment to find what works best.')
     cmd.args['ASSUME_SORT_ORDER'] = Argument(prefix='--ASSUME_SORT_ORDER ', default='queryname')
