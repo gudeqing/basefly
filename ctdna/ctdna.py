@@ -197,11 +197,16 @@ def Bam2FastqBwaMem(sample):
     return cmd
 
 
-def BwaMem2(sample, platform):
+def BwaMem(sample, platform, bwamem2=True):
     cmd = Command()
     cmd.meta.name = 'BwaMem2'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.tool = '/opt/bwa-mem2-2.2.1_x64-linux/bwa-mem2 mem -M -Y -v 3'
+    if bwamem2:
+        cmd.meta.version = '2.2.1_x64-linux'
+        cmd.runtime.tool = 'bwa-mem2 mem -M -Y -v 3'
+    else:
+        cmd.runtime.tool = 'bwa mem -M -Y -v 3'
+        cmd.runtime.tool = '0.7.17-r1188'
     cmd.runtime.memory = 15 * 1024 ** 3
     cmd.runtime.cpu = 8
     cmd.args['include_read_header'] = Argument(prefix='-C', type='bool', default=False, desc='Append FASTA/FASTQ comment to SAM output')
@@ -1952,7 +1957,7 @@ def pipeline():
             fastp_task_dict[uniq_tag] = fastp_task
 
             if 'FastqToSam' in wf.args.skip:
-                map_task, args = wf.add_task(BwaMem2(sample, 'Illumina'), tag='fastp-' + sample, depends=[fastp_task])
+                map_task, args = wf.add_task(BwaMem(sample, 'Illumina'), tag='fastp-' + sample, depends=[fastp_task])
                 args['read1'].value = fastp_task.outputs['out1']
                 args['read2'].value = fastp_task.outputs['out2']
                 args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
@@ -1993,7 +1998,7 @@ def pipeline():
             args['CLIPPING_ACTION'].value = 'N'
             args['read1'].value = uniq_tag + '.R1.fq.gz'
             args['read2'].value = uniq_tag + '.R2.fq.gz'
-            bwa_task, args = wf.add_task(BwaMem2(uniq_tag, 'Illumina'), tag='First-' + uniq_tag)
+            bwa_task, args = wf.add_task(BwaMem(uniq_tag, 'Illumina'), tag='First-' + uniq_tag)
             args['read1'].value = bam2fq_task.outputs['read1']
             args['read2'].value = bam2fq_task.outputs['read2']
             args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
@@ -2085,7 +2090,7 @@ def pipeline():
         args['out2'].value = sample + '.consensus.bq_correct.R2.fq.gz'
         sam2fastq_task_dict[sample] = reformat_task
 
-        map_task, args = wf.add_task(BwaMem2(sample, 'Illumina'), tag=sample, depends=[reformat_task])
+        map_task, args = wf.add_task(BwaMem(sample, 'Illumina'), tag=sample, depends=[reformat_task])
         args['read1'].value = reformat_task.outputs['read1']
         args['read2'].value = reformat_task.outputs['read2']
         args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
