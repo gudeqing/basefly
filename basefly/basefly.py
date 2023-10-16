@@ -274,10 +274,12 @@ class Command:
             else:
                 if arg_value is not None:
                     if not arg.multi_times:
-                        if '{}' not in arg.prefix:
-                            cmd += ' ' + arg.prefix + str(arg_value)
-                        else:
+                        if '{}' in arg.prefix:
                             cmd += ' ' + arg.prefix.format(arg_value)
+                        elif '{v}' in arg.prefix:
+                            cmd += ' ' + arg.prefix.format(v=arg_value)
+                        else:
+                            cmd += ' ' + arg.prefix + str(arg_value)
                     else:
                         if arg_value:
                             cmd += ' ' + arg.prefix + (' ' + arg.prefix).join(arg_value)
