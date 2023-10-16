@@ -732,6 +732,8 @@ class Workflow:
         self.topvars.update(var_dict)
 
     def add_task(self, cmd: Command, depends: list = [], parent_wkdir: str = '', name: str = None, tag: str = None):
+        if type(cmd) != Command:
+            raise Exception(f'Try to add task {name}, but the first argument is {cmd}, you may forget to return cmd')
         self.task_order += 1
         task = Task(cmd=cmd, depends=depends.copy(), name=name, tag=tag, parent_wkdir=parent_wkdir)
         existed_names = {x.name for x in self.tasks.values()}
