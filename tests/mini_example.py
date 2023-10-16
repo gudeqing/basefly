@@ -11,7 +11,7 @@ def stepA():
     # 初始化tool
     cmd = Command()
     cmd.meta.name = 'ModuleA'  # 工具名称，将被用作task名称的前缀，不能有重复，最好不用特殊字符串，不建议包含‘-’或‘_'
-    cmd.meta.desc = 'This module is ude to collect information'
+    cmd.meta.desc = 'This module is used to collect information'
     cmd.meta.version = 'version_number'  # 建议填写软件版本号
     cmd.meta.author = 'who_create_the_tool'
 
