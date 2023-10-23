@@ -127,7 +127,7 @@ def ExtractUmisFromBam():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'fgbio -Xmx10g --compression 1 ExtractUmisFromBam'
+    cmd.runtime.tool = 'java -Xmx10g -jar /opt/fgbio/fgbio.jar --compression 1 --async-io ExtractUmisFromBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='Input BAM file', format='ubam')
     cmd.args['read-structure'] = Argument(prefix='-r ', array=True, default=['3M2S+T', '3M2S+T'], desc='The read structure, one per read in a template.')
     cmd.args['molecular-index-tags'] = Argument(prefix='-t ', array=True, default=['ZA', 'ZB'], desc='SAM tag(s) in which to store the molecular indices.')
@@ -279,7 +279,7 @@ def GroupReadsByUmi(sample):
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio -Xmx12g --compression 1 GroupReadsByUmi'
+    cmd.runtime.tool = 'java -Xmx12g -jar /opt/fgbio/fgbio.jar --compression 1 --async-io GroupReadsByUmi'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', value=f'{sample}.umi_grouped.bam', desc='The output BAM file.')
     cmd.args['strategy'] = Argument(prefix='-s ', default="adjacency", desc='The UMI assignment strategy. edit: reads are clustered into groups such that each read within a group has at least one other read in the group with <= edits differences and there are inter-group pairings with <= edits differences. Effective when there are small numbers of reads per UMI, but breaks down at very high coverage of UMIs. 3.adjacency: a version of the directed adjacency method described in umi_tools that allows for errors between UMIs but only when there is a count gradient.')
@@ -301,7 +301,7 @@ def CallDuplexConsensusReads():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'fgbio -Xmx12g --compression 1 CallDuplexConsensusReads'
+    cmd.runtime.tool = 'java -Xmx12g -jar /opt/fgbio/fgbio.jar --compression 1 --async-io CallDuplexConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
@@ -322,7 +322,7 @@ def CallMolecularConsensusReads():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'fgbio -Xmx12g --compression 1 CallMolecularConsensusReads'
+    cmd.runtime.tool = 'java -Xmx12g -jar /opt/fgbio/fgbio.jar --compression 1 --async-io CallMolecularConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
@@ -342,7 +342,7 @@ def FilterConsensusReads():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio -Xmx10g --compression 1 FilterConsensusReads'
+    cmd.runtime.tool = 'java -Xmx10g -jar /opt/fgbio/fgbio.jar --compression 1 --async-io FilterConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
@@ -370,7 +370,7 @@ def ClipBam():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio -Xmx10g --compression 1 ClipBam'
+    cmd.runtime.tool = 'java -Xmx10g -jar /opt/fgbio/fgbio.jar --compression 1 --async-io ClipBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['metrics'] = Argument(prefix='-m ', type='outstr', default='clipbam.metrics.txt', desc='output of clipping metrics.')
@@ -393,7 +393,7 @@ def FilterBam():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio -Xmx10g FilterBam'
+    cmd.runtime.tool = 'java -Xmx10g -jar /opt/fgbio/fgbio.jar --compression 1 --async-io FilterBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['remove-duplicates'] = Argument(prefix='-D ', default='true', range=['true', 'false'], desc='If true remove all reads that are marked as duplicates')
@@ -437,7 +437,7 @@ def ZipperBams():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio -Xmx10g --compression 1 ZipperBams'
+    cmd.runtime.tool = 'java -Xmx10g -jar /opt/fgbio/fgbio.jar --compression 1 --async-io ZipperBams'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.', format='bam')
     cmd.args['unmapped'] = Argument(prefix='-u ', type='infile', desc='The input unmapped BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
@@ -510,7 +510,7 @@ def VardictSingle():
     cmd.runtime.image = 'hydragenetics/vardict:1.8.3'
     cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 8
-    cmd.runtime.tool = 'vardict-java'
+    cmd.runtime.tool = 'java -Xmx12g -jar /usr/local/lib/VarDict-1.8.3.jar'
     cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
     cmd.args['bam'] = Argument(prefix='-b ', type='infile', format='bam', desc='The indexed BAM file')
     cmd.args['genome'] = Argument(prefix='-G ', type='infile', desc='The reference fasta. Should be indexed (.fai).')
@@ -544,7 +544,7 @@ def VardictPaired():
     cmd.runtime.image = 'hydragenetics/vardict:1.8.3'
     cmd.runtime.memory = 16 * 1024 ** 3
     cmd.runtime.cpu = 8
-    cmd.runtime.tool = 'vardict-java'
+    cmd.runtime.tool = 'java -Xmx16g -jar /usr/local/lib/VarDict-1.8.3.jar'
     cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
     cmd.args['bam'] = Argument(prefix='-b ', type='infile', array=True, delimiter='\\|', format='bam', desc='The indexed BAM files, tumor|normal')
     cmd.args['genome'] = Argument(prefix='-G ', type='infile', format='fasta', desc='The reference fasta. Should be indexed (.fai).')
