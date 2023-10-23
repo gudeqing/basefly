@@ -1246,7 +1246,9 @@ class Workflow:
         base_cmd = cmd.runtime.tool_dir + cmd.runtime.tool
         base_cmd = base_cmd.split()
         if base_cmd:
-            contents += f'baseCommand: {base_cmd}\n'
+            # contents += f'baseCommand: {base_cmd}\n'
+            # 利用json.dumps处理单引号
+            contents += f'baseCommand: {json.dumps(base_cmd)}\n'
 
         def _get_default_value(arg: Argument):
             value = None
