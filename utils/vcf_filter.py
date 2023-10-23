@@ -1660,6 +1660,8 @@ class VcfFilter(ValidateMutationByBam):
         # csq_dict['IMPACT'],
         # csq_dict['MAX_AF'],
         # csq_dict['MAX_AF_POPS']
+        if 'CSQ' not in self.vcf.header.info:
+            return True, 0
         csq_format = self.vcf.header.info['CSQ'].description.split('Format: ')[1]
         pop_af = []
         for each in record.info['CSQ']:
@@ -1763,6 +1765,34 @@ class VcfFilter(ValidateMutationByBam):
         return passed
 
     def format_txt_output(self, r) -> dict:
+        if 'CSQ' not in self.vcf.header.info:
+            target_info = {
+                'Sample': self.tumor,
+                "Chr": r.contig,
+                "Start": r.pos,
+                "End": r.stop,
+                "Ref": r.ref,
+                "Alt": r.alts,
+                "VAF(%)": f'{self.get_af_value(r, self.tumor)*100:.2f}',  # Allele Frequency
+                # additional information
+                "AltDepth": self.get_alt_depth(r),
+                "Depth": self.get_depth(r, self.tumor),  # Depth
+                'CtrlSample': self.normal,
+            }
+            if 'LSEQ' in r.info:
+                target_info['LSEQ'] = r.info['LSEQ']  # from vardict output
+                target_info['REF'] = r.ref
+                target_info['RSEQ'] = r.info['RSEQ']
+
+            if 'LOD' in r.info:
+                target_info['LOD(error_rate,error_upper,pvalue,min_depth)'] = r.info['LOD']
+            if 'ConsInfo' in r.info:
+                # consensus depth information
+                target_info['(Alt_cD1, Alt_cD2+, cD1, cD2+, MeanError)'] = r.info['ConsInfo']
+            if 'PassBGN' in r.info:
+                target_info['PassBGN'] = r.info['PassBGN']
+            return target_info
+
         csq_format = self.vcf.header.info['CSQ'].description.split('Format: ')[1]
         picked = None
         canonical = None
@@ -2248,7 +2278,7 @@ if __name__ == '__main__':
     import argparse
     from pathlib import Path
     parser = argparse.ArgumentParser()
-    parser.add_argument('-vcf', type=Path, required=True, help='vcf file annotated with vep')
+    parser.add_argument('-vcf', type=Path, required=True, help='vcf file, vcf annotated with vep is also supported')
     parser.add_argument('-genome', type=Path, required=True, help='path to indexed genome fasta')
     parser.add_argument('-bam', type=Path, required=False, help='bam file which will be used to estimate background noise')
     parser.add_argument('-bed', type=Path,  required=False, help='target region file which will be used to estimate background noise')
