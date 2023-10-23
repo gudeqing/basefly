@@ -86,9 +86,9 @@ def FastqToSam(sample):
     cmd.meta.name = 'FastqToSam'
     cmd.meta.desc = 'convert fastq to sam'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 10 * 1024 ** 3
-    cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'gatk FastqToSam'
+    cmd.runtime.memory = 17 * 1024 ** 3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'gatk --java-options -Xmx16g FastqToSam'
     cmd.args['read1'] = Argument(prefix='-F1 ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-F2 ', level='optional', type='infile', editable=False, desc='read2 fastq file')
     cmd.args['out'] = Argument(prefix='-O ', value=f'{sample}.unmapped.bam', type='outstr', format='ubam', desc='output sam file')
@@ -106,7 +106,7 @@ def SamToFastq():
     cmd.meta.name = 'SamToFastq'
     cmd.meta.desc = 'Use samtools to convert sam to Fastq. This tool enables user to copy tag to fastq header line'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'samtools fastq'
     cmd.args['read1'] = Argument(prefix='-1 ', desc='write paired reads flagged READ1 to FILE')
@@ -126,8 +126,8 @@ def ExtractUmisFromBam():
     cmd.meta.desc = 'Extracts unique molecular indexes from reads in a BAM file into tags'
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
-    cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio --compression 1 ExtractUmisFromBam'
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'fgbio -Xmx10g --compression 1 ExtractUmisFromBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='Input BAM file', format='ubam')
     cmd.args['read-structure'] = Argument(prefix='-r ', array=True, default=['3M2S+T', '3M2S+T'], desc='The read structure, one per read in a template.')
     cmd.args['molecular-index-tags'] = Argument(prefix='-t ', array=True, default=['ZA', 'ZB'], desc='SAM tag(s) in which to store the molecular indices.')
@@ -145,7 +145,7 @@ def MarkIlluminaAdapters():
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'gatk MarkIlluminaAdapters'
+    cmd.runtime.tool = 'gatk --java-options -Xmx10g MarkIlluminaAdapters'
     cmd.args['input'] = Argument(prefix='--INPUT ', type='infile', desc='Input BAM file', format='ubam')
     cmd.args['metrics'] = Argument(prefix='--METRICS ', type='outstr', default='metrics.txt', desc='Histogram showing counts of bases_clipped in how many reads Required')
     cmd.args['output'] = Argument(prefix='--OUTPUT ', type='outstr', desc='Output BAM file')
@@ -161,7 +161,7 @@ def Bam2Fastq():
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10*1024**3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'gatk SamToFastq'
+    cmd.runtime.tool = 'gatk --java-options -Xmx10g SamToFastq'
     cmd.args['input'] = Argument(prefix='-I ', type='infile', desc='input ubam file')
     cmd.args['CLIPPING_ATTRIBUTE'] = Argument(prefix='--CLIPPING_ATTRIBUTE ', level='optional', desc='The attribute that stores the position at which the SAM record should be clipped ')
     cmd.args['CLIPPING_ACTION'] = Argument(prefix='--CLIPPING_ACTION ', level='optional', desc="The action that should be taken with clipped reads: 'X' means the reads and qualities should be trimmed at the clipped position; 'N' means the bases should be changed to Ns in the clipped region; and any integer means that the base qualities should be set to that value in the clipped region. ")
@@ -180,7 +180,7 @@ def Bam2FastqBwaMem(sample):
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 15*1024**3
     cmd.runtime.cpu = 8
-    cmd.args['_fix0'] = Argument(type='fix', value='gatk SamToFastq')
+    cmd.args['_fix0'] = Argument(type='fix', value='gatk --java-options -Xmx12g SamToFastq')
     cmd.args['input'] = Argument(prefix='-I ', type='infile', desc='input ubam file')
     cmd.args['CLIPPING_ATTRIBUTE'] = Argument(prefix='--CLIPPING_ATTRIBUTE ', level='optional', desc='The attribute that stores the position at which the SAM record should be clipped ')
     cmd.args['CLIPPING_ACTION'] = Argument(prefix='--CLIPPING_ACTION ', level='optional', desc="The action that should be taken with clipped reads: 'X' means the reads and qualities should be trimmed at the clipped position; 'N' means the bases should be changed to Ns in the clipped region; and any integer means that the base qualities should be set to that value in the clipped region. ")
@@ -207,7 +207,7 @@ def BwaMem(sample, platform, bwamem2=True):
     else:
         cmd.runtime.tool = 'bwa mem -M -Y -v 3'
         cmd.runtime.tool = '0.7.17-r1188'
-    cmd.runtime.memory = 15 * 1024 ** 3
+    cmd.runtime.memory = 30 * 1024 ** 3
     cmd.runtime.cpu = 8
     cmd.args['include_read_header'] = Argument(prefix='-C', type='bool', default=False, desc='Append FASTA/FASTQ comment to SAM output')
     cmd.args['readgroup'] = Argument(prefix='-R ', desc='read group info', value=f'"@RG\\tID:{sample}\\tSM:{sample}\\tPL:{platform}"')
@@ -227,9 +227,9 @@ def MergeBamAlignment(sample):
     cmd.meta.name = 'MergeBamAlignment'
     cmd.meta.desc = 'merge bam alignment'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 10 * 1024 ** 3
-    cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'gatk MergeBamAlignment'
+    cmd.runtime.memory = 17 * 1024 ** 3
+    cmd.runtime.cpu = 4
+    cmd.runtime.tool = 'gatk --java-options -Xmx16g MergeBamAlignment'
     cmd.args['VALIDATION_STRINGENCY'] = Argument(prefix='--VALIDATION_STRINGENCY ', default='SILENT')
     cmd.args['EXPECTED_ORIENTATIONS'] = Argument(prefix='--EXPECTED_ORIENTATIONS ', level='optional')
     cmd.args['ATTRIBUTES_TO_RETAIN'] = Argument(prefix='--ATTRIBUTES_TO_RETAIN ', default='X0')
@@ -260,9 +260,9 @@ def MergeSamFiles():
     cmd.meta.name = 'MergeSamFiles'
     cmd.meta.desc = 'Merges multiple SAM and/or BAM files into a single file.'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.memory = 17 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'gatk MergeSamFiles'
+    cmd.runtime.tool = 'gatk --java-options -Xmx16g MergeSamFiles'
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='SAM or BAM input file', format='bam')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', type='outstr', desc='SAM or BAM file to write merged result')
     cmd.args['CREATE_INDEX'] = Argument(prefix='--CREATE_INDEX ', default='true', range=['true', 'false'], desc='Whether to create a BAM index when writing a coordinate-sorted BAM file.')
@@ -277,9 +277,9 @@ def GroupReadsByUmi(sample):
     cmd.meta.source = 'https://fulcrumgenomics.github.io/fgbio/tools/latest/GroupReadsByUmi.html'
     cmd.meta.desc = 'Groups reads together that appear to have come from the same original molecule. Reads are grouped by template, and then templates are sorted by the 5’ mapping positions of the reads from the template, used from earliest mapping position to latest. Reads that have the same end positions are then sub-grouped by UMI sequence.'
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
-    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio --compression 1 GroupReadsByUmi'
+    cmd.runtime.tool = 'fgbio -Xmx12g --compression 1 GroupReadsByUmi'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', value=f'{sample}.umi_grouped.bam', desc='The output BAM file.')
     cmd.args['strategy'] = Argument(prefix='-s ', default="adjacency", desc='The UMI assignment strategy. edit: reads are clustered into groups such that each read within a group has at least one other read in the group with <= edits differences and there are inter-group pairings with <= edits differences. Effective when there are small numbers of reads per UMI, but breaks down at very high coverage of UMIs. 3.adjacency: a version of the directed adjacency method described in umi_tools that allows for errors between UMIs but only when there is a count gradient.')
@@ -299,9 +299,9 @@ def CallDuplexConsensusReads():
     cmd.meta.source = 'https://fulcrumgenomics.github.io/fgbio/tools/latest/CallDuplexConsensusReads.html'
     cmd.meta.desc = 'Calls duplex consensus sequences from reads generated from the same double-stranded source molecule.'
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
-    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'fgbio --compression 1 CallDuplexConsensusReads'
+    cmd.runtime.tool = 'fgbio -Xmx12g --compression 1 CallDuplexConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
@@ -320,9 +320,9 @@ def CallMolecularConsensusReads():
     cmd.meta.source = 'https://fulcrumgenomics.github.io/fgbio/tools/latest/CallMolecularConsensusReads.html'
     cmd.meta.desc = 'Calls consensus sequences from reads with the same unique molecular tag.'
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
-    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'fgbio --compression 1 CallMolecularConsensusReads'
+    cmd.runtime.tool = 'fgbio -Xmx12g --compression 1 CallMolecularConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['min-reads'] = Argument(prefix='--min-reads ', default=1, desc='The minimum number of reads to produce a consensus base')
@@ -342,7 +342,7 @@ def FilterConsensusReads():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio --compression 1 FilterConsensusReads'
+    cmd.runtime.tool = 'fgbio -Xmx10g --compression 1 FilterConsensusReads'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='Reference fasta file.')
@@ -370,7 +370,7 @@ def ClipBam():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio --compression 1 ClipBam'
+    cmd.runtime.tool = 'fgbio -Xmx10g --compression 1 ClipBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='the input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['metrics'] = Argument(prefix='-m ', type='outstr', default='clipbam.metrics.txt', desc='output of clipping metrics.')
@@ -393,7 +393,7 @@ def FilterBam():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio FilterBam'
+    cmd.runtime.tool = 'fgbio -Xmx10g FilterBam'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.', format='bam')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
     cmd.args['remove-duplicates'] = Argument(prefix='-D ', default='true', range=['true', 'false'], desc='If true remove all reads that are marked as duplicates')
@@ -437,7 +437,7 @@ def ZipperBams():
     cmd.runtime.image = 'gudeqing/fgbio:2.1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
-    cmd.runtime.tool = 'fgbio --compression 1 ZipperBams'
+    cmd.runtime.tool = 'fgbio -Xmx10g --compression 1 ZipperBams'
     cmd.args['input'] = Argument(prefix='-i ', type='infile', desc='The input BAM file.', format='bam')
     cmd.args['unmapped'] = Argument(prefix='-u ', type='infile', desc='The input unmapped BAM file.')
     cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.')
@@ -485,7 +485,7 @@ def Bamdst():
     cmd.meta.source = 'https://github.com/shiquan/bamdst'
     cmd.meta.desc = 'Bamdst is a lightweight tool to stat the depth coverage of target regions of bam file(s).'
     cmd.runtime.image = 'biocontainers/bamdst:1.0.9_cv1'
-    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'bamdst'
     cmd.args['cutoffdepth'] = Argument(prefix='--cutoffdepth ', default=500, desc='coverage of above the specified depth will be reported')
@@ -505,16 +505,16 @@ def VardictSingle():
     cmd = Command()
     cmd.meta.name = 'VardictSingle'
     cmd.meta.source = 'https://github.com/AstraZeneca-NGS/VarDictJava'
-    cmd.meta.version = 'VarDict_v1.8.2'
+    cmd.meta.version = '1.8.3'
     cmd.meta.desc = "VarDictJava is a variant discovery program written in Java and Perl."
     cmd.runtime.image = 'hydragenetics/vardict:1.8.3'
-    cmd.runtime.memory = 10 * 1024 ** 3
-    cmd.runtime.cpu = 2
+    cmd.runtime.memory = 12 * 1024 ** 3
+    cmd.runtime.cpu = 8
     cmd.runtime.tool = 'vardict-java'
     cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
     cmd.args['bam'] = Argument(prefix='-b ', type='infile', format='bam', desc='The indexed BAM file')
     cmd.args['genome'] = Argument(prefix='-G ', type='infile', desc='The reference fasta. Should be indexed (.fai).')
-    cmd.args['threads'] = Argument(prefix='-th ', default=8, desc='Threads count.')
+    cmd.args['threads'] = Argument(prefix='-th ', default=cmd.runtime.cpu, desc='Threads count.')
     cmd.args['min-freq'] = Argument(prefix='-f ', default="0.0001", desc='The threshold for allele frequency')
     cmd.args['chromosome'] = Argument(prefix='-c ', default=1, desc='The column of chromosome')
     cmd.args['region_start'] = Argument(prefix='-S ', default=2, desc='The column of region start')
@@ -539,16 +539,16 @@ def VardictPaired():
     cmd = Command()
     cmd.meta.name = 'VardictPaired'
     cmd.meta.source = 'https://github.com/AstraZeneca-NGS/VarDictJava'
-    cmd.meta.version = 'VarDict_v1.8.2'
+    cmd.meta.version = '1.8.3'
     cmd.meta.desc = "VarDictJava is a variant discovery program written in Java and Perl."
     cmd.runtime.image = 'hydragenetics/vardict:1.8.3'
-    cmd.runtime.memory = 10 * 1024 ** 3
-    cmd.runtime.cpu = 2
+    cmd.runtime.memory = 16 * 1024 ** 3
+    cmd.runtime.cpu = 8
     cmd.runtime.tool = 'vardict-java'
     cmd.args['sample'] = Argument(prefix='-N ', desc='sample name')
     cmd.args['bam'] = Argument(prefix='-b ', type='infile', array=True, delimiter='\\|', format='bam', desc='The indexed BAM files, tumor|normal')
     cmd.args['genome'] = Argument(prefix='-G ', type='infile', format='fasta', desc='The reference fasta. Should be indexed (.fai).')
-    cmd.args['threads'] = Argument(prefix='-th ', default=8, desc='Threads count.')
+    cmd.args['threads'] = Argument(prefix='-th ', default=cmd.runtime.cpu, desc='Threads count.')
     cmd.args['min-freq'] = Argument(prefix='-f ', default="0.0001", desc='The threshold for allele frequency')
     cmd.args['chromosome'] = Argument(prefix='-c ', default=1, desc='The column of chromosome')
     cmd.args['region_start'] = Argument(prefix='-S ', default=2, desc='The column of region start')
@@ -575,7 +575,7 @@ def add_vcf_contig():
     cmd.meta.name = 'AddVcfContig'
     cmd.meta.desc = 'Add contig info for vardict output vcf'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 2 * 1024 ** 3
+    cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
     cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/add_vcf_contig.py', desc='script path')
@@ -593,9 +593,9 @@ def Mutect2(prefix):
     cmd.meta.desc = 'Call somatic short mutations via local assembly of haplotypes. Short mutations include single nucleotide (SNA) and insertion and deletion (indel) alterations.'
     cmd.meta.source = 'https://github.com/broadinstitute/gatk'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 5*1024**3
+    cmd.runtime.memory = 16*1024**3
     cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'gatk Mutect2'
+    cmd.runtime.tool = 'gatk --java-options -Xmx16g Mutect2'
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['tumor_bam'] = Argument(prefix='-I ', type='infile', format='bam', desc='tumor bam')
     cmd.args['normal_bam'] = Argument(prefix='-I ', type='infile', level='optional', format='bam', desc='normal bam')
@@ -715,7 +715,7 @@ def stat_context_seq_error():
     cmd.meta.name = 'StatSeqError'
     cmd.meta.desc = '假设大部分低频突变是测序错误，基于bam文件估计测序错误率'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 2 * 1024 ** 3
+    cmd.runtime.memory = 12 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
     cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/stat_3bases_error.py', desc='script path')
@@ -735,7 +735,7 @@ def VcfFilter():
     cmd.meta.name = 'VcfFilter'
     cmd.meta.desc = 'filtering vcf, 输出符合室间质评的格式结果'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 2 * 1024 ** 3
+    cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'python'
     cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/vcf_filter.py', desc='script path')
@@ -768,8 +768,9 @@ def MergeVcfs(sample):
     cmd.meta.name = 'MergeVcfs'
     cmd.meta.desc = 'Combines multiple variant files into a single variant file.'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
+    cmd.runtime.memory = 8 * 1024**3
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360056969852-MergeVcfs-Picard-'
-    cmd.runtime.tool = 'gatk MergeVcfs'
+    cmd.runtime.tool = 'gatk --java-options -Xmx8g MergeVcfs'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input vcf list', format='vcf.gz')
     cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.vcf.gz', desc='The merged VCF or BCF file. File format is determined by file extension.')
     cmd.outputs['out'] = Output(value='{out}', format='vcf.gz')
@@ -781,7 +782,8 @@ def LearnReadOrientationModel(sample):
     cmd.meta.name = 'LearnReadOrientationModel'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.meta.desc = 'Learn the prior probability of read orientation artifact from the output of CollectF1R2Counts of Mutect2'
-    cmd.runtime.tool = 'gatk LearnReadOrientationModel'
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.runtime.tool = 'gatk --java-options -Xmx8g LearnReadOrientationModel'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='One or more .tar.gz containing outputs of CollectF1R2Counts')
     cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.artifact-priors.tar.gz', desc='tar.gz of artifact prior tables')
     cmd.outputs['out'] = Output(value='{out}')
@@ -792,7 +794,8 @@ def FilterMutectCalls(sample):
     cmd = Command()
     cmd.meta.name = 'FilterMutectCalls'
     cmd.meta.desc = 'FilterMutectCalls applies filters to the raw output of Mutect2'
-    cmd.runtime.tool = 'gatk FilterMutectCalls'
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.runtime.tool = 'gatk --java-options -Xmx8g FilterMutectCalls'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', format='vcf.gz', desc='A VCF file containing variants')
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', format='bam', level='optional', desc=' BAM/SAM/CRAM file containing reads')
@@ -824,7 +827,8 @@ def FilterAlignmentArtifacts(sample):
     cmd.meta.name = 'FilterAlignmentArtifacts'
     cmd.meta.desc = 'Alignment artifacts can occur whenever there is sufficient sequence similarity between two or more regions in the genome to confuse the alignment algorithm. This can occur when the aligner for whatever reason overestimate how uniquely a read maps, thereby assigning it too high of a mapping quality. It can also occur through no fault of the aligner due to gaps in the reference, which can also hide the true position to which a read should map. By using a good alignment algorithm (the GATK wrapper of BWA-MEM), giving it sensitive settings (which may have been impractically slow for the original bam alignment) and mapping to the best available reference we can avoid these pitfalls. The last point is especially important: one can (and should) use a BWA-MEM index image corresponding to the best reference, regardless of the reference to which the bam was aligned.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4418051467035-FilterAlignmentArtifacts-EXPERIMENTAL-'
-    cmd.runtime.tool = 'gatk FilterAlignmentArtifacts'
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.runtime.tool = 'gatk --java-options -Xmx8g FilterAlignmentArtifacts'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', format='vcf.gz', desc='A VCF file containing variants')
     cmd.args['ref'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -839,7 +843,8 @@ def MergeMutectStats(sample):
     cmd = Command()
     cmd.meta.name = 'MergeMutectStats'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.tool = 'gatk MergeMutectStats'
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.runtime.tool = 'gatk --java-options -Xmx8g MergeMutectStats'
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', multi_times=True)
     cmd.args['out'] = Argument(prefix='-O ', type='outstr', value=f'{sample}.vcf.stats', desc='output merged stat files')
     cmd.outputs['out'] = Output(value='{out}')
@@ -879,8 +884,8 @@ def mutscan():
     cmd.meta.name = 'Mutscan'
     cmd.meta.source = 'https://github.com/OpenGene/MutScan'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 5 * 1024 ** 3
-    cmd.runtime.cpu = 2
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.runtime.cpu = 4
     cmd.runtime.tool = 'mutscan'
     cmd.args['read1'] = Argument(prefix='-1 ', type='infile', desc='read1 file name')
     cmd.args['read2'] = Argument(prefix='-2 ', type='infile', desc='read2 file name')
@@ -888,7 +893,7 @@ def mutscan():
     cmd.args['ref'] = Argument(prefix='--ref ', type='infile', desc='reference fasta file name (only needed when mutation file is a VCF)')
     cmd.args['html'] = Argument(prefix='--html ', type='outstr', default='mutscan.html', desc='filename of html report')
     cmd.args['json'] = Argument(prefix='--json ', type='outstr', default='mutscan.json', desc='filename of JSON report')
-    cmd.args['threads'] = Argument(prefix='--thread ', default=4, desc='worker thread number')
+    cmd.args['threads'] = Argument(prefix='--thread ', default=cmd.runtime.cpu, desc='worker thread number')
     cmd.args['support'] = Argument(prefix='--support ', default=2, desc='min read support for reporting a mutation')
     cmd.outputs['json'] = Output(value='{json}')
     cmd.outputs['html'] = Output(value='{html}')
@@ -913,7 +918,7 @@ def multi_qc():
     cmd.meta.name = 'MultiQC'
     cmd.meta.source = 'https://multiqc.info/'
     cmd.runtime.image = 'ewels/multiqc:latest'
-    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.memory = 8 * 1024 ** 3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'multiqc'
     # 由于权限问题，更改docker_cmd_prefix
@@ -932,12 +937,12 @@ def fastp():
     cmd.meta.source = 'https://github.com/OpenGene/fastp'
     cmd.meta.version = '0.23.4'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 5 * 1024 ** 3
-    cmd.runtime.cpu = 2
+    cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.cpu = 4
     cmd.runtime.tool = 'fastp'
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', editable=False, desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', editable=False, level='optional', desc='read2 fastq file')
-    cmd.args['threads'] = Argument(prefix='-w ', default=4, desc='thread number')
+    cmd.args['threads'] = Argument(prefix='-w ', default=cmd.runtime.cpu, desc='thread number')
     cmd.args['min_length'] = Argument(prefix='-l ', default=35, desc='reads shorter than length_required will be discarded')
     cmd.args['correction'] = Argument(prefix='--correction', type='bool', default=True, desc='enable base correction in overlapped regions')
     cmd.args['overlap_diff_percent_limit'] = Argument(prefix='--overlap_diff_percent_limit ', default=10, desc='The maximum number of mismatched bases to detect overlapped region of PE reads')
@@ -960,7 +965,7 @@ def ABRA2():
     cmd.meta.source = 'https://github.com/mozack/abra2'
     cmd.meta.version = 'v2.20'
     cmd.runtime.image = 'goalconsortium/abra2:latest'
-    cmd.runtime.memory = 12 * 1024 ** 3
+    cmd.runtime.memory = 16 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = 'java -Xmx16G -jar /opt/bin/abra2-2.20.jar'
     cmd.args['contigs'] = Argument(prefix='--contigs ', level='optional', desc='Optional file to which assembled contigs are written')
@@ -996,7 +1001,7 @@ def CNVkitFlatRef():
     cmd.meta.desc = 'detecting copy number variants and alterations genome-wide from high-throughput sequencing'
     cmd.runtime.image = 'etal/cnvkit:latest'
     cmd.runtime.cpu = 4
-    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.memory = 8 * 1024 ** 3
     cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
     cmd.args['_antitarget'] = Argument(prefix='', type='fix', value='cnvkit.py antitarget')
     cmd.args['access'] = Argument(prefix='--access ', type='infile', desc='Regions of accessible sequence on chromosomes (.bed)')
@@ -1022,7 +1027,7 @@ def CNVkit():
     cmd.runtime.image = 'etal/cnvkit:latest'
     cmd.runtime.tool = 'cnvkit.py batch'
     cmd.runtime.cpu = 4
-    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.memory = 8 * 1024 ** 3
     cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
     cmd.args['tumor_bams'] = Argument(prefix='', type='infile', array=True, format='bam', desc='Mapped sequence reads (.bam)')
     cmd.args['seq_method'] = Argument(prefix='-m ', default='hybrid', range=['hybrid', 'amplicon', 'wgs'], desc='Sequencing assay type')
@@ -1065,7 +1070,7 @@ def Manta():
     cmd.meta.desc = 'Manta calls structural variants (SVs) and indels from mapped paired-end sequencing reads.'
     cmd.runtime.image = 'michaelfranklin/manta:1.6.0'
     cmd.runtime.cpu = 4
-    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.tool = '/opt/manta/bin/configManta.py'
     cmd.args['config'] = Argument(prefix='--config ', type='infile', level='optional', desc='provide a configuration file to override defaults')
     cmd.args['normal_bam'] = Argument(prefix='--normalBam ', type='infile', format='bam', multi_times=True, level='optional', desc='Normal sample BAM or CRAM file.')
@@ -1094,14 +1099,14 @@ def ETCHING():
     tar zxvf PGK2.tar.gz
     """
     cmd.runtime.image = 'gudeqing/etching:1.4.2'
-    cmd.runtime.cpu = 4
+    cmd.runtime.cpu = 8
     cmd.runtime.memory = 20 * 1024 ** 3
     cmd.runtime.tool = 'etching'
     cmd.args['normal_bam'] = Argument(prefix='-bc ', type='infile', multi_times=True, format='bam', level='optional', desc='Normal sample BAM or CRAM file.')
     cmd.args['tumor_bam'] = Argument(prefix='-b ', type='infile', format='bam', level='optional', desc='Tumor sample BAM or CRAM file')
     cmd.args['genome'] = Argument(prefix='-g ', type='infile', desc='BWA indexed reference genome')
     cmd.args['kmer_database'] = Argument(prefix='-f {}/PGK2', default='/home/hxbio04/dbs/etching/PGK2', type='indir', desc='The Pan-Genome k-mer(PGK) set is used to build PGK filter. wget http://big.hanyang.ac.kr/ETCHING/PGK2.tar.gz')
-    cmd.args['threads'] = Argument(prefix='-t ', default=8, desc='threads number')
+    cmd.args['threads'] = Argument(prefix='-t ', default=cmd.runtime.cpu, desc='threads number')
     cmd.args['prefix'] = Argument(prefix='-o ', desc='output prefix')
     cmd.outputs['out'] = Output(value='{prefix}.scored.filtered.vcf', format='vcf', report=True)
     cmd.outputs['out2'] = Output(value='{prefix}.scored.vcf', format='vcf')
@@ -1113,8 +1118,8 @@ def MarkDuplicates(sample):
     cmd.meta.name = 'MarkDuplicates'
     cmd.meta.desc = 'merge bam alignment and mark duplicate reads'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 10 * 1024 ** 3
-    cmd.runtime.tool = 'gatk MarkDuplicates'
+    cmd.runtime.memory = 16 * 1024 ** 3
+    cmd.runtime.tool = 'gatk --java-options -Xmx16g MarkDuplicates'
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', format='bam', multi_times=True, desc='input bam file list')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', value=f'{sample}.unsorted.dup_marked.bam', desc='output bam file')
     cmd.args['METRICS_FILE'] = Argument(prefix='--METRICS_FILE ', value=f'{sample}.dup_metrics.txt')
@@ -1133,7 +1138,7 @@ def ReformatBaseQual():
     cmd.meta.desc = 'Reformats reads to change ASCII quality encoding'
     cmd.meta.version = '38.96'
     cmd.runtime.image = 'docker.io/genomecenter/bbmap_38.96:latest'
-    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.memory = 8 * 1024 ** 3
     cmd.runtime.cpu = 4
     cmd.runtime.tool = '/bbmap/reformat.sh qin=33 qout=33 mincalledquality=2 maxcalledquality=41 qchist=qc.hist'
     cmd.args['in1'] = Argument(prefix='in1=', type='infile', desc='read1 fq file')
@@ -1151,6 +1156,7 @@ def SortVcf():
     cmd.meta.desc = 'Sort vcf with bedtools'
     cmd.runtime.image = 'dceoy/bedtools:latest'
     cmd.runtime.memory = 10 * 1024 ** 3
+    cmd.runtime.cpu = 2
     cmd.runtime.tool = 'bedtools sort -header'
     cmd.args['in_vcf'] = Argument(prefix='-i ', type='infile', desc='Input vcf file')
     cmd.args['out_vcf'] = Argument(prefix='> ', desc='output vcf file')
@@ -1174,7 +1180,7 @@ def Gridss():
     cmd.args['ref'] = Argument(prefix='--reference ', type='infile', desc='reference genome to use. Must have a .fai index file and a bwa index')
     cmd.args['_fix'] = Argument(prefix='--output ', type='fix', value='tmp.vcf')
     cmd.args['assembly'] = Argument(prefix='--assembly ', level='optional', desc='location of the GRIDSS assembly BAM. This file will be created by GRIDSS. The default filename adds a .assembly.bam suffix to the output file')
-    cmd.args['threads'] = Argument(prefix='--threads ', default=8, desc='number of threads to use.')
+    cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='number of threads to use.')
     cmd.args['blacklist'] = Argument(prefix='--blacklist ', type='infile', default='/home/hxbio04/dbs/gridss/ENCFF001TDO.chr_numeric.bed', desc='BED file containing regions to ignore. The ENCODE DAC blacklist is recommended for hg19.')
     cmd.args['configuration'] = Argument(prefix='--configuration ', type='infile', level='optional', desc='configuration file use to override default GRIDSS settings')
     cmd.args['labels'] = Argument(prefix='--labels ', type='outstr', level='optional', array=True, delimiter=',', desc='comma separated labels to use in the output VCF for the input files. '
