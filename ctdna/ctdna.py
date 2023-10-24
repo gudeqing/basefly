@@ -2243,16 +2243,19 @@ def pipeline():
         args['out'].value = tumor + '.mutect2.normed.raw.vcf'
 
         # vep 注释
-        mutect2_vep_task, args = wf.add_task(vep(tumor), tag='mutect2-'+tumor, depends=[norm_vcf_task])
-        args['input_file'].value = norm_vcf_task.outputs['out']
-        args['fasta'].value = wf.topvars['ref']
-        args['refseq'].value = True
-        args['dir_cache'].value = top_vars['vep_cache']
-        args['dir_plugins'].value = top_vars['vep_plugin']
+        if 'VEP' not in wf.args.skip:
+            mutect2_vep_task, args = wf.add_task(vep(tumor), tag='mutect2-'+tumor, depends=[norm_vcf_task])
+            args['input_file'].value = norm_vcf_task.outputs['out']
+            args['fasta'].value = wf.topvars['ref']
+            args['refseq'].value = True
+            args['dir_cache'].value = top_vars['vep_cache']
+            args['dir_plugins'].value = top_vars['vep_plugin']
+        else:
+            mutect2_vep_task = None
 
         # mutect2结果最终过滤和整理
         filter_task, args = wf.add_task(VcfFilter(), tag='mutect2-' + tumor)
-        args['vcf'].value = mutect2_vep_task.outputs['out_vcf']
+        args['vcf'].value = mutect2_vep_task.outputs['out_vcf'] if mutect2_vep_task else norm_vcf_task.outputs['out']
         if error_stat_task_dict:
             args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
@@ -2292,15 +2295,18 @@ def pipeline():
         args['vcf'].value = add_contig_task.outputs['out']
         args['out'].value = tumor + '.normed.raw.vcf'
 
-        vardict_vep_task, args = wf.add_task(vep(tumor), tag='vardict-'+tumor, depends=[vcf_norm_task])
-        args['input_file'].value = vcf_norm_task.outputs['out']
-        args['fasta'].value = wf.topvars['ref']
-        args['refseq'].value = True
-        args['dir_cache'].value = top_vars['vep_cache']
-        args['dir_plugins'].value = top_vars['vep_plugin']
+        if 'VEP' not in wf.args.skip:
+            vardict_vep_task, args = wf.add_task(vep(tumor), tag='vardict-'+tumor, depends=[vcf_norm_task])
+            args['input_file'].value = vcf_norm_task.outputs['out']
+            args['fasta'].value = wf.topvars['ref']
+            args['refseq'].value = True
+            args['dir_cache'].value = top_vars['vep_cache']
+            args['dir_plugins'].value = top_vars['vep_plugin']
+        else:
+            vardict_vep_task = None
 
         filter_task, args = wf.add_task(VcfFilter(), tag='vardict-'+tumor)
-        args['vcf'].value = vardict_vep_task.outputs['out_vcf']
+        args['vcf'].value = vardict_vep_task.outputs['out_vcf'] if vardict_vep_task else vcf_norm_task.outputs['out']
         if error_stat_task_dict:
             args['error_rate_file'].value = error_stat_task_dict[tumor].outputs['context_error_rate']
         args['genome'].value = wf.topvars['ref']
