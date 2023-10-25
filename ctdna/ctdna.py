@@ -199,7 +199,7 @@ def Bam2FastqBwaMem(sample):
 
 def BwaMem(sample, platform, bwamem2=True):
     cmd = Command()
-    cmd.meta.name = 'BwaMem2'
+    cmd.meta.name = 'BwaMem2' if bwamem2 else "BwaMem"
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     if bwamem2:
         cmd.meta.version = '2.2.1_x64-linux'

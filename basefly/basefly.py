@@ -1160,7 +1160,7 @@ class Workflow:
             for line in lines:
                 f.write(line + '\n')
 
-    def _cwl_add_secondary_files(self, arg: Argument or Output or TopVar):
+    def _cwl_add_secondary_files(self, arg: Argument or Output or TopVar, bwa_mem=False):
         # 所有secondary都设置为optional
         contents = ''
         if (arg.value is not None) and arg.type in ('infile', 'outfile'):
@@ -1190,18 +1190,23 @@ class Workflow:
                 contents += ' ' * 4 + 'secondaryFiles:\n'
                 contents += ' ' * 6 + '- .fai?\n'
                 contents += ' ' * 6 + '- ^.dict?\n'
-                contents += ' ' * 6 + '- ".0123?"\n'
-                contents += ' ' * 6 + '- .ann?\n'
-                contents += ' ' * 6 + '- .bwt.2bit.64?\n'
-                contents += ' ' * 6 + '- .pac?\n'
-                contents += ' ' * 6 + '- .amb?\n'
-                contents += ' ' * 6 + '- .bwt?\n'
-                contents += ' ' * 6 + '- .sa?\n'
+                if bwa_mem:
+                    contents += ' ' * 6 + '- ".0123?"\n'
+                    contents += ' ' * 6 + '- .ann?\n'
+                    contents += ' ' * 6 + '- .bwt.2bit.64?\n'
+                    contents += ' ' * 6 + '- .pac?\n'
+                    contents += ' ' * 6 + '- .amb?\n'
+                    contents += ' ' * 6 + '- .bwt?\n'
+                    contents += ' ' * 6 + '- .sa?\n'
         return contents
 
     def to_cwl_tool(self, cmd: Command, version='v1.2', image_map_dict=None):
         # 如果arg_prefix是纯数字，需要加引号, 因此为方便起见，统一加引号
         # prefix加引号后，不能存在空格，否则传cwltool在接受参数时会同时给prefix和value加上引号导致参数不可识别，如 gatk ’-a value'
+        if 'bwamem' in cmd.meta.name.lower():
+            bwamem = True
+        else:
+            bwamem = False
         convert_type: dict[str, str] = {
             'str': 'string',
             'outstr': 'string',
@@ -1275,6 +1280,10 @@ class Workflow:
             return value
 
         contents += 'inputs:\n'
+        contents += ' '*2 + '_run_:\n'
+        contents += ' '*4 + 'doc: a special boolean argument defined for step skipping logic in the workflow\n'
+        contents += ' '*4 + 'type: boolean\n'
+        contents += ' '*4 + 'default: true\n\n'
         pos = 0
         arguments_to_process = []
         for arg_name, arg in cmd.args.items():
@@ -1330,7 +1339,7 @@ class Workflow:
                 default_value = _get_default_value(arg)
                 if default_value:
                     contents += ' ' * 4 + f'default: {default_value}\n'
-                contents += self._cwl_add_secondary_files(arg)
+                contents += self._cwl_add_secondary_files(arg, bwa_mem=bwamem)
                 contents += ' ' * 4 + 'inputBinding:\n'
                 contents += ' ' * 6 + f'position: {pos}\n'
             else:
@@ -1344,7 +1353,7 @@ class Workflow:
                         contents += ' ' * 4 + f'default:\n'
                         contents += ' ' * 6 + f'class: {arg_type}\n'
                         contents += ' ' * 6 + f'path: {default_value}\n'
-                contents += self._cwl_add_secondary_files(arg)
+                contents += self._cwl_add_secondary_files(arg, bwa_mem=bwamem)
                 if bind_input:
                     contents += ' ' * 4 + 'inputBinding:\n'
                     contents += ' ' * 6 + f'position: {pos}\n'
@@ -1458,6 +1467,10 @@ class Workflow:
         header_content = contents
 
         contents = 'inputs:\n'
+        # 加入特殊参数unpaired，针对normal样本的task进行传递，以判断是否跳过相应的task
+        contents += ' ' * 2 + 'paired:\n'
+        contents += ' ' * 4 + 'type: boolean\n'
+        contents += ' ' * 4 + 'default: false\n\n'
         for name, top_var in self.topvars.items():
             contents += ' ' * 2 + f'{name}:\n'
             var_type = convert_type[top_var.type]
@@ -1492,7 +1505,15 @@ class Workflow:
         for task_id, task in self.tasks.items():
             contents += ' ' * 2 + f'{task.name}:\n'
             contents += ' ' * 4 + f'run: {task.cmd.meta.name}.tool.cwl\n'
+            if task.name.endswith('normal'):
+                # 特殊处理，针对normal样本的处理时，加入when
+                contents += ' ' * 4 + f'when: $(inputs._run_)\n'
+
             contents += ' ' * 4 + 'in:\n'
+            if task.name.endswith('normal'):
+                # 特殊处理，针对normal样本的处理时，给_run_参数赋值
+                contents += ' ' * 6 + '_run_: paired\n'
+
             # 参数赋值
             for _, arg in task.cmd.args.items():
                 if arg.type == 'fix' or (arg.value is None):
