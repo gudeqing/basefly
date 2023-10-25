@@ -1004,7 +1004,7 @@ def CNVkitFlatRef():
     cmd.runtime.memory = 8 * 1024 ** 3
     cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
     cmd.args['_antitarget'] = Argument(prefix='', type='fix', value='cnvkit.py antitarget')
-    cmd.args['access'] = Argument(prefix='--access ', type='infile', desc='Regions of accessible sequence on chromosomes (.bed)')
+    cmd.args['access'] = Argument(prefix='--access ', type='infile', default='/home/hxbio04/dbs/hs37d5/access-5k-mappable.grch37.bed', desc='Regions of accessible sequence on chromosomes (.bed)')
     cmd.args['avg-size'] = Argument(prefix='--avg-size ', level='optional', default=150000, desc='Average size of antitarget bins (results are approximate)')
     cmd.args['_output'] = Argument(prefix='--output ', type='fix', value='antitargets.bed', desc='output file name')
     cmd.args['targets'] = Argument(prefix='', type='infile', desc='BED or interval file listing the targeted regions.')
@@ -1806,10 +1806,10 @@ def pipeline():
     wf.add_argument('-min_af', default=0.001, type=float, help='Minimum Variant Frequency Cutoff')
 
     # 参考数据库参数
-    wf.add_argument('-ref', default='/home/hxbio04/dbs/hg19/hs37d5.fa', help='reference fasta file')
+    wf.add_argument('-ref', default='/home/hxbio04/dbs/hs37d5/hs37d5.fa', help='reference fasta file')
     wf.add_argument('-vep_cache', default='/home/hxbio04/dbs/vep', help='VEP cache directory')
     wf.add_argument('-vep_plugin', required=False, help='VEP plugin directory')
-    wf.add_argument('-germline_vcf', default='/home/hxbio04/dbs/hg19/af-only-gnomad.raw.sites.b37.vcf.gz', help='for Mutect2 input, will be used for germline variant filtering')
+    wf.add_argument('-germline_vcf', default='/home/hxbio04/dbs/hs37d5/af-only-gnomad.raw.sites.b37.vcf.gz', help='for Mutect2 input, will be used for germline variant filtering')
     wf.add_argument('-bwaMemIndexImage', required=False, help='bwa-mem-index-mage for artifact alignment filtering. you may created it with tool BwaMemIndexImageCreator with only fasta as input')
 
     # 收集参数
@@ -2334,7 +2334,6 @@ def pipeline():
         create_ref_task = None
         if not normal_bam_task:
             create_ref_task, args = wf.add_task(CNVkitFlatRef(), tag=tumor)
-            args['access'].value = '/home/hxbio04/dbs/hg19/access-5k-mappable.grch37.bed'
             args['targets'].value = wf.topvars['bed']
             args['targets2'].value = wf.topvars['bed']
             args['ref'].value = wf.topvars['ref']
