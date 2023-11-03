@@ -87,35 +87,39 @@ Arguments for controlling running mode:
 2. value: Any = None
     > 描述参数取值
 3. prefix: str = ''
-   > 参数前缀，如‘-i ’， ‘--i’
+   > 参数前缀字符串，如‘-i ’， ‘--i’
+   > + 参数前缀和其赋值将会参与具体任务命令行的组装，组装形式默认是prefix+value，但是为了保证灵活性，允许用下面的方式实现更灵活的组装：
+   >> 1. 参数前缀中可以用最多1个”{}“符号，basefly在组装具体的任务命令行时，将用参数的赋值替换”{}“符号，如prefix='-i{} '
+   >> 2. 参数前缀中可以用最多个”{v}“符号，basefly在组装具体的任务命令行时，将用参数的赋值替换所有”{v}“符号, 如prefix='x{v}:{v}y'
 4. type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir', 'fix', 'outstr'] = 'str'
-   > 描述参数类型, type is one of ['str', 'outstr', 'int', 'float', 'bool', 'infile', 'indir', 'fix']
+   > 描述的参数值的类型。注意，即使参数类型是int或float，其本质也是通过字符串的形式参与命令行的形成，因此仅仅起到提示作用。
    > + str: 字符串类型
-   > + outstr: 字符串类型,表示该参数是用于形成输出文件名或路径的参数，归类为动态赋值的参数，引入该类型的目的是为了输出的wf.args.json时避免输出这类参数,同时方便cwl流程的准确转化
+   > + *outstr*: 字符串类型,表示该参数是用于形成输出文件名或路径的参数，其赋值过程是写在流程中的，是无法通过参数文件wf.args.json更改的；另外，该类型的定义方便了cwl流程的准确转化
    > + int: 整数类型
    > + float: 浮点数类型
    > + bool: bool类型，如果其值设置为True，则命令行中将出现该参数的前缀，否则不出现
    > + infile：表示参数对应的值是输入文件路径
    > + indir：表示参数对应的只是输入文件目录
-   > + fix： 表示该参数并不是真正的参数，其为固定的字符串，写command时需要给value直接赋值. 例如其可以用来表示管道符如‘| samtools sort’，如此可以让一个command可以串联执行多个程序
+   > + **fix**： 表示该参数并不是真正可以的参数，其为固定的字符串，写command时，建议用value而不是default直接赋值. 作用：其可以用来表示管道符如‘| samtools sort -’，这是使得一个具体的任务命令行（command）可以串联执行多个程序
 5. level: Literal['required', 'optional'] = 'required'
-   > 描述参数是否为必需参数
+   > 描述参数是否为必需参数，默认定义的参数都是必须参数，即一定会参与具体的任务命令行组装
+   > 当参数定义为"optional", 如果不用value属性给其具体赋值，则即使该参数有默认值，也不会参与具体任务命令行的组装
 6. default: Any = None
    > 描述参数的默认值, 如果指定level="optional", 则生成具体命令行时，默认值会被忽略，所以对于可选参数的默认值，只起到了提示作用
 7. range: Any = None
-   > 描述参数的可选取值范围，用列表表示，如range['a', 'b', 'c']
+   > 描述参数的可选取值范围，用列表表示，如range['a', 'b', 'c']，通常用于参数值可以枚举的参数，起到提示作用，增加流程的可读性
 8. array: bool = False
    > 描述参数是否可以赋值多个值，如果True，给value赋值时应该使用列表，另外，如果multi_times=True, 则赋值是嵌套列表
 9. delimiter: str = ' '
     > 当一个参数可以输入多个值（即array=True)，形成命令行时，这几个值的分隔符由此指定，默认空格分隔
 10. multi_times: bool = False
-    > 指示一个参数是否可以重复多次使用，如果True，给value赋值时应该使用列表, 进一步如果此时还有array=True, 则赋值是嵌套列表
+    > 指示一个参数是否可以重复多次使用，如果True，给value赋值时应该使用列表, 进一步如果此时还定义了array=True, 则赋值是嵌套列表[[]]
 11. format: str = None
-    > 指示输入文件的格式，如[bam, vcf.gz, vcf, fasta, fa]，目前在basefly中仅仅起提示作用，但转换为CWL时有用
+    > 指示输入文件的格式，如[bam, vcf.gz, vcf, fasta, fa]，目前在basefly中仅仅起提示作用，但转换为CWL时有用,可以辅助判断是否需要定义secondaryFiles
 12. order: int = 0
-    > order字段是为了参数排序设计，暂无用处，可以用于将来的说明文档
+    > order字段起初是为了给参数排序设计，但目前命令行的组装顺序是按照由代码顺序决定的。故其暂无用处，可以用于将来的说明文档
 13. desc: str = 'This is description of the argument.'
-    > 参数的说明
+    > 参数的说明文字，生成流程说明文档时，这些说明将是重要的组成部分，强烈建议完善该信息
 14. *editable*: bool = True
     > editable字段用于表示该参数是否适合作为流程参数进行修改，如果不可以，则不会显示在输出的参数配置文件中wf.static.args.json
 
@@ -123,25 +127,25 @@ Arguments for controlling running mode:
 1. image: str = None
    > docker镜像地址
 2. tool_dir: str = ''
-   > 命令行的起始字符串，如软件所在目录
+   > 是组装命令行时的起始字符串，通常指软件所在绝对目录
 3. tool: str = ''
-   > 软件名称，命令的行的拼接顺序是 tool_dir + tool + arguments
+   > 软件名称，是组装命令行时的第二个字符串。**所以command组装顺序是 tool_dir + tool + arguments**
 4. memory: int = 1024
    > 执行环境设置, 指定最少计算资源, memory的单位为字节
 5. cpu: int = 2
    > 执行环境设置, 指定最少cpu数量
 6. max_memory: int = 0
-   > 执行环境设置, 指定最大计算资源, memory的单位为字节
+   > 执行环境设置, 指定最大计算资源, memory的单位为字节，目前basefly自带runner不会使用该信息
 7. max_cpu: int = 0
-   > 执行环境设置, 指定最大cpu数量
+   > 执行环境设置, 指定最大cpu数量，目前basefly自带runner不会使用该信息
 8. timeout: int = 3600*24*7
    > 最长运行时间，如果运行时间超过该值，则将强制终止该命令
 9. docker_cmd_prefix2: str = 'docker run --rm --privileged --user `id -u`:`id -g` -i --entrypoint /bin/bash'
-   > docker run 运行命令的前缀
+   > docker run 运行命令的可选前缀
 10. docker_cmd_prefix: str = 'docker run --rm --privileged -i --entrypoint /bin/bash'
-   > docker run 运行命令的前缀
+   > docker run 运行命令的默认前缀
 11. docker_local_user: bool = False
-   > 该值如果为真，docker_cmd_prefix将被docker_cmd_prefix2替换
+   > 该值如果为真，docker_cmd_prefix将被docker_cmd_prefix2替换，请根据docker镜像的情况决定，如使用VEP的官方镜像时，测试发现由于执行权限问题需要用这个
 
 ### 定义Output对象，其由如下属性描述
 1. value: Any = None
@@ -149,13 +153,13 @@ Arguments for controlling running mode:
 2. type: Literal['str', 'int', 'float', 'bool', 'outfile', 'outdir'] = 'outfile'
    > "outfile"表示是输出文件，"outdir"表示是输出目录
 3. report: bool = True
-   > 设计report参数，用于指定该参数最终是否作为流程的outputs, 暂无用处
+   > 设计report参数，用于指定该输出最终是否作为流程的outputs，basefly的自带runner会自动根据该参数汇总一份结果目录
 4. task_id: str = None
    > 由command形成task之后，可以带入task_id
 5. name: str = None
    > 名称
 6. desc: str = None
-   > 描述信息
+   > 描述信息，目前仅仅支持用字符串的对输出进行描述，暂未支持更复杂的描述方式
 7. format: str = None
    > 输出文件的格式指定，如’bam','fasta','vcf.gz', 正确写这些信息将方便流程转化
 
@@ -173,29 +177,29 @@ Arguments for controlling running mode:
    > 记录工具或流程的版本信息
 
 ## 定义Command对象，其由如下对象组成
->  Command = {Argument, RunTime, Output, Meta}
+>  Command = {Meta，RunTime，Argument, Output}
 * Argument: 全面描述参数，最终可以根据参数列表自动组装成命令行
 * Runtime：运行环境描述，如软件，docker image，memory，cpu限制等信息
 * Outputs: 描述程序的输出
 * Meta: 描述程序的信息，如名称，作者，版本等信息
 * format_cmd：函数，用生成具体的命令行信息
 * run_now：函数，用于立马执行任务，适合作为中间步骤为流程准备输入文件，如建立索引等步骤
+* 实现建议：请参考流程样例，尽量全面定义信息，你今天偷的懒，明天也得补
 
 ## 定义Task对象，主要由配备具体参数的Command实例组成:
 > Task = {Command, task_id, depends, name, wkdir, parent_wkdir}
 * task_id是自动生成的uuid4对象
 * depends是列表，记录其依赖的Task或task_id
-* name是task的名称，最好不要有重复
-* wkdir是工作目录，后续自动生成
-* parent_wkdir可用于指定task工作目录的上一级目录名称，可实现把相关的任务放在同一个文件夹下执行，让流程的工作目录看起来更简洁
-
+* name是task的名称，写流程时，一定要保证该名称的唯一；即使多个任务使用同一个command，也可以在添加task时，给不一样的tag值保证任务名称的唯一
+* wkdir是工作目录，后续自动生成，basefly自带runner会使用该信息
+* parent_wkdir可用于指定task工作目录的上一级目录名称，basefly自带runner会使用该信息，可实现把相关的任务放在同一个文件夹下执行，让流程的工作目录看起来更简洁
 
 ## 定义TopVar对象
-> 用于记录流程最开始的输入文件或参数信息，这个设计的目的是为了方便流程的转化，也增加可读性
+> 用于记录流程最开始的外部输入文件或参数信息，这个设计的目的是为了方便流程的转化，也增加流程可读性和可塑性，强烈建议使用
 1. value: Any
 2. name: str = 'notNamed'
 3. type: Literal['str', 'int', 'float', 'bool', 'infile', 'indir'] = 'infile'
-4. format：指定输入文件的格式，如 ‘fasta', 'bam', 'fastq.gz'
+4. format：指定输入文件的格式，如 ‘fasta', 'bam', 'fastq.gz'，该信息可用于辅助cwl流程的转化
 
 ## 定义workflow对象，主要由Task组成的字典构成
 > workflow = {Meta, TopVar, dict(task_id=Task, task_id=Task, ...)}
@@ -204,3 +208,9 @@ Arguments for controlling running mode:
 * run: 函数，流程的执行函数
 ----
 
+## 关于CWL流程的转化
+1. 根据format，判断secondaryFiles是否需要定义，并且所有secondaFiles定义为optional
+2. 生成的*tool.cwl是可以复用的标准cwl文件
+3. 生成的*wf.cwl是通常可以直接执行的cwl流程，但该流程是根据输入得到的具体流程，不可复用。
+4. 可以用cwl的执行引擎代替basefly自带runner完成分析，前提是每次都要先用basefly生成具体的cwl流程。
+5. 当然，你也可以把basefly生成的cwl流程进行修改，变成可以复用的流程
