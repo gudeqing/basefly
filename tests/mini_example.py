@@ -4,6 +4,9 @@ import sys; sys.path.append(script_path)
 from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 
 # 参考代码的注释信息，了解如何写basefly流程
+# 你只需要掌握最基本的python语法，不包括类的定义和使用
+# 你要了解argparse这个包的简单使用以方便添加流程的特有参数
+# 最好提前阅读Readme以了解basefly的设计逻辑
 
 
 # 定义如下函数时，最好不要带参数, 如果带参数，在给参数赋值时，建议使用value而不是default
@@ -74,7 +77,7 @@ def pipeline():
 
     # 增加更多的task
     for idx in [1, 2]:
-        # 默认depends是空的列表，你可以显示添加depends信息，如果不输入，basefly将自动根据输入信息添加depends信息
+        # 默认depends是空的列表，你可以显式添加depends信息，如果不填，basefly将自动根据输入信息添加depends信息
         # parent_wkdir参数可以帮你把类似的任务归类到同一个目录进行执行，让结果目录看起来更简洁
         task_b, args = wf.add_task(stepB(), name=f'B-{idx}', parent_wkdir='B-tasks', depends=[task_a])
 
