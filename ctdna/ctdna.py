@@ -587,6 +587,25 @@ def add_vcf_contig():
     return cmd
 
 
+def merge_umi_qc():
+    cmd = Command()
+    cmd.meta.name = 'MergeUMIQC'
+    cmd.meta.desc = 'merge fastp and bamdst and GroupReadsByUmi QC metrics'
+    cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
+    cmd.runtime.memory = 5 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'python'
+    cmd.args['script'] = Argument(prefix='', type='infile', value=f'{script_path}/utils/mergeqc.py', desc='script path')
+    cmd.args['fastp_json_files'] = Argument(prefix='-fastp_json_files ', type='infile', array=True, desc='fastp output json file')
+    cmd.args['bamdst_cov_report_files'] = Argument(prefix='-bamdst_cov_report_files ', type='infile', array=True, desc='bamdst output coverage report file')
+    cmd.args['bamdst_depth_files'] = Argument(prefix='-bamdst_depth_files ', type='infile', array=True, desc='bamdst output depth stat file ')
+    cmd.args['umi_family_size_files'] = Argument(prefix='-umi_family_size_files ', type='infile', array=True, desc='UMI family size stat file from tool GroupReadsByUmi')
+    cmd.args['prefix'] = Argument(prefix='-prefix ', type='outstr', level='optional', desc='output file prefix')
+    cmd.outputs['all_metrics'] = Output(value='*.QC.all.metrics.txt', report=True)
+    cmd.outputs['target_metrics'] = Output(value='*.QC.target.metrics.txt', report=True)
+    return cmd
+
+
 def Mutect2(prefix):
     cmd = Command()
     cmd.meta.name = 'Mutect2'
@@ -2171,6 +2190,19 @@ def pipeline():
             args['bed'].value = wf.topvars['bed']
             args['out_prefix'].value = sample
             error_stat_task_dict[sample] = error_stat_task
+
+        # merge qc
+        if 'preUMI-'+sample in bamdst_task_dict:
+            merge_qc_task, args = wf.add_task(merge_umi_qc(), tag=sample)
+            # 如果一个样本有补测数据，fastp是分别分开分析的，因此下面的情况就会报错
+            if sample in fastp_task_dict:
+                args['fastp_json_files'].value = [fastp_task_dict[sample].outputs['json']]
+            else:
+                # 为了避免报错，使用第一批结果替代整体
+                args['fastp_json_files'].value = [fastp_task_dict[f'{sample}-0'].outputs['json']]
+            args['bamdst_cov_report_files'].value = [bamdst_task_dict['preUMI-'+sample].outputs['coverage_report'], bamdst_task_dict[sample].outputs['coverage_report']]
+            args['bamdst_depth_files'].value = [bamdst_task_dict['preUMI-'+sample].outputs['depth_file'], bamdst_task_dict[sample].outputs['depth_file']]
+            args['umi_family_size_files'].value = [groupumi_task_dict[sample].outputs['family_size']]
 
     # call 变异： bam -> vcf
     vardict_filter_task_ids = []

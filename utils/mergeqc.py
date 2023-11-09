@@ -1,0 +1,177 @@
+import os
+import json
+import pandas as pd
+
+
+def merge_umi_qc(
+        fastp_json_files: list,
+        bamdst_cov_report_files: list,
+        bamdst_depth_files: list,
+        umi_family_size_files: list,
+        outdir='.',
+        prefix=None,
+):
+    """
+    用于umi数据分析流程的质控汇总：fastp的分析结果，bamdst的深度统计，umi统计
+    :param fastp_json_files: [json, json2], 根据文件名称信息提取样本名信息， sample_name = file_name.split('.')[0]
+    :param : bamdst_cov_report_files:  第一个UMI处理前的，第二个是UMI处理后的; 需要和bamdst_depth_files一一对应,
+    :param : bamdst_depth_files: 第一个UMI处理前的，第二个是UMI处理后的; 需要和bamdst_cov_report_files一一对应，
+    :param umi_family_size_files: [family_size, family_size2]
+    :param outdir: 输出结果目录
+    :param prefix: 输出文件名前缀
+    :return:
+    """
+    print('Merging QC table......')
+    result = dict()
+
+    # 汇总fastp信息
+    for stat_file in fastp_json_files:
+        if not os.path.exists(stat_file):
+            print(f'skip un-existing file {stat_file}')
+            continue
+        # 文件名用‘.‘分割后，取第一个值作为样本名称
+        sample = os.path.basename(stat_file).split('.', 1)[0]
+        json_dict = json.load(open(stat_file))
+        target_info = dict()
+        # target_info['sequencing'] = json_dict['summary']['sequencing']
+        target_info['Read1_length'] = json_dict['summary']['before_filtering']['read1_mean_length']
+        target_info['Read2_length'] = json_dict['summary']['before_filtering']['read2_mean_length']
+        target_info['Total_raw_reads'] = json_dict['summary']['before_filtering']['total_reads']
+        target_info['Total_raw_bases'] = json_dict['summary']['before_filtering']['total_bases']
+        target_info['Q20_rate'] = json_dict['summary']['before_filtering']['q20_rate']
+        target_info['Q30_rate'] = json_dict['summary']['before_filtering']['q30_rate']
+        target_info['Q20_bases'] = json_dict['summary']['before_filtering']['q20_bases']
+        target_info['Q30_bases'] = json_dict['summary']['before_filtering']['q30_bases']
+        target_info['GC_content'] = json_dict['summary']['before_filtering']['gc_content']
+        target_info['Duplication(sequence-based)'] = json_dict['duplication']['rate']
+        target_info['Insert_size_peak'] = json_dict['insert_size']['peak']
+        result[sample] = target_info
+
+    # 汇总bamdst的信息
+    for idx, (stat_file, depth_file) in enumerate(zip(bamdst_cov_report_files, bamdst_depth_files)):
+        if not os.path.exists(stat_file):
+            print(f'skip un-existing file {stat_file}')
+            continue
+        target_info = dict()
+        with open(stat_file) as f:
+            for line in f:
+                if line.startswith('#'):
+                    continue
+                name, value = line.strip().split('\t')
+                if '%' in value:
+                    value = round(float(value.replace('%', ''))*0.01, 4)
+                else:
+                    value = float(value)
+                target_info[name] = value
+        # 计算均一性
+        data = pd.read_table(depth_file, header=0, low_memory=False)
+        mean_coverage = data['Cover depth'].mean()
+        panel_size = data.shape[0]
+        target_info['[Target] Coverage (>=0.2*MeanDepth)'] = sum(data['Rmdup depth'] >= mean_coverage*0.2)/panel_size
+        target_info['[Target] Coverage (>=0.5*MeanDepth)'] = sum(data['Rmdup depth'] >= mean_coverage*0.5)/panel_size
+        target_info['[Target] Coverage (>=200x)'] = sum(data['Rmdup depth'] >= 200)/panel_size
+        target_info['[Target] Coverage (>=300x)'] = sum(data['Rmdup depth'] >= 300)/panel_size
+        target_info['[Target] Coverage (>=500x)'] = sum(data['Rmdup depth'] >= 500)/panel_size
+        target_info['[Target] Coverage (>=1000x)'] = sum(data['Rmdup depth'] >= 1000)/panel_size
+        target_info['[Target] Coverage (>=2000x)'] = sum(data['Rmdup depth'] >= 2000)/panel_size
+        target_info['[Target] Coverage (>=5000x)'] = sum(data['Rmdup depth'] >= 5000)/panel_size
+        target_info['[Target] Coverage (>=10000x)'] = sum(data['Rmdup depth'] >= 10000)/panel_size
+        # 假设第一组数据是UMI处理前的统计结果，第二组数据是UMI consensus后的结果，加上标签以示区别
+        if idx == 0:
+            target_info = {'[Raw]'+ key: value for key, value in target_info.items()}
+        else:
+            target_info = {'[Consensus]'+ key: value for key, value in target_info.items()}
+        # 样本名称沿用前面fastp文件名中提取的，因为bamdst文件名是固定的，不包含样本名信息
+        if sample in result:
+            result[sample].update(target_info)
+        else:
+            result[sample] = target_info
+
+    # 汇总UMI信息
+    for stat_file in umi_family_size_files:
+        if os.path.exists(stat_file):
+            # 文件名用‘.‘分割后，取第一个值作为样本名称
+            sample = os.path.basename(stat_file).split('.', 1)[0]
+            with open(stat_file) as f:
+                target_info = dict()
+                header = f.readline()
+                for line in f:
+                    size, count, fraction, ratio = line.strip().split()
+                    target_info[f'UmiFamilySize={size}:count'] = int(count)
+                    target_info[f'UmiFamilySize={size}:fraction'] = round(float(fraction), 4)
+                    target_info[f'UmiFamilySize>={size}:fraction'] = round(float(ratio), 4)
+                if sample in result:
+                    result[sample].update(target_info)
+                else:
+                    result[sample] = target_info
+
+    # 保存结果
+    if not result:
+        print('Nothing merged!')
+        return
+    table = pd.DataFrame(result)
+    table = table.loc[:, sorted(result.keys())]
+    table.index.name = 'Metrics'
+    table.loc["Total_raw_reads(M)", :] = table.loc["Total_raw_reads"] * 1e-6
+    table.loc["Total_raw_bases(G)", :] = table.loc["Total_raw_bases"] * 1e-9
+    prefix = prefix or sample
+    table.to_csv(os.path.join(outdir, f'{prefix}.QC.all.metrics.txt'), sep='\t')
+    table.to_excel(os.path.join(outdir, f'{prefix}.QC.all.metrics.xlsx'))
+
+    # 精简QC报告
+    target_rows = [
+        "Total_raw_bases(G)",
+        "Total_raw_reads(M)",
+        "GC_content",
+        "[Raw][Target] Average depth",
+        "[Consensus][Target] Average depth",
+        "Insert_size_peak",
+        "[Raw][Total] Fraction of Mapped Reads",
+        "Q20_rate",
+        "Q30_rate",
+        "[Raw][Target] Fraction of Target Data in all data",
+        "[Raw][Target] Coverage (>=0.2*MeanDepth)",
+        "[Raw][Target] Coverage (>=0.5*MeanDepth)",
+        "[Raw][flank] Fraction of flank Reads in all reads",
+        "[Raw][Target] Coverage (>=200x)",
+        "[Raw][Target] Coverage (>=500x)",
+        "[Raw][Target] Coverage (>=2000x)",
+        "[Raw][Target] Coverage (>=5000x)",
+        "[Consensus][Target] Fraction of Target Data in all data",
+        "[Consensus][Target] Coverage (>=0.2*MeanDepth)",
+        "[Consensus][Target] Coverage (>=0.5*MeanDepth)",
+        "[Consensus][flank] Fraction of flank Reads in all reads",
+        "[Consensus][Target] Coverage (>=200x)",
+        "[Consensus][Target] Coverage (>=500x)",
+        "[Consensus][Target] Coverage (>=2000x)",
+        "[Consensus][Target] Coverage (>=5000x)",
+        "UmiFamilySize=1:count",
+        "UmiFamilySize=2:count",
+        "UmiFamilySize=3:count",
+        "UmiFamilySize=1:fraction",
+        "UmiFamilySize=2:fraction",
+        "UmiFamilySize>=2:fraction",
+        "UmiFamilySize=3:fraction",
+        "UmiFamilySize>=3:fraction",
+    ]
+    target_rows = [x for x in target_rows if x in table.index]
+    table.loc[target_rows].to_excel(os.path.join(outdir, f'{prefix}.QC.target.metrics.xlsx'))
+    table.loc[target_rows].to_csv(os.path.join(outdir, f'{prefix}.QC.target.metrics.txt'), sep='\t')
+
+
+if __name__ == '__main__':
+    # from xcmds import xcmds
+    # xcmds.xcmds(locals())
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-fastp_json_files', required=False, nargs='+', help='fastp output json file')
+    parser.add_argument('-bamdst_cov_report_files', required=False, nargs='+', help='bamdist output coverage report file')
+    parser.add_argument('-bamdst_depth_files', required=False, nargs='+', help='bamdst output coverage report file')
+    parser.add_argument('-umi_family_size_files', required=False, nargs='+', help='UMI family size stat file from tool GroupReadsByUmi')
+    args = parser.parse_args()
+    merge_umi_qc(
+        fastp_json_files=args.fastp_json_files,
+        bamdst_cov_report_files=args.bamdst_cov_report_files,
+        bamdst_depth_files=args.bamdst_depth_files,
+        umi_family_size_files=args.umi_family_size_files
+    )
