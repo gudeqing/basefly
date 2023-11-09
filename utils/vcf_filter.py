@@ -1772,7 +1772,7 @@ class VcfFilter(ValidateMutationByBam):
                 "Start": r.pos,
                 "End": r.stop,
                 "Ref": r.ref,
-                "Alt": r.alts,
+                "Alt": r.alts[0],
                 "VAF(%)": f'{self.get_af_value(r, self.tumor)*100:.2f}',  # Allele Frequency
                 # additional information
                 "AltDepth": self.get_alt_depth(r),
