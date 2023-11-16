@@ -522,7 +522,6 @@ class Workflow:
             self.list_task()
         elif parameters.dry_run:
             os.makedirs(outdir, exist_ok=True)
-            self.generate_docs(os.path.join(outdir, f'{self.meta.name}.ReadMe.md'))
             self.dump_args(out=os.path.join(outdir, 'wf.static.args.json'))
             logging_run_cmd()
             # 生成config格式的流程
@@ -532,6 +531,8 @@ class Workflow:
                 self.wf.write(configfile)
             # 仅仅为了生成流程图
             RunCommands(outfile, draw_state_graph=True)
+            # 生成说明文档
+            self.generate_docs(os.path.join(outdir, f'{self.meta.name}.ReadMe.md'))
         elif parameters.run:
             os.makedirs(outdir, exist_ok=True)
             self.dump_args(out=os.path.join(outdir, 'wf.static.args.json'))

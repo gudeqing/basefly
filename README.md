@@ -10,7 +10,9 @@ Basefly的宗旨是简化基于python构建数据分析流程的过程，尤其�
    * 流程日志清晰且容易检索，方便快速定位问题
    * 通过python语法任意设计流程的运行逻辑，可以轻松实现一个流程多种用途的目的
 3. 只要按照规范建议编写流程，basefly绝大部分情况下可以成功将流程一键转化为可执行的CWL、WDL等格式流程；如果你不想学习和记忆cwl、wdl这些包含各种补丁规则的语言，basefly将是个非常好的辅助工具
-4. 可以支持流程的说明文档一键生成
+4. 可以支持流程的说明文档一键生成, 文档格式为markdown格式，可以通过pandoc将其转化为其他格式如："pandoc -s -f gfm -t html5 --number-sections --number-offset 1 -o readme.html *ReadMe.md"
+   * 文档生成命令示例： 
+   `python rnaseq_quant.py -fastq_info testdata/fastqs/ -transcripts testdata/transcripts/transcripts.fa -outdir Result --dry_run --plot --docker`
 5. 其他待开发：
    1. 支持用户积累和管理分析结果：考虑设计分析结果导入数据库的功能
    2. 执行引擎Runner改进，支持集群运行，支持k8s环境运行
