@@ -128,12 +128,24 @@ def pipeline():
     
     2. 使用本地环境（在云平台可以根据docker镜像创建一个本地环境：docker run -v /home/hxbio04/basefly/:/home/hxbio04/basefly/ -w $PWD --rm -it gudeqing/rnaseq_envs:1.4)
     python rnaseq_quant.py -fastq_info testdata/fastqs/ -transcripts testdata/transcripts/transcripts.fa -outdir Result --run --plot
+    
+    3. 在云平台，假设挂载 （1）流程数据集（scripts_dataset）（2）待分析数据集（testdata_dataset） （3）存储参考数据库的数据集
+    启动实例后： 
+    python /enigma/datasets/*/rnaseq_quant.py -r1_name '(.*).R1.fastq.gz' -r2_name '(.*).R2.fastq.gz' -transcripts transcripts.fa -outdir Result --run --plot
+    注意：
+        1. 上面“/enigma/datasets/*/rnaseq_quant.py”中的”*“是通配符，在不确定流程数据集的具体路径的时候派上用场
+        2. -outdir：指定输出目录，如果目录不存在会尝试创建，该目录是流程的工作目录，也是结果的输出目录
+        3. 默认流程会去遍历整个/enigma/datasets/目录，找到能被参数r1_name和r2_name匹配到文件作为待分析数据文件
+        4. -transcripts参数是指定分析时需要的参考数据库，如果不提供完整路径，默认会去遍历整个/enigma/datasets/目录，找到该参数指定的文件作为参考输入
+        5. --plot表示运行时同时绘制流程运行状态图，此状态图路径为 outdir + "/state.svg"，建议能够让用户实时预览该文件以查看流程的运行情况
+        6. outdir + "/logs/" 为流程运行日志文件目录，建议能够让用户实时查看该目录以了解流程的运行情况，方便debug
+        7. outdir + "wf.*.running.*.log"路径为流程运行日志，建议能够让用户实时预览该文件以查看流程的运行情况，默认流程会print这个日志信息
     """
 
     # 定义流程输入参数
     # 初始化流程输入参数解析器
     wf.init_argparser()
-    wf.add_argument('-fastq_info', nargs='+', required=True, default='/enigma/datasets/',
+    wf.add_argument('-fastq_info', nargs='+', default='/enigma/datasets/',
                     help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
     wf.add_argument('-r1_name', default='(.*).R1.fastq.gz',
                     help="python regExp that describes the full name of read1 fastq file name. "
