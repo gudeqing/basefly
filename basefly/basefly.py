@@ -1022,7 +1022,7 @@ class Workflow:
         for cmd in tools:
             contents += [f"|{cmd.meta.name}|{cmd.meta.desc}|{cmd.meta.source}|{cmd.meta.version}|"]
         contents += ['### 系统总体结构图']
-        contents += ["本系统为数据分析流程，流程结构图可能随参数有所变化，一下仅为一个典型示例图"]
+        contents += ["本系统为数据分析流程，流程结构图可能随参数有所变化，下图仅为一个典型示例图"]
         contents += [f'![分析流程的有向无循环(DAG)图](./state.svg "{self.meta.name}")']
         contents += ['## 系统运行环境']
         contents += ['该系统主要内容是分析流程，需要在Linux操作系统下运行，需安装python > 3.7的环境，环境中需要安装graphviz和xcmds等包. '
