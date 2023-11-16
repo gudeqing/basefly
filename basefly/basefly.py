@@ -558,9 +558,8 @@ class Workflow:
                 shutil.copyfile(outfile, os.path.join(outputs_dir, f'{self.meta.name}.ini'))
                 shutil.copyfile(os.path.join(outdir, 'wf.static.args.json'), os.path.join(outputs_dir, 'wf.static.args.json'))
                 shutil.copyfile(os.path.join(outdir, 'wf.run.cmd.txt'), os.path.join(outputs_dir, 'wf.run.cmd.txt'))
-                state_svg = os.path.join(outputs_dir, 'state.svg')
-                if os.path.exists(state_svg):
-                    shutil.copyfile(os.path.join(outdir, 'state.svg'), state_svg)
+                if os.path.exists(os.path.join(outdir, 'state.svg')):
+                    shutil.copyfile(os.path.join(outdir, 'state.svg'), os.path.join(outputs_dir, 'state_graph.html'))
                 for name, out in self.outputs.items():
                     if '${{' in out.value:
                         src_dir = out.value.replace('${{mode:outdir}}', outdir)
@@ -585,7 +584,7 @@ class Workflow:
                                 targets.append(os.path.join(parent_dir, 'docker.cmd.sh'))
                         for src_dir in targets:
                             # print('Found expected output: ', src_dir)
-                            final_out_dir = os.path.join(outdir, 'Outputs', self.tasks[out.task_id].name)
+                            final_out_dir = os.path.join(outdir, 'Report', self.tasks[out.task_id].name)
                             os.makedirs(final_out_dir, exist_ok=True)
                             dst_path = os.path.join(final_out_dir, os.path.basename(src_dir))
                             if dst_path.endswith('/.'):
