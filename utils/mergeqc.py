@@ -128,15 +128,16 @@ def merge_umi_qc(
     target_metrics = {
         "Total_raw_bases(G)": "TotalRawBasesGb",
         "Total_raw_reads(M)": "TotalRawReadsMb",
-        "GC_content": "GCRatio",  # report
-        "Duplication(sequence-based)": "DupRate",  # report
-        "[Raw][Target] Average depth": "RawMeanDepth",
-        "[Consensus][Target] Average depth": "UmiMeanDepth",  # report
+        "GC_content": "GC",  # report
+        "Duplication(sequence-based)": "SeqDupRate",
         "Insert_size_peak": "InsertSize",  # report
-        "[Raw][Total] Fraction of Mapped Reads": "MappingRate",  # report
         "Q20_rate": "Q20",
         "Q30_rate": "Q30",  # report
-        "[Raw][Target] Fraction of Target Data in all data": "OnTargetRate",  # report
+        "[Raw][Total] Fraction of Mapped Reads": "MappingRate",  # report
+        "[Raw][Target] Average depth": "RawMeanDepth",
+        "[Raw][Total] Fraction of MapQ reads in mapped reads": "MapQ20Rate",  # report
+        "[Raw][Target] Fraction of Target Reads in all reads": "OnTargetReadRate",  # report
+        "[Raw][Target] Fraction of Target Data in all data": "OnTargetBaseRate",  # report
         "[Raw][Target] Coverage (>=0.2*MeanDepth)": "Uniformity20",
         "[Raw][Target] Coverage (>=0.5*MeanDepth)": "Uniformity50",
         "[Raw][Target] Fold80BasePenalty": "Fold80BasePenalty",  # report
@@ -145,7 +146,10 @@ def merge_umi_qc(
         "[Raw][Target] Coverage (>=500x)": "RawDepthOver500x",
         "[Raw][Target] Coverage (>=2000x)": "RawDepthOver2000x",
         "[Raw][Target] Coverage (>=5000x)": "RawDepthOver5000x",
-        "[Consensus][Target] Fraction of Target Data in all data": "UmiOnTargetRate",
+        "[Consensus][Target] Average depth": "UmiMeanDepth",  # report
+        "[Consensus][Total] Fraction of MapQ reads in mapped reads": "UmiMapQ20Rate",
+        "[Consensus][Target] Fraction of Target Reads in all reads": "UmiOnTargetReadRate",
+        "[Consensus][Target] Fraction of Target Data in all data": "UmiOnTargetBaseRate",
         "[Consensus][Target] Coverage (>=0.2*MeanDepth)": "UmiUniformity20",
         "[Consensus][Target] Coverage (>=0.5*MeanDepth)": "UmiUniformity50",  # report
         "[Consensus][flank] Fraction of flank Reads in all reads": "UmiOnFlankRate",
@@ -157,11 +161,11 @@ def merge_umi_qc(
         "UmiFamilySize=1:count": "UmiFamilySize1Count",
         "UmiFamilySize=2:count": "UmiFamilySize2Count",
         "UmiFamilySize=3:count": "UmiFamilySize3Count",
-        "UmiFamilySize=1:fraction": "UmiFamilySize1Percent",
-        "UmiFamilySize=2:fraction": "UmiFamilySize2Percent",
-        "UmiFamilySize=3:fraction": "UmiFamilySize3Percent",
-        "UmiFamilySize>=2:fraction": "UmiFamilySizeOver2Percent",  # report
-        "UmiFamilySize>=3:fraction": "UmiFamilySizeOver3Percent",  # report
+        "UmiFamilySize=1:fraction": "UmiFamilySize1",
+        "UmiFamilySize=2:fraction": "UmiFamilySize2",
+        "UmiFamilySize=3:fraction": "UmiFamilySize3",
+        "UmiFamilySize>=2:fraction": "UmiFamilySizeOver2",  # report
+        "UmiFamilySize>=3:fraction": "UmiFamilySizeOver3",  # report
     }
     target_rows = [x for x in target_metrics.keys() if x in table.index]
     table = table.loc[target_rows]
