@@ -498,6 +498,7 @@ def Bamdst():
     cmd.outputs['outdir'] = Output(value='{outdir}', report=True, type='outdir')
     cmd.outputs['coverage_report'] = Output(value='{outdir}/coverage.report')
     cmd.outputs['depth_file'] = Output(value='{outdir}/depth.tsv.gz')
+    cmd.outputs['insertsize_file'] = Output(value='{outdir}/insertsize.plot')
     return cmd
 
 
@@ -599,6 +600,7 @@ def merge_umi_qc():
     cmd.args['fastp_json_files'] = Argument(prefix='-fastp_json_files ', type='infile', array=True, desc='fastp output json file')
     cmd.args['bamdst_cov_report_files'] = Argument(prefix='-bamdst_cov_report_files ', type='infile', array=True, desc='bamdst output coverage report file')
     cmd.args['bamdst_depth_files'] = Argument(prefix='-bamdst_depth_files ', type='infile', array=True, desc='bamdst output depth stat file ')
+    cmd.args['bamdst_insertsize_files'] = Argument(prefix='-bamdst_insertsize_files ', type='infile', array=True, desc='bamdst output depth stat file ')
     cmd.args['umi_family_size_files'] = Argument(prefix='-umi_family_size_files ', type='infile', array=True, desc='UMI family size stat file from tool GroupReadsByUmi')
     cmd.args['prefix'] = Argument(prefix='-prefix ', type='outstr', level='optional', desc='output file prefix')
     cmd.outputs['all_metrics'] = Output(value='*.QC.all.metrics.txt', report=True)
@@ -2202,6 +2204,7 @@ def pipeline():
                 args['fastp_json_files'].value = [fastp_task_dict[f'{sample}-0'].outputs['json']]
             args['bamdst_cov_report_files'].value = [bamdst_task_dict['preUMI-'+sample].outputs['coverage_report'], bamdst_task_dict[sample].outputs['coverage_report']]
             args['bamdst_depth_files'].value = [bamdst_task_dict['preUMI-'+sample].outputs['depth_file'], bamdst_task_dict[sample].outputs['depth_file']]
+            args['bamdst_insertsize_files'].value = [bamdst_task_dict['preUMI-'+sample].outputs['insertsize_file'], bamdst_task_dict[sample].outputs['insertsize_file']]
             args['umi_family_size_files'].value = [groupumi_task_dict[sample].outputs['family_size']]
 
     # call 变异： bam -> vcf
