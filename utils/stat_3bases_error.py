@@ -201,6 +201,8 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
                             # dict(qual_counter.most_common())
                         ])
             # write out
+            if len(depths) == 0:
+                depths = [1]
             median_depth = statistics.median(depths)
             depth_lst.append(median_depth)
             for info in target_info_lst:
