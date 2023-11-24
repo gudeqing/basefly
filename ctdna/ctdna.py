@@ -604,7 +604,7 @@ def merge_umi_qc():
     cmd.args['umi_family_size_files'] = Argument(prefix='-umi_family_size_files ', type='infile', array=True, desc='UMI family size stat file from tool GroupReadsByUmi')
     cmd.args['prefix'] = Argument(prefix='-prefix ', type='outstr', level='optional', desc='output file prefix')
     cmd.outputs['all_metrics'] = Output(value='*.QC.all.metrics.txt', report=True)
-    cmd.outputs['target_metrics'] = Output(value='*.QC.target.metrics.txt', report=True)
+    cmd.outputs['target_metrics'] = Output(value='*.QC.target.metrics.csv', report=True)
     return cmd
 
 
