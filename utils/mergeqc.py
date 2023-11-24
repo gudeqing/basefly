@@ -7,6 +7,7 @@ def merge_umi_qc(
         fastp_json_files: list,
         bamdst_cov_report_files: list,
         bamdst_depth_files: list,
+        bamdst_insertsize_files: list,
         umi_family_size_files: list,
         outdir='.',
         prefix=None,
@@ -14,8 +15,9 @@ def merge_umi_qc(
     """
     用于umi数据分析流程的质控汇总：fastp的分析结果，bamdst的深度统计，umi统计, 最好仅用于汇总一个样本的分析结果
     :param fastp_json_files: [json, json2], 根据文件名称信息提取样本名信息， sample_name = file_name.split('.')[0]
-    :param : bamdst_cov_report_files:  第一个UMI处理前的，第二个是UMI处理后的; 需要和bamdst_depth_files一一对应,
-    :param : bamdst_depth_files: 第一个UMI处理前的，第二个是UMI处理后的; 需要和bamdst_cov_report_files一一对应，
+    :param : bamdst_cov_report_files:  第一个UMI处理前的，第二个是UMI处理后的; 需要和bamdst_depth_files一一对应
+    :param : bamdst_depth_files: 第一个UMI处理前的，第二个是UMI处理后的; 需要和bamdst_cov_report_files一一对应
+    :param : bamdst_insertsize_files: 第一个UMI处理前的，第二个是UMI处理后的; 需要和bamdst_cov_report_files一一对应
     :param umi_family_size_files: [family_size, family_size2, ...], 根据文件名称信息提取样本名信息， sample_name = file_name.split('.')[0]
     :param outdir: 输出结果目录
     :param prefix: 输出文件名前缀, 默认用样本名称作为前缀
@@ -50,7 +52,7 @@ def merge_umi_qc(
         result[sample] = target_info
 
     # 汇总bamdst的信息
-    for idx, (stat_file, depth_file) in enumerate(zip(bamdst_cov_report_files, bamdst_depth_files)):
+    for idx, (stat_file, depth_file, size_file) in enumerate(zip(bamdst_cov_report_files, bamdst_depth_files, bamdst_insertsize_files)):
         sample = samples[0] if len(samples) == 1 else samples[idx]
         if not os.path.exists(stat_file):
             print(f'skip un-existing file {stat_file}')
@@ -82,6 +84,12 @@ def merge_umi_qc(
         target_info['[Target] Coverage (>=5000x)'] = sum(data['Rmdup depth'] >= 5000)/panel_size
         target_info['[Target] Coverage (>=10000x)'] = sum(data['Rmdup depth'] >= 10000)/panel_size
         target_info['[Target] Fold80BasePenalty'] = mean_depth/data['Rmdup depth'].quantile(0.2)
+        # 计算insert size
+        data = pd.read_table(size_file, header=None)
+        peak_insert_size = data[data[1] == data[1].max()][0].mean()
+        mean_insert_size = (data[0] * data[1]).sum() / data[1].sum()
+        target_info['[Total] Peak insert size'] = peak_insert_size
+        target_info['[Total] Mean insert size'] = mean_insert_size
         # 假设第一组数据是UMI处理前的统计结果，第二组数据是UMI consensus后的结果，加上标签以示区别
         if idx == 0:
             target_info = {'[Raw]' + key: value for key, value in target_info.items()}
@@ -129,8 +137,10 @@ def merge_umi_qc(
         "Total_raw_bases(G)": "TotalRawBasesGb",
         "Total_raw_reads(M)": "TotalRawReadsMb",
         "GC_content": "GC",  # report
-        "Duplication(sequence-based)": "SeqDupRate",
-        "Insert_size_peak": "InsertSize",  # report
+        "Duplication(sequence-based)": "SeqDupRate",  # report
+        # "Insert_size_peak": "InsertSize",  # report
+        "[Consensus][Total] Peak insert size": "PeakInsertSize",
+        "[Consensus][Total] Mean insert size": "MeanInsertSize",
         "Q20_rate": "Q20",
         "Q30_rate": "Q30",  # report
         "[Raw][Total] Fraction of Mapped Reads": "MappingRate",  # report
@@ -167,7 +177,7 @@ def merge_umi_qc(
         "UmiFamilySize>=2:fraction": "UmiFamilySizeOver2",  # report
         "UmiFamilySize>=3:fraction": "UmiFamilySizeOver3",  # report
     }
-    target_rows = [x for x in target_metrics.keys() if x in table.index]
+    target_rows = [x for x in target_metrics.keys()]
     table = table.loc[target_rows]
     table.index = [x for x in target_metrics.values()]
     table.to_excel(os.path.join(outdir, f'{prefix}.QC.target.metrics.xlsx'))
@@ -185,11 +195,13 @@ if __name__ == '__main__':
     parser.add_argument('-fastp_json_files', required=False, nargs='+', help='fastp output json file')
     parser.add_argument('-bamdst_cov_report_files', required=False, nargs='+', help='bamdist output coverage report file')
     parser.add_argument('-bamdst_depth_files', required=False, nargs='+', help='bamdst output coverage report file')
+    parser.add_argument('-bamdst_insertsize_files', required=False, nargs='+', help='bamdst output coverage report file')
     parser.add_argument('-umi_family_size_files', required=False, nargs='+', help='UMI family size stat file from tool GroupReadsByUmi')
     args = parser.parse_args()
     merge_umi_qc(
         fastp_json_files=args.fastp_json_files,
         bamdst_cov_report_files=args.bamdst_cov_report_files,
         bamdst_depth_files=args.bamdst_depth_files,
+        bamdst_insertsize_files=args.bamdst_insertsize_files,
         umi_family_size_files=args.umi_family_size_files
     )
