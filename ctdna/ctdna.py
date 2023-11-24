@@ -494,7 +494,6 @@ def Bamdst():
     cmd.args['bed'] = Argument(prefix='-p ', type='infile', desc='probe bed file')
     cmd.args['outdir'] = Argument(prefix='-o ', type='outstr', default='.', desc='output directory')
     cmd.args['flank'] = Argument(prefix='-f ', default=100, desc='calculate the coverage of flank region')
-    cmd.args['use_rmdup'] = Argument(prefix='--use_rmdup', type='bool', default=True, desc='indicate to use RmDup depth to stat the coverage information in the coverage.report file.')
     cmd.args['input'] = Argument(prefix='', type='infile', format='bam', desc='input bam file')
     cmd.outputs['outdir'] = Output(value='{outdir}', report=True, type='outdir')
     cmd.outputs['coverage_report'] = Output(value='{outdir}/coverage.report')
