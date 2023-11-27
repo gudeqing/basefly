@@ -2503,11 +2503,12 @@ def pipeline():
     if xls_lst:
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
         df = df.sort_values(by=['Sample', 'Chr', 'Start'])
-        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.xlsx')
+        out_file = os.path.join(wf.wkdir, 'Report', 'All.vardict.variants.xlsx')
         df.to_excel(out_file, index=False)
-        target_idx = [x in target_genes for x in df['Gene']]
-        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.vardict.variants.5LungCanerGenes.xlsx')
-        df.loc[target_idx].to_excel(out_file, index=False)
+        if 'Gene' in df.columns:
+            target_idx = [x in target_genes for x in df['Gene']]
+            out_file = os.path.join(wf.wkdir, 'Report', 'All.vardict.variants.5LungCanerGenes.xlsx')
+            df.loc[target_idx].to_excel(out_file, index=False)
 
     xls_lst = []
     for tid in mutect2_filter_task_ids:
@@ -2517,11 +2518,11 @@ def pipeline():
             if os.path.exists(xls_file):
                 xls_lst.append(xls_file)
     if xls_lst:
-        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.xlsx')
+        out_file = os.path.join(wf.wkdir, 'Report', 'All.mutect2.variants.xlsx')
         df = pd.concat([pd.read_excel(xls_file, sheet_name='Sheet1') for xls_file in xls_lst])
         df = df.sort_values(by=['Sample', 'Chr', 'Start'])
         df.to_excel(out_file, index=False)
-        out_file = os.path.join(wf.wkdir, 'Outputs', 'All.mutect2.variants.5LungCanerGenes.xlsx')
+        out_file = os.path.join(wf.wkdir, 'Report', 'All.mutect2.variants.5LungCanerGenes.xlsx')
         target_idx = [x in target_genes for x in df['Gene']]
         df.loc[target_idx].to_excel(out_file, index=False)
 

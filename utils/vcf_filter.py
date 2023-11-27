@@ -2006,7 +2006,10 @@ class VcfFilter(ValidateMutationByBam):
         key_left = key_right = 0
         if error_rate_file:
             seq_error_dict = json.load(open(error_rate_file))
-            key_len = max(len(x) for x in seq_error_dict['A'].keys())//2
+            if seq_error_dict:
+                key_len = max(len(x) for x in seq_error_dict['A'].keys())//2
+            else:
+                key_len = 1
             key_left = key_right = key_len
         else:
             if min_error_rate:

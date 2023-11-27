@@ -250,7 +250,8 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
             zip(freq_result.keys(), freq_result.values()),
             key=lambda x: sum(x[1].values()), reverse=True)
         )
-        alt_dict[alt_type] = freq_result
+        if freq_result:
+            alt_dict[alt_type] = freq_result
 
     # print(alt_dict.keys())
     out_file = f'{prefix}.centered{center_size[0]}{center_size[1]}_site.json'
