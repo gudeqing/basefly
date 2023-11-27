@@ -223,6 +223,8 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
         for base in ['A', 'T', 'C', 'G', 'I', 'D']:
             for center_seq in mdict:
                 result.setdefault(center_seq, Counter())
+                if base not in mdict[center_seq]:
+                    continue
                 result[center_seq][base] = mdict[center_seq][base]
                 r_key = reverse_complement(center_seq)
                 r_base = reverse_complement(base)

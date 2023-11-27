@@ -649,7 +649,8 @@ class Workflow:
 
         for task_id, task in self.tasks.items():
             cmd_wkdir = os.path.join("${mode:outdir}", task.parent_wkdir, task.name)
-            task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
+            # 下面的task.wkdir已经在add_task时更新
+            # task.wkdir = os.path.join(self.wkdir, task.parent_wkdir, task.name)
             mount_vols = {cmd_wkdir}
 
             # format output
@@ -932,10 +933,11 @@ class Workflow:
         self.add_argument = self.argparser.add_argument
 
     def parse_args(self):
+        # 这个函数会在写流程时使用
         if self.argparser is None:
             self.init_argparser()
         self.args = self.argparser.parse_args()
-        self.wkdir = self.args.outdir
+        self.wkdir = os.path.abspath(self.args.outdir)
 
     def finalize(self):
         # depends统一转为task_id
@@ -962,6 +964,7 @@ class Workflow:
                                 task.depends.append(each.task_id)
                 else:
                     pass
+
         # 优先处理跳过的步骤
         parameters = self.argparser.parse_args()
         self.wkdir = os.path.abspath(parameters.outdir)
