@@ -2091,8 +2091,9 @@ class VcfFilter(ValidateMutationByBam):
                 if seq_error_dict:
                     if mutation_type == 'SNV':
                         key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
-                        if key in seq_error_dict[r.alts[0]]:
-                            error_rate = seq_error_dict[r.alts[0]][key][r.alts[0]]
+                        if r.alts[0] in seq_error_dict:
+                            if key in seq_error_dict[r.alts[0]]:
+                                error_rate = seq_error_dict[r.alts[0]][key][r.alts[0]]
                     elif mutation_type == 'Insertion':
                         key = gn.fetch(r.contig, r.start - key_left, r.start + 1 + key_right).upper()
                         if 'I' in seq_error_dict:
