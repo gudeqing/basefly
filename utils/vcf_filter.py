@@ -190,7 +190,7 @@ class ValidateMutationByBam(object):
             # u, pvalue = stats.mannwhitneyu(alt_quals, ref_quals, alternative='less')
             u, pvalue = stats.ranksums(alt_quals, ref_quals)
             # u, pvalue = stats.ttest_ind(alt_quals, ref_quals)
-        elif len(alt_quals) >= 3 and len(alt_quals) >= 3:
+        elif len(alt_quals) >= 3 and len(ref_quals) >= 3:
             if qual_dict2:
                 # 配对检验
                 s, pvalue = stats.ttest_rel(alt_quals, ref_quals)
