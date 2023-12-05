@@ -12,10 +12,15 @@ __author__ = 'gdq'
 
 
 class MicroHapCaller(object):
-    def __init__(self, bam_file, genome_file, micro_hap_file, out_prefix):
+    def __init__(self, bam_file, genome_file, micro_hap_file, out_prefix, error_rate_file=None):
         self.bam = AlignmentFile(bam_file)
         self.genome = FastaFile(genome_file)
         self.markers = self.parse_micro_hap(micro_hap_file)
+        if error_rate_file:
+            self.seq_error_dict = json.load(open(error_rate_file))
+        else:
+            self.seq_error_dict = None
+
         self.run(out_prefix)
 
     @staticmethod
@@ -52,6 +57,7 @@ class MicroHapCaller(object):
         # 比较
         # 优先进行mannwhitneyu检验，适合样本量较多的情况
         if len(alt_quals) >= 10 and len(ref_quals) >= 10:
+            # 如果alt_quals和ref_quals完全一样,有可能导致有些版本的stats.mannwhitneyu报错
             u, pvalue = stats.mannwhitneyu(alt_quals, ref_quals, alternative=alternative)
             # u, pvalue = stats.ranksums(alt_quals, ref_quals, alternative=alternative)
             # u, pvalue = stats.ttest_ind(alt_quals, ref_quals, alternative=alternative)
@@ -111,7 +117,7 @@ class MicroHapCaller(object):
         depths = []
         for pos in positions:
             # 期望这里的pos是0-based
-            ref_base = self.genome.fetch(contig, pos, pos+1).upper()
+            ref_base = self.genome.fetch(contig, pos-1, pos+2).upper()
             pileup_columns = self.bam.pileup(
                 contig, pos, pos+1,
                 stepper='samtools',
@@ -160,36 +166,33 @@ class MicroHapCaller(object):
                     query_seq = alignment.query_sequence
                     query_pos = pileup_read.query_position
                     query_len = alignment.query_length
-                    # 对于pair，只会记录其中一条记录
-                    if read_name not in support_reads:
-                        if query_pos is not None and pileup_read.indel == 0:
+                    if query_pos is not None and pileup_read.indel == 0:
+                        # 对于pair，只会记录其中一条记录
+                        # 提取目标位置检测到的具体碱基成分，其可能是和ref一致，也可能不一致
+                        predict_base = query_seq[query_pos].upper()
+                        support_reads.setdefault(predict_base, set())
+                        F2R1.setdefault(predict_base, 0)
+                        F1R2.setdefault(predict_base, 0)
+                        if read_name not in support_reads[predict_base]:
+                            # 存储支持突变的reads
+                            support_reads[predict_base].add(read_name)
                             # 计算突变位点距离read两端的距离的最小值, 针对multiplexPCR得到的，这个值没有什么用处
                             dist_to_read_end_dict[read_name] = min(query_pos, query_len - query_pos)
-                            # 提取目标位置检测到的具体碱基成分，其可能是和ref一致，也可能不一致
-                            predict_base = query_seq[query_pos].upper()
-                            # 注意，由于未知原因，这里找到的read_name不一定在前面的query_names中
-                            # 存储支持突变的reads
-                            support_reads.setdefault(predict_base, set()).add(read_name)
-                            # 计算正负链的支持情况
-                            if alignment.is_proper_pair:
-                                if alignment.is_read1:
-                                    if alignment.is_reverse:
-                                        # 突变在read1,并且read1和参考基因组是反向互补的方向
-                                        F2R1.setdefault(predict_base, 0)
-                                        F2R1[predict_base] += 1
-                                    else:
-                                        # 突变在read1，并且read1和参考基因组是一致的方向
-                                        F1R2.setdefault(predict_base, 0)
-                                        F1R2[predict_base] += 1
-                                elif alignment.is_read2:
-                                    if alignment.is_reverse:
-                                        # 突变在read2,并且read1和参考基因组是反向互补的方向
-                                        F1R2.setdefault(predict_base, 0)
-                                        F1R2[predict_base] += 1
-                                    else:
-                                        # 突变在read2，并且read1和参考基因组是一致的方向
-                                        F2R1.setdefault(predict_base, 0)
-                                        F2R1[predict_base] += 1
+                            # 计算正负链的支持情况, single end比对时将无记录, 对于
+                            if alignment.is_read1:
+                                if alignment.is_reverse:
+                                    # 突变在read1,并且read1和参考基因组是反向互补的方向
+                                    F2R1[predict_base] += 1
+                                else:
+                                    # 突变在read1，并且read1和参考基因组是一致的方向
+                                    F1R2[predict_base] += 1
+                            elif alignment.is_read2:
+                                if alignment.is_reverse:
+                                    # 突变在read2,并且read1和参考基因组是反向互补的方向
+                                    F1R2[predict_base] += 1
+                                else:
+                                    # 突变在read2，并且read1和参考基因组是一致的方向
+                                    F2R1[predict_base] += 1
 
                 # 开始统计分析; 提取主碱基作为参考
                 for predict_base in support_reads.keys():
@@ -201,9 +204,9 @@ class MicroHapCaller(object):
                     mq_pvalue, alt_mqs, ref_mqs = self.qual_diff_test(test_reads, ref_reads, map_qual_dict)
                     pos_pvalue, alt_pos, ref_pos = self.qual_diff_test(test_reads, ref_reads, dist_to_read_end_dict)
                     mean_alt_bq = statistics.mean(alt_bqs) if alt_mqs else None
-                    mean_ref_bq = statistics.mean(ref_bqs) if alt_mqs else None
+                    # mean_ref_bq = statistics.mean(ref_bqs) if alt_mqs else None
                     mean_alt_mq = statistics.mean(alt_mqs) if alt_mqs else None
-                    mean_ref_mq = statistics.mean(ref_mqs) if alt_mqs else None
+                    # mean_ref_mq = statistics.mean(ref_mqs) if alt_mqs else None
                     mean_alt_pos = statistics.median(alt_pos) if alt_pos else None
                     alt_pos_pstd = statistics.pstdev(alt_pos) if alt_pos else None
                     max_alt_pos_diff = max(alt_pos) - min(alt_pos)
@@ -213,7 +216,7 @@ class MicroHapCaller(object):
                     # 实践表明,当前的碱基质量比较检验得到的pvalue无决定性的参考意义
                     # metric_info['bq_pvalue'] = bq_pvalue
                     metric_info['mean_bq'] = mean_alt_bq
-                    metric_info['mean_ref_bq'] = mean_ref_bq
+                    # metric_info['mean_ref_bq'] = mean_ref_bq
                     metric_info['mq_pvalue'] = mq_pvalue
                     metric_info['mean_mq'] = mean_alt_mq
                     metric_info['pos_pvalue'] = pos_pvalue
@@ -226,11 +229,15 @@ class MicroHapCaller(object):
                     metric_info['ref_base'] = ref_base
                     metric_info['main_base'] = main_base
                     metric_info['predict_base'] = predict_base
-                    metric_info['F1R2'] = F1R2
-                    metric_info['F2R1'] = F2R1
-
+                    metric_info['F1R2'] = F1R2[predict_base]
+                    metric_info['F2R1'] = F2R1[predict_base]
+                    metric_info['error_rate'] = 0
+                    if self.seq_error_dict:
+                        if predict_base in self.seq_error_dict and ref_base in self.seq_error_dict[predict_base]:
+                            metric_info['error_rate'] = self.seq_error_dict[predict_base][ref_base][predict_base]
+                    metric_info['AF'] = support_depth/depth
                     # 判断snv的质量
-                    if mean_alt_bq >= 30 and support_depth >= 2:
+                    if mean_alt_bq >= 30 and support_depth >= 2 and metric_info['AF'] > metric_info['error_rate']:
                         metric_info['GoodQuality'] = True
                     else:
                         metric_info['GoodQuality'] = False
@@ -284,8 +291,8 @@ class MicroHapCaller(object):
         pd.DataFrame(clean_result).to_csv(out_prefix+'.csv', index=False)
 
 
-def micro_hap_typing(bam_file, genome_file, micro_hap_file, out_prefix='typing_result'):
-    MicroHapCaller(bam_file, genome_file, micro_hap_file, out_prefix=out_prefix)
+def micro_hap_typing(bam_file, genome_file, micro_hap_file, out_prefix='typing_result', error_rate_file=None):
+    MicroHapCaller(bam_file, genome_file, micro_hap_file, out_prefix=out_prefix, error_rate_file=error_rate_file)
 
 
 if __name__ == '__main__':
