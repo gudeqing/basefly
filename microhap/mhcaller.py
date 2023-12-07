@@ -17,9 +17,25 @@ class MicroHapCaller(object):
         self.genome = FastaFile(genome_file)
         self.markers = self.parse_micro_hap(micro_hap_file)
         if error_rate_file:
-            self.seq_error_dict = json.load(open(error_rate_file))
+            if error_rate_file.endswith('json'):
+                self.seq_error_dict = json.load(open(error_rate_file))
+            else:
+                error_dict = dict()
+                base_mapping = dict(A='T', C='G', T='A', G="C")
+                with open(error_rate_file) as f:
+                    for line in f:
+                        if line.startswith('#') or line.startswith('REF_BASE'):
+                            continue
+                        if line.strip():
+                            lst = line.strip().split()
+                            alt, rate = lst[2], lst[-1]
+                            error_dict[alt] = float(rate)
+                            r, a = alt.split('>')
+                            error_dict[base_mapping[r]+'>'+base_mapping[a]] = float(rate)
+                self.seq_error_dict = error_dict
+                print(self.seq_error_dict)
         else:
-            self.seq_error_dict = None
+            self.seq_error_dict = dict()
 
         self.run(out_prefix)
 
@@ -73,6 +89,28 @@ class MicroHapCaller(object):
         return pvalue, alt_quals, ref_quals
 
     @staticmethod
+    def pass_seq_error(dp, af, error_rate:float=None, alpha=0.05):
+        if error_rate == 0:
+            return True, error_rate, 1
+        # 估计error_rate的置信区间
+        confidence = 1 - alpha
+        # confidence越大，则 error_upper越大, af_lower越小，min_depth越大， 这意味着过滤条件越严格
+        try:
+            lower, upper = stats.binom.interval(confidence, n=dp, p=error_rate)
+        except:
+            raise Exception(f'{dp}|{af}|{error_rate}')
+        error_lower, error_upper = lower / dp, upper / dp
+        # 假设测序错误服从二型分布，可以计算alt_depth全部来自错误的概率
+        pvalue = 1 - stats.binom.cdf(k=round(dp*af), n=dp, p=error_rate)
+        # error rate不能为0，af不能为1，否则会报错
+        # print(dp, r.qual, error_rate, lower, upper)
+        # 测试发现pvalue<alpha时，af 不一定小于upper，说明这可能是两种过滤策略
+        if (af >= error_upper) and (pvalue <= alpha):
+            return True, error_upper, pvalue
+        else:
+            return False, error_upper, pvalue
+
+    @staticmethod
     def consensus_seqs(seqs):
         # 对支持突变的reads的突变中心进行consensus
         if len(seqs) == 1:
@@ -111,7 +149,42 @@ class MicroHapCaller(object):
                 FoxoG = round(F1R2 / (F1R2 + F2R1), 3)
         return FoxoG
 
-    def marker_typing(self, marker, contig, positions, min_bq=10):
+    def marker_typing(self, marker, contig, positions, min_bq=10, min_mean_bq=25, min_support_depth=2):
+        """
+        # 下面是一个值得思考的现象:
+        marker	haplotype	count
+        mh17CP-001	G,G,G	564 (true)
+        mh17CP-001	G,G,A	15 (可以被error rate的过滤策略排除)
+        mh17CP-001	G,A,G	26
+        mh17CP-001	C,G,G	17
+        mh17CP-001	C,A,G	666 (true)
+        mh17CP-001	C,A,T	1 (可以被最低阈值2排除)
+        mh17CP-001	C,T,G	1 (可以被最低阈值2排除)
+        mh17CP-001	T,A,G	1 (可以被最低阈值2排除)
+        mh17CP-001	A,A,G	1 (可以被最低阈值2排除)
+
+        CAG可以是GGG中第2个碱基测序错误的结果, 也可能是等位基因型CAG中第1个碱基测序错误的结果
+        CGG可以是GGG中第1个碱基测序错误的结果, 也可能是等位基因型CAG中第2个碱基测序错误的结果
+        所以我们才会看到上述2个噪音值比较大
+
+        再比如下面,也可以看到类似的高噪音值
+        marker	haplotype	count
+        mh17CP-002	G,T,T	324   [332, 324, 678]
+        mh17CP-002	G,G,T	8     [332, 345, 678](高噪音值, 可以是GTT的中间碱基测序错误导致,也可以是等位基因型AGT的第一个碱基值测序错误导致)
+        mh17CP-002	A,G,T	333   [335, 345, 678]
+        mh17CP-002	A,G,C	1
+        mh17CP-002	A,G,G	1
+        mh17CP-002	C,G,T	1
+        假设GTT, AGT, GGT都是真的, GTT和AGT是等位, GGT是mix进来的,大概率是纯合子,那么比例是324:4
+        # 根据这个现象,我们需要发展更好的过滤策略: 见count_cutoff
+        :param marker: marker名称
+        :param contig: 染色体名称
+        :param positions: marker的SNP坐标
+        :param min_bq: 最小碱基质量值,pileup的输入
+        :param min_mean_bq: 最小平均碱基质量
+        :param min_support_depth: 支持alt的最小read数量
+        :return:
+        """
         result = dict()
         # result的key是position=(contig, start, ref_base)，value是相应position的碱基测序结果
         depths = []
@@ -231,17 +304,19 @@ class MicroHapCaller(object):
                     metric_info['predict_base'] = predict_base
                     metric_info['F1R2'] = F1R2[predict_base]
                     metric_info['F2R1'] = F2R1[predict_base]
-                    metric_info['error_rate'] = 0
-                    if self.seq_error_dict:
-                        if predict_base in self.seq_error_dict and ref_base in self.seq_error_dict[predict_base]:
-                            metric_info['error_rate'] = self.seq_error_dict[predict_base][ref_base][predict_base]
+                    # metric_info['error_rate'] = 0
+                    # if self.seq_error_dict:
+                    #     if predict_base in self.seq_error_dict and ref_base in self.seq_error_dict[predict_base]:
+                    #         metric_info['error_rate'] = self.seq_error_dict[predict_base][ref_base][predict_base]
                     metric_info['AF'] = support_depth/depth
                     # 判断snv的质量
-                    if mean_alt_bq >= 30 and support_depth >= 2 and metric_info['AF'] > metric_info['error_rate']:
+                    metric_info['GoodQuality'] = False
+                    if mean_alt_bq >= min_mean_bq and support_depth >= min_support_depth:
                         metric_info['GoodQuality'] = True
-                    else:
-                        metric_info['GoodQuality'] = False
-
+                        # judge, error_upper, pvalue = self.pass_seq_error(dp=depth, af=metric_info['AF'], error_rate=metric_info['error_rate'], alpha=0.05)
+                        # metric_info['error_upper'] = error_upper
+                        # metric_info['error_pvalue'] = pvalue
+                        # if judge:
             # call完成
             call = result.setdefault((contig, pos), dict())
             for predict_base in support_reads:
@@ -261,7 +336,7 @@ class MicroHapCaller(object):
                 # 提取基因型对应的snp的metrics
                 metric_lst = [result[(contig, positions[idx])][base]['metrics'] for idx, base in enumerate(genotype)]
                 tmp_dict = dict(marker=marker)
-                tmp_dict['haplotype'] = ','.join(genotype)
+                tmp_dict['haplotype'] = '-'.join(genotype)
                 tmp_dict['count'] = genotype_support_num
                 tmp_dict['metrics'] = metric_lst
                 tmp_dict['depths'] = depths
@@ -274,21 +349,86 @@ class MicroHapCaller(object):
         :return:
         """
 
+    def haplotype_convert_rate(self, current_hap, hap):
+        hap1 = current_hap.split('-')
+        hap2 = hap.split('-')
+        error_rates = []
+        for b1, b2 in zip(hap1, hap2):
+            if b1 != b2:
+                alt_mode = b2 + '>' + b1
+                if alt_mode in self.seq_error_dict:
+                    error_rates.append(self.seq_error_dict[alt_mode])
+        if error_rates:
+            multi_value = 1
+            for each in error_rates:
+                multi_value *= each
+            return multi_value
+
     def run(self, out_prefix='typing_result'):
-        raw_result = []
-        clean_result = []
+        result = []
         for marker_name, marker_info in self.markers.items():
             type_result = self.marker_typing(marker_name, marker_info['contig'], marker_info['snp_pos'])
-            raw_result += type_result
             for each in type_result:
                 # 要求每个SNP都是GoodQuality
+                each["support_depths"] = [x["support_depth"] for x in each['metrics']]
                 if all([x["GoodQuality"] for x in each['metrics']]):
-                    clean_result.append(each)
-        with open(out_prefix+'.raw.json', 'w') as f:
-            json.dump(raw_result, f, indent=2)
-        with open(out_prefix+'.clean.json', 'w') as f:
-            json.dump(clean_result, f, indent=2)
-        pd.DataFrame(clean_result).to_csv(out_prefix+'.csv', index=False)
+                    each['Pass'] = True
+                else:
+                    each['Pass'] = False
+                result.append(each)
+
+        # 汇总所有Pass信息,统计一个基因型被测错的指标
+        # total_good = 0
+        # total_bad = 0
+        # for type_result in result:
+        #     if type_result['Pass']:
+        #         total_good += type_result['count']
+        #     else:
+        #         total_bad += type_result['count']
+        # bad_ratio = total_bad / (total_good + total_bad)
+        # print('bad ratio', bad_ratio)
+
+        # 定制错误率相关cutoff,我们比较同一个marker的不同基因型的差异,根据碱基错误率计算一个阈值
+        # 收集marker和haplotype的关系
+        marker2type = dict()
+        for marker_info in result:
+            tmp_dict = marker2type.setdefault(marker_info['marker'], dict())
+            tmp_dict[marker_info['haplotype']] = marker_info['count']
+        # 开始统计计算
+        for marker_info in result:
+            count_ratio = marker_info['count'] / sum(marker2type[marker_info['marker']].values())
+            marker_info['count_freq'] = round(count_ratio, 4)
+            current_hap = marker_info['haplotype']
+            cutoff = 0
+            for hap, count in marker2type[marker_info['marker']].items():
+                convert_rate = self.haplotype_convert_rate(current_hap, hap)
+                if convert_rate:
+                    lower, upper = stats.binom.interval(0.95, n=count+marker_info['count'], p=convert_rate)
+                    cutoff += upper
+            marker_info['count_cutoff'] = cutoff
+            if marker_info['Pass']:
+                # 进一步降低假阳性
+                if marker_info['count'] <= marker_info['count_cutoff']:
+                    marker_info['Pass'] = False
+
+        # 汇总所有Pass信息,统计一个基因型被测错的指标, 然后用这个指标重新过滤
+        total_good = 0
+        total_bad = 0
+        for type_result in result:
+            if type_result['Pass']:
+                total_good += type_result['count']
+            else:
+                total_bad += type_result['count']
+        bad_ratio = total_bad / (total_good + total_bad)
+        print('bad ratio', bad_ratio)
+
+        # save out file
+        with open(out_prefix+'.json', 'w') as f:
+            json.dump(result, f, indent=2)
+
+        df = pd.DataFrame(result)
+        df = df[["marker", "haplotype", "count", "count_cutoff", "count_freq", "support_depths", "depths", "Pass", "metrics"]]
+        df.to_csv(out_prefix+'.csv', index=False)
 
 
 def micro_hap_typing(bam_file, genome_file, micro_hap_file, out_prefix='typing_result', error_rate_file=None):
