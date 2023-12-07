@@ -54,7 +54,7 @@ from collections import Counter
 __author__ = 'gdq'
 
 
-def get_seq_and_qual(contig, start, end, bam, min_bq=13, get_qual=False):
+def get_seq_and_qual(contig, start, end, bam, min_bq=13, get_qual=True):
     cols = bam.pileup(
         contig, start, end,
         stepper='samtools',
@@ -110,8 +110,8 @@ def reverse_complement(seq):
     return ''.join(complement[base] if base in complement else base for base in seq[::-1])
 
 
-def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_from=None,
-        genome='/nfs2/database/1_human_reference/hg19/ucsc.hg19.fasta',):
+def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_from=None, af_cutoff=0.01,
+        genome='/nfs2/database/1_human_reference/hg19/ucsc.hg19.fasta'):
     """
     对要目标区域的每一个位点进行统计，尝试得出测序错误条件下：碱基发生转换的条件概率
     分析思路：
@@ -126,12 +126,12 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
         "CTT": { "A": 0.0008 }，
         ...},
     ...}
-    注:统计时会把测序DP>=10且AF>=10%的位点剔除，认为这些是真实突变，并不是测序错误导致
     :param bed: 要统计的目标区域
     :param bam: 比对结果文件
     :param prefix: 输出结果文件前缀
     :param center_size: 该值为统计时以当前位点为中心并向两边延申的长度，默认为1
     :param exclude_sites: 统计时需要排除的位点列表文件，可以是未经压缩的vcf或bed，通常为已知突变位点信息
+    :param af_cutoff: 认为af低于这个频率的突变大部分是假的突变,通过累加这些位点的信息,估计出错误率
     :param genome: 参考基因组序列文件路径, 用于获取参考序列
     :return: 默认输出两个文件。
         一个文件为*.each_site.txt，记录目标区域的每一个碱基的突变情况；
@@ -154,7 +154,8 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
                     # 统一转换为1-based
                     excludes.add((chr_name, str(each)))
     # 初始化变异字典
-    alt_raw_dict = {x: dict() for x in ['A', 'T', 'C', 'G', 'I', 'D']}
+    # alt_raw_dict = {x: dict() for x in ['A', 'T', 'C', 'G', 'I', 'D']}
+    alt_raw_dict = {}
     with open(bed) as bed_file, open(f'{prefix}.each_site.txt', 'w') as fw:
         # header = ['contig', 'pos', 'ref', 'centered_ref', 'depth', 'alt_stat', 'base_qual_stat']
         header = ['contig', 'pos', 'ref', 'centered_ref', 'depth', 'alt_stat']
@@ -165,98 +166,164 @@ def estimate_context_seq_error(bed, bam, prefix, center_size=(1, 1), exclude_fro
                 continue
             r, s, t = line.strip().split()[:3]
             s, t = int(s), int(t)
-            seq_quals = get_seq_and_qual(r, s, t, bam)
+            # 返回每个位点的测序信息
+            seq_quals = get_seq_and_qual(r, s, t, bam, get_qual=False)
             target_info_lst = []
             depths = []
             for pos, seq_qual in zip(range(s, t), seq_quals):
+                seq_bases = seq_qual[0]
                 if (r, str(pos+1)) in excludes:
                     # print('skip', pos)
                     continue
-                if len(seq_qual[0]) > 0:
+                if len(seq_bases) > 0:
                     # 统计当前位点A/T/C/G/I/D出现的频数
-                    seq_counter = Counter(seq_qual[0])
+                    seq_counter = Counter(seq_bases)
                     # qual_counter = Counter(seq_qual[1])
                     center_seq = get_center_seq(r, pos, gn, sizes=center_size).upper()
-                    ref = center_seq[len(center_seq)//2]
-                    # 统计alternative碱基的总数
-                    alt_types = seq_counter.keys() - {ref, 'N', 'n'}
-                    total_depth = sum(seq_counter.values())
+                    ref = center_seq[center_size[0]]
+                    # 统计
+                    total_depth = len(seq_bases)
                     depths.append(total_depth)
-                    # alt_freq = alt_num / (total)
-                    for alt_type in alt_types:
-                        alt_depth = seq_counter[alt_type]
-                        alt_freq = alt_depth/total_depth
-                        if alt_freq < 0.01:
-                            # 只考虑低频突变
-                            alt_raw_dict[alt_type].setdefault(center_seq, Counter())
-                            # {'G': 'CAT':{'A': 10, 'G':2}}
-                            alt_raw_dict[alt_type][center_seq] += seq_counter
 
+                    # 根据碱基频率猜测真实测序模板
+                    # 对于center_seq的中间碱基,我们应该要确认样本中真正的参考碱基是什么,我们可以用频率高低来判断
+                    predict_base_freq = []
+                    for each in seq_counter.keys():
+                        base_freq = [each, seq_counter[each], seq_counter[each]/total_depth]
+                        predict_base_freq.append(base_freq)
+                    # 根据af倒序
+                    sorted_base_freq = sorted(predict_base_freq, key=lambda x: x[2], reverse=True)
+                    # 我们尽量要以germline信息去做参考,而不是输入的参考基因组作为参考,所以出现下面的center_seq1和center_seq2
+                    center_seq1 = None
+                    center_seq2 = None
+                    if sorted_base_freq[0][2] >= 0.85:
+                        # 认为频率超过85%的碱基才是真正的测序模板
+                        center_seq = list(center_seq)
+                        center_seq[center_size[0]] = sorted_base_freq[0][0]
+                        center_seq = ''.join(center_seq)
+                    elif len(sorted_base_freq) >= 2 and (sorted_base_freq[0][2] + sorted_base_freq[1][2]) >= 0.85:
+                        # 认为频率top2的碱基都是测序模板, 这里我们最多也只考虑真实样本中含量最多的两位模板的情况
+                        center_seq = list(center_seq)
+                        center_seq[center_size[0]] = sorted_base_freq[0][0]
+                        center_seq1 = ''.join(center_seq)
+                        # 按照各自的占比去分配测序深度
+                        top1_count = sorted_base_freq[0][1]
+                        top2_count = sorted_base_freq[1][1]
+                        center_seq1_depth = int(top1_count/(top1_count+top2_count) * total_depth) + 1
+                        center_seq[center_size[0]] = sorted_base_freq[1][0]
+                        center_seq2 = ''.join(center_seq)
+                        center_seq2_depth = int(top2_count/(top1_count+top2_count) * total_depth) + 1
+
+                    updated = False
+                    for each in sorted_base_freq:
+                        # 挑选可能错误的测序结果进行统计
+                        if each[2] <= af_cutoff:
+                            updated = True
+                            # 只考虑低频突变
+                            error_base = each[0]
+                            error_base_depth = each[1]
+                            # 例如: alt_raw_dict = {'CAT':{'A': 1, 'G':2, 'ref_depth':1222}}
+                            if center_seq1:
+                                alt_raw_dict.setdefault(center_seq1, Counter())
+                                alt_raw_dict[center_seq1] += {error_base: error_base_depth}
+                            else:
+                                alt_raw_dict.setdefault(center_seq, Counter())
+                                alt_raw_dict[center_seq] += {error_base: error_base_depth}
+                            if center_seq2:
+                                alt_raw_dict.setdefault(center_seq2, Counter())
+                                alt_raw_dict[center_seq2] += {error_base: error_base_depth}
+                    if updated:
+                        # ref_depth, 理解为目标模板被测序了多少次, 下面是进行次数累加更新,夯实统计意义
+                        if center_seq1:
+                            if 'ref_depth' in alt_raw_dict[center_seq1]:
+                                alt_raw_dict[center_seq1]['ref_depth'] += center_seq1_depth
+                            else:
+                                alt_raw_dict[center_seq1]['ref_depth'] = center_seq1_depth
+                        else:
+                            if 'ref_depth' in alt_raw_dict[center_seq]:
+                                alt_raw_dict[center_seq]['ref_depth'] += total_depth
+                            else:
+                                alt_raw_dict[center_seq]['ref_depth'] = total_depth
+                        if center_seq2:
+                            if 'ref_depth' in alt_raw_dict[center_seq2]:
+                                alt_raw_dict[center_seq2]['ref_depth'] += center_seq2_depth
+                            else:
+                                alt_raw_dict[center_seq2]['ref_depth'] = center_seq2_depth
+                    # 下面按照常规方式去统计每个目标位点的测序信息,不会用于对测序错误率的估计
+                    alt_types = seq_counter.keys() - {ref, 'N', 'n'}
                     if alt_types:
                         target_info_lst.append([
-                            r, pos, ref,
-                            center_seq,
-                            total_depth,
+                            r, pos, ref, center_seq, total_depth,
                             dict(seq_counter.most_common()),
                             # dict(qual_counter.most_common())
                         ])
-            # write out
+
+            # 区间信息统计完毕,现在输出该区间的测序信息
+            for info in target_info_lst:
+                fw.write('\t'.join(str(x) for x in info)+'\n')
+
+            # 统计一下每个区间的测序深度信息
             if len(depths) == 0:
                 depths = [1]
             median_depth = statistics.median(depths)
             depth_lst.append(median_depth)
-            for info in target_info_lst:
-                fw.write('\t'.join(str(x) for x in info)+'\n')
     bam.close()
     gn.close()
+    # 计算出区间测序深度的中位值的中位值
     median_depth = statistics.median(depth_lst)
     print('Median Depth:', median_depth)
+    # print(alt_raw_dict.pop())
 
-    # 查看字段结构大小
-    print(dict(zip(alt_raw_dict.keys(), (len(v) for k, v in alt_raw_dict.items()))))
-    alt_dict = dict()
+    # 转换成错误率信息
+    freq_result = {}
+    # 要求累加测序深度不能低于5000,否则认为统计意义不足,同时也不能低于中位值的5倍,这些都是经验阈值
     min_depth = max(median_depth * 5, 5000)
-    for alt_type, mdict in alt_raw_dict.items():
-        # 例如alt_type='G', mdict={'CAT':{'A': 10, 'G':2}}
-        # 合并：由于观察到A->C时，可能是pcr时把A错配成C, 也有可能pcr时把互补链的T错配为G
-        result = dict()
-        for base in ['A', 'T', 'C', 'G', 'I', 'D']:
-            for center_seq in mdict:
-                result.setdefault(center_seq, Counter())
-                if base not in mdict[center_seq]:
-                    continue
-                result[center_seq][base] = mdict[center_seq][base]
-                r_key = reverse_complement(center_seq)
-                r_base = reverse_complement(base)
-                if r_key in mdict and r_base in mdict[r_key]:
-                    result[center_seq][base] += mdict[r_key][r_base]
-        # convert to freq
-        freq_result = dict()
-        for center_seq in sorted(result.keys()):
-            v = result[center_seq]
-            total = sum(v.values())
-            if total < min_depth:
-                # total是总的depth，如果总的depth不够多，则统计意义将不足
-                print(f'For context named "{center_seq}", the total deph < median_depth * 5, skip it for not enough statistic meaning')
-                continue
-            v = dict(v.most_common())
-            # 仅仅输出目标突变的概率
-            # freq = {x: v[x]/total for x in v if x==alt_type}
-            freq = {alt_type: v[alt_type]/total}
-            freq['Depth'] = total
-            freq_result[center_seq] = freq
-        # 排序
-        freq_result = dict(sorted(
-            zip(freq_result.keys(), freq_result.values()),
-            key=lambda x: sum(x[1].values()), reverse=True)
-        )
-        if freq_result:
-            alt_dict[alt_type] = freq_result
+    for center_seq, alt_count_dict in alt_raw_dict.items():
+        # 举例: center_seq='ACG', alt_count_dict={'A': 10, 'G':2, 'ref_depth':1000}
+        freq = freq_result.setdefault(center_seq, dict())
+        for error_base in alt_count_dict.keys():
+            if error_base != 'ref_depth':
+                if alt_count_dict['ref_depth'] >= min_depth:
+                    freq[error_base] = dict(
+                        error_rate=alt_count_dict[error_base] / alt_count_dict['ref_depth'],
+                        depth=alt_count_dict['ref_depth']
+                    )
+                # 下面根据互补情况进行合并：例如观察到A->C时，可能是pcr时把A错配成C, 也有可能pcr时把互补链的T错配为G
+                # r_key = reverse_complement(center_seq)
+                # r_base = reverse_complement(error_base)
+                # if r_key in alt_raw_dict:
+                #     if r_base in alt_raw_dict[r_key]:
+                #         # 累加相应alt的数量
+                #         new_count = alt_count_dict[error_base] + alt_raw_dict[r_key][r_base]
+                #         new_depth = alt_count_dict['ref_depth'] + alt_raw_dict[r_key]['ref_depth']
+                #         # 更新具体error_base的信息
+                #         freq[error_base] = dict(
+                #             af=new_count/new_depth,
+                #             depth=new_depth
+                #         )
 
-    # print(alt_dict.keys())
+    # 转换为其他格式表述信息
+    alt_dict = {}
+    for center_seq, freq in freq_result.items():
+        for each in ['A', 'T', 'C', 'G', 'I', 'D']:
+            for error_base, info in freq.items():
+                if error_base == each:
+                    tmp_dict = alt_dict.setdefault(error_base, dict())
+                    tmp_dict[center_seq] = {error_base: info['error_rate'], "Depth": info['depth']}
+    # 按照error_rate排序
+    alt_dict_sort = {}
+    for alt_base, v_dict in alt_dict.items():
+        sorted_v_dict = dict(sorted(
+            zip(v_dict.keys(), v_dict.values()),
+            key=lambda x: x[1][alt_base],
+            reverse=True
+        ))
+        alt_dict_sort[alt_base] = sorted_v_dict
+
+    # 保存结果
     out_file = f'{prefix}.centered{center_size[0]}{center_size[1]}_site.json'
     with open(out_file, 'w') as fw:
-        json.dump(alt_dict, fw, indent=4)
+        json.dump(alt_dict_sort, fw, indent=4)
     return out_file
 
 
@@ -270,6 +337,7 @@ if __name__ == '__main__':
     parser.add_argument('-out_prefix', required=True, help='output file prefix')
     parser.add_argument('-center_size', type=int, nargs='+', default=(1, 1), help='extending size around ref base during background noise estimating')
     parser.add_argument('-exclude_from', type=Path, required=False, help='bed or vcf file containing known variant in input bam, these variants will be excluded during background noise estimating')
+    parser.add_argument('-af_cutoff', type=float, default=0.01, help='Max af cutoff for error stats')
     args = parser.parse_args()
     estimate_context_seq_error(
         bed=args.bed,
@@ -277,5 +345,6 @@ if __name__ == '__main__':
         prefix=args.out_prefix,
         center_size=args.center_size,
         genome=args.genome,
-        exclude_from=args.exclude_from
+        exclude_from=args.exclude_from,
+        af_cutoff=args.af_cutoff,
     )
