@@ -110,45 +110,6 @@ class MicroHapCaller(object):
         else:
             return False, error_upper, pvalue
 
-    @staticmethod
-    def consensus_seqs(seqs):
-        # 对支持突变的reads的突变中心进行consensus
-        if len(seqs) == 1:
-            return seqs
-        else:
-            # ''.join(Counter(bases).most_common(1)[0][0] for bases in zip(*seqs))
-            # 考虑多个分支
-            total = len(seqs)
-            consensus = ['']
-            for bases in zip(*seqs):
-                two_bases = Counter(bases).most_common()
-                base1, freq1 = two_bases[0]
-                if len(two_bases) > 1:
-                    base2, freq2 = two_bases[1]
-                else:
-                    base2, freq2 = '', 0
-                tmp_consensus = []
-                for each in consensus:
-                    tmp_consensus.append(each + base1)
-                    if freq2 / total >= 0.4:
-                        tmp_consensus.append(each+base2)
-                consensus = tmp_consensus
-            return consensus
-
-    @staticmethod
-    def foxog_calc(ref, F1R2, F2R1):
-        """
-        C>A|G>T variants can be oxidation artifacts introduced during library preparation (Costello et al, 2013).
-        These "OxoG" artifacts have a telltale read orientation, with the majority of ALT reads in the artifact orientation.
-        """
-        FoxoG = None
-        if (F1R2 + F2R1) > 6:
-            if ref == "C" or ref == "A":
-                FoxoG = round(F2R1 / (F1R2 + F2R1), 3)
-            elif ref == "G" or ref == "T":
-                FoxoG = round(F1R2 / (F1R2 + F2R1), 3)
-        return FoxoG
-
     def marker_typing(self, marker, contig, positions, min_bq=10, min_mean_bq=25, min_support_depth=2):
         """
         # 下面是一个值得思考的现象:
@@ -420,23 +381,223 @@ class MicroHapCaller(object):
             else:
                 total_bad += type_result['count']
         bad_ratio = total_bad / (total_good + total_bad)
-        print('bad ratio', bad_ratio)
+        print('Bad typing ratio', bad_ratio)
 
         # save out file
         with open(out_prefix+'.json', 'w') as f:
             json.dump(result, f, indent=2)
 
         df = pd.DataFrame(result)
-        df = df[["marker", "haplotype", "count", "count_cutoff", "count_freq", "support_depths", "depths", "Pass", "metrics"]]
+        df = df[["marker", "haplotype", "count", "count_cutoff", "count_freq", "Pass", "support_depths", "depths",  "metrics"]]
         df.to_csv(out_prefix+'.csv', index=False)
 
 
-def micro_hap_typing(bam_file, genome_file, micro_hap_file, out_prefix='typing_result', error_rate_file=None):
+def micro_hap_caller(bam_file, genome_file, micro_hap_file, out_prefix='typing_result', error_rate_file=None):
     MicroHapCaller(bam_file, genome_file, micro_hap_file, out_prefix=out_prefix, error_rate_file=error_rate_file)
+
+
+def call_diploid_profile(profile, freq_cutoff=0.15, out_json=None):
+    """
+    主要目的是确定一个人的marker的具体基因型信息, 不适用于存在DNA混合的样本分析
+    :param profile: 来源于本工具的检测结果
+    # 本工具的检测结果示例如下:
+    marker	haplotype	count	count_cutoff	count_freq	Pass
+    mh01CP-016	T-G-A	436	0	0.6469	TRUE
+    mh01CP-016	T-A-A	230	0	0.3412	TRUE
+    mh01CP-010	C-C-G	606	0	0.8978	TRUE
+    mh01CP-010	T-C-A	63	0	0.0933	TRUE
+    mh02CP-004	C-T-A	1584	0	0.9888	TRUE
+    mh04CP-003	A-C-T	222	0	0.1336	TRUE
+    mh04CP-003	A-C-C	841	0	0.506	TRUE
+    mh04CP-003	G-C-C	576	0	0.3466	TRUE
+    mh04CP-004	T-T-C	441	0	0.4168	TRUE
+    mh04CP-004	C-C-T	591	0	0.5586	TRUE
+    :param freq_cutoff: 如果一个基因型的频率低于该值则不参与统计
+    :param out_json: 指定输出到json文件
+    :return:
+    """
+    markers = dict()
+    with open(profile) as f:
+        header = f.readline()
+        # {marker: allele: {sources: []}
+        for line in f:
+            marker, haplotype, count, count_cutoff, count_freq, flag = line.strip().split(',')[:6]
+            count_freq = float(count_freq)
+            # 这里我们假设是一个人结果,且marker都是双等位基因,因此预期频率应该都较高
+            if count_freq >= freq_cutoff and flag == 'True':
+                marker_info = markers.setdefault(marker, dict())
+                marker_info.setdefault('Alleles', []).append(haplotype)
+                marker_info.setdefault('count_freq', []).append(count_freq)
+        # 检查marker是否是双等位的, 如果不是将提取top2
+        for marker in markers:
+            alleles = markers[marker]['Alleles']
+            af = markers[marker]['count_freq']
+            if len(alleles) >= 3:
+                print(f'Marker {marker} has more than 2 genotypes, and we will use only top 2')
+                allele_freq = zip(alleles, af)
+                allele_freq = sorted(allele_freq, key=lambda x: x[1], reverse=True)
+                markers[marker]['Alleles'] = allele_freq[0][:2]
+                markers[marker]['count_freq'] = allele_freq[1][:2]
+                print(f'The top 2 alleles are: {" | ".join(allele_freq[0][:2])}')
+                if sum(allele_freq[0][:2]) < 0.8:
+                    print(f'Warn: but the frequency of {marker}:{alleles} is too low (={af}))')
+            else:
+                if sum(af) < 0.8:
+                    print(f'Warn: the frequency of {marker}:{alleles} is too low (={af}))')
+    if out_json:
+        with open(out_json, 'w') as f:
+            json.dump(markers, f, indent=2)
+    return markers
+
+
+def get_marker_chemerism(donor_count: dict, recipient_count: dict):
+    """
+    在已知贡献者的marker基因型信息前提下,推算混合比例
+    # 同为纯合子, 且不同
+    Donor:      AA
+    Recipient:  BB
+    Percent recipient chimerism: B/(A+B)
+
+    # 供者为纯合子, 受者为杂合子, 且和供者共享一个allele
+    Donor:      AA
+    Recipient:  AB
+    Percent recipient chimerism: 2B/(A+B)
+
+    # 供者为纯合子,受者为杂合子,但两者没有共享allele
+    Donor:      AA
+    Recipient:  CD
+    Percent recipient chimerism: (C+D)/(A+C+D)
+
+    # 供者为杂合子, 受者为纯合子, 且和供者分享一个allele
+    Donor:      AB
+    Recipient:  AA
+    Percent recipient chimerism: (A-B)/(A+B)
+
+    # 供者为杂合子, 受者为纯合子, 且和供者完全不同
+    Donor:      AB
+    Recipient:  CC
+    Percent recipient chimerism: C/(A+B+C)
+
+    # 供者为杂合子,受者也为杂合子,且共享一个allele
+    Donor:      AB
+    Recipient:  BC
+    Percent recipient chimerism: 2C/(A+B+C)
+
+    # 供者为杂合子, 受者也为杂合子,且和供者完全不同
+    Donor:      AB
+    Recipient:  CD
+    Percent recipient chimerism: (C+D)/(A+B+C+D)
+
+    最后归纳总结发现,本质只有3种计算方式方式
+    :param donor_count: {'ATC': 5, 'AGC':3}
+    :param recipient_count: {'ATC': 5, 'ATT':4}
+    :return: Percent recipient chimerism or None
+    """
+    if len(donor_count.keys() - recipient_count.keys()) == 0:
+        # print('两个来源的marker基因型一样, 因此信息无效')
+        return None
+    if len(recipient_count) == 1:
+        recipient_is_homo = True
+    else:
+        recipient_is_homo = False
+    total_count = sum((donor_count | recipient_count).values())
+    # 针对不同情形计算
+    comm = donor_count.keys() & recipient_count.keys()
+    if len(comm) == 0:
+        # 两者等位基因型完全不一样
+        return sum(recipient_count.values()) / total_count
+    else:
+        # 两者等位基因型存在交集
+        if not recipient_is_homo:
+            recipient_uniq = list(recipient_count.keys() - donor_count.keys())[0]
+            return 2 * recipient_count[recipient_uniq] / total_count
+        else:
+            recipient = list(recipient_count.keys())[0]
+            donor_uniq = list(donor_count.keys() - recipient_count.keys())[0]
+            return (recipient_count[recipient] - donor_count[donor_uniq]) / total_count
+
+
+def chemerism(donor_profile, recipient_profile, test_profile, out_json=None):
+    # 提取有效marker, 相同基因的marker无法提供区分信息
+    # 仅仅处理双等位基因的情况
+    person2markers = dict()
+    markers_lst = []
+    sources = []
+    for ref_profile in [donor_profile, recipient_profile]:
+        source = os.path.basename(ref_profile).split('.')[0]
+        sources.append(source)
+        markers = call_diploid_profile(ref_profile)
+        markers_lst.append(set(markers.keys()))
+        person2markers[source] = markers
+    # 检查是否使用了相同的marker
+    comm_markers = set.intersection(*markers_lst)
+    if not comm_markers:
+        raise Exception('No common markers found between contributors')
+    else:
+        print(f'There are {len(comm_markers)} common markers found between contributors')
+    # 分析比例
+    detected = dict()
+    detected_example = {
+        "person1": {
+            "marker1": {"A1": 3, "A2": 3},
+            "marker2": {"A1": 3, "A2": 7},
+        },
+        'person2': {
+            "marker1": {"A1": 3, "A2": 3},
+            "marker2": {"A1": 2, "A2": 7},
+        }
+    }
+    with open(test_profile) as f:
+        header = f.readline().strip().split()
+        marker_found = set()
+        # {marker: allele: {sources: []}
+        for line in f:
+            marker, haplotype, count, count_cutoff, count_freq, flag = line.strip().split(',')[:6]
+            if flag != 'True':
+                continue
+            if marker not in comm_markers:
+                print(f'skip marker {marker} that is not in ref contributors')
+            else:
+                marker_found.add(marker)
+                for person in person2markers.keys():
+                    if haplotype in person2markers[person][marker]['Alleles']:
+                        person_info = detected.setdefault(person, dict())
+                        person_marker_info = person_info.setdefault(marker, dict())
+                        if haplotype not in person_marker_info:
+                            person_marker_info[haplotype] = int(count)
+                        else:
+                            raise Exception(f'duplicated marker {marker}:{haplotype}')
+    # 更新完成count信息后计算嵌合率
+    # 统计是否存在预期marker丢失
+    loss_markers = comm_markers - marker_found
+    if loss_markers:
+        print('Some marker are not found in testing sample:', loss_markers)
+    percent_dict = dict()
+    for marker in marker_found:
+        # 这个过程没有考虑到有些marker的部分基因型的count为0, 从而误判基因型
+        percent = get_marker_chemerism(detected[sources[0]][marker], detected[sources[1]][marker])
+        if percent is not None:
+            percent_dict[marker] = percent
+    if percent_dict:
+        mean_percent = statistics.mean(percent_dict.values())
+        print(f"We found {len(percent_dict)} Informative Markers", list(percent_dict.keys()))
+        print(percent_dict)
+        print(f'Mean Recipient({sources[1]}) Chimerism: ', mean_percent)
+        if out_json:
+            percent_dict['mean_chimerism'] = mean_percent
+            with open(out_json, 'w') as f:
+                json.dump(percent_dict, f, indent=2)
+    else:
+        print('No informative marker found!')
+    return percent_dict
 
 
 if __name__ == '__main__':
     from xcmds import xcmds
-    xcmds.xcmds(locals(), include=['micro_hap_typing'])
+    xcmds.xcmds(locals())
 
-
+"""
+测试:
+cd /home/hxbio04/data/PRJNA508621/Result/analysis/SRR8284658-12-1v3/fullrefr
+python /home/hxbio04/basefly/microhap/mhcaller.py micro_hap_caller -bam_file *-fullrefr.bam -genome_file /home/hxbio04/data/PRJNA807084/mh20panel_bymicrohabdb/MicroHapulator/microhapulator/data/hg38.fasta -micro_hap_file ../../../marker-definitions.tsv -out_prefix SRR8284658-12-1v3.call
+"""
