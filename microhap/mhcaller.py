@@ -517,7 +517,7 @@ def get_marker_chemerism(donor_count: dict, recipient_count: dict):
             return (recipient_count[recipient] - donor_count[donor_uniq[0]]) / total_count
 
 
-def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimerism.json'):
+def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimerism.json', adjust_count=False):
     # 提取有效marker, 相同基因的marker无法提供区分信息
     # 仅仅处理双等位基因的情况
     person2markers = dict()
@@ -548,25 +548,64 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
         }
     }
     with open(test_profile) as f:
-        header = f.readline().strip().split()
+        _header = f.readline()
         marker_found = set()
         # {marker: allele: {sources: []}
+        not_assigned_hap = dict()
         for line in f:
             marker, haplotype, count, count_cutoff, count_freq, flag = line.strip().split(',')[:6]
             if flag != 'True':
+                not_assigned_hap.setdefault(marker, dict())
+                not_assigned_hap[marker].update({haplotype: [count, count_cutoff, count_freq, flag]})
                 continue
             if marker not in comm_markers:
                 print(f'skip marker {marker} that is not in ref contributors')
             else:
                 marker_found.add(marker)
+                hap_assigned = False
                 for person in person2markers.keys():
                     if haplotype in person2markers[person][marker]['Alleles']:
+                        hap_assigned = True
                         person_info = detected.setdefault(person, dict())
                         person_marker_info = person_info.setdefault(marker, dict())
                         if haplotype not in person_marker_info:
                             person_marker_info[haplotype] = int(count)
                         else:
                             raise Exception(f'duplicated marker {marker}:{haplotype}')
+                if not hap_assigned:
+                    not_assigned_hap.setdefault(marker, dict())
+                    not_assigned_hap[marker].update({haplotype: [count, count_cutoff, count_freq, flag]})
+
+    # 可以考虑尝试将没有分配的haplotype进行重新分配
+    # 当然但这里的潜在假设还是: 没有分配的haplotype是人工产物
+    # 分配策略: 只重新分配与目标haplotype相差一个碱基的haplotype
+    # with open('not_assigned_haplotype.json', 'w') as f:
+    #     json.dump(not_assigned_hap, f, indent=2)
+    if adjust_count:
+        for marker in marker_found:
+            donor_count = detected[sources[0]][marker]
+            recipient_count = detected[sources[1]][marker]
+            assign_to = dict()
+            merged_count_dict = donor_count | recipient_count
+            for un_hap in not_assigned_hap[marker]:
+                for target_hap in merged_count_dict.keys():
+                    # 找到只有一个碱基差异的目标haplotype
+                    if sum(x != y for x, y in zip(un_hap, target_hap)) == 1:
+                        assign_to.setdefault(un_hap, []).append(target_hap)
+            for un_hap, target_haps in assign_to.items():
+                un_hap_count = int(not_assigned_hap[marker][un_hap][0])
+                target_current_count = [merged_count_dict[x] for x in target_haps]
+                for target in target_haps:
+                    print(marker)
+                    if target in donor_count:
+                        ratio = merged_count_dict[target]/sum(target_current_count)
+                        print(f'{un_hap}分配给donor{target}:', un_hap_count * ratio)
+                        donor_count[target] += un_hap_count * ratio
+                    if target in recipient_count:
+                        ratio = merged_count_dict[target] / sum(target_current_count)
+                        print(f'{un_hap}分配给recipient{target}:', un_hap_count * ratio)
+                        recipient_count[target] += un_hap_count * ratio
+
     # 更新完成count信息后计算嵌合率
     # 统计是否存在预期marker丢失
     loss_markers = comm_markers - marker_found
@@ -601,4 +640,5 @@ if __name__ == '__main__':
 测试:
 cd /home/hxbio04/data/PRJNA508621/Result/analysis/SRR8284658-12-1v3/fullrefr
 python /home/hxbio04/basefly/microhap/mhcaller.py micro_hap_caller -bam_file *-fullrefr.bam -genome_file /home/hxbio04/data/PRJNA807084/mh20panel_bymicrohabdb/MicroHapulator/microhapulator/data/hg38.fasta -micro_hap_file ../../../marker-definitions.tsv -out_prefix SRR8284658-12-1v3.call
+python /home/hxbio04/basefly/microhap/mhcaller.py chemerism -donor_profile SRR8284710-1.call.csv -recipient_profile SRR8284713-2.call.csv -test_profile SRR8284658-12-1v3.call.csv -out 1v3.chimersim.json
 """
