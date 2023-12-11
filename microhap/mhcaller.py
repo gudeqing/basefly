@@ -493,7 +493,9 @@ def get_marker_chemerism(donor_count: dict, recipient_count: dict):
     :param recipient_count: {'ATC': 5, 'ATT':4}
     :return: Percent recipient chimerism or None
     """
-    if len(donor_count.keys() - recipient_count.keys()) == 0:
+    recipient_uniq = list(recipient_count.keys() - donor_count.keys())
+    donor_uniq = list(donor_count.keys() - recipient_count.keys())
+    if len(recipient_uniq) == len(donor_uniq) == 0:
         # print('两个来源的marker基因型一样, 因此信息无效')
         return None
     if len(recipient_count) == 1:
@@ -509,12 +511,10 @@ def get_marker_chemerism(donor_count: dict, recipient_count: dict):
     else:
         # 两者等位基因型存在交集
         if not recipient_is_homo:
-            recipient_uniq = list(recipient_count.keys() - donor_count.keys())[0]
-            return 2 * recipient_count[recipient_uniq] / total_count
+            return 2 * recipient_count[recipient_uniq[0]] / total_count
         else:
             recipient = list(recipient_count.keys())[0]
-            donor_uniq = list(donor_count.keys() - recipient_count.keys())[0]
-            return (recipient_count[recipient] - donor_count[donor_uniq]) / total_count
+            return (recipient_count[recipient] - donor_count[donor_uniq[0]]) / total_count
 
 
 def chemerism(donor_profile, recipient_profile, test_profile, out_json=None):
