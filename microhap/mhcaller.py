@@ -517,7 +517,7 @@ def get_marker_chemerism(donor_count: dict, recipient_count: dict):
             return (recipient_count[recipient] - donor_count[donor_uniq[0]]) / total_count
 
 
-def chemerism(donor_profile, recipient_profile, test_profile, out_json=None):
+def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimerism.json'):
     # 提取有效marker, 相同基因的marker无法提供区分信息
     # 仅仅处理双等位基因的情况
     person2markers = dict()
@@ -584,6 +584,7 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json=None):
         print(percent_dict)
         print(f'Mean Recipient({sources[1]}) Chimerism: ', mean_percent)
         if out_json:
+            percent_dict = dict(sorted(zip(percent_dict.keys(), percent_dict.values()), key=lambda x: x[1]))
             percent_dict['mean_chimerism'] = mean_percent
             with open(out_json, 'w') as f:
                 json.dump(percent_dict, f, indent=2)
