@@ -353,7 +353,8 @@ class StateGraph(object):
         self.state = state
         # rank dir: LR(left->right), RL, TB, BT(bottom->top)
         node_names = [x for x in state.keys() if '-' in x]
-        sample_names = {x.split('-')[1] for x in node_names if len(x.split('-')) == 2}
+        # sample_names = {x.split('-')[1] for x in node_names if len(x.split('-')) == 2}
+        sample_names = {x.split('-', 1)[1] for x in node_names if len(x.split('-')) >= 2}
         if len(sample_names) <= 3:
             self.graph = pgv.AGraph(directed=True, rankdir='TB')
         else:
