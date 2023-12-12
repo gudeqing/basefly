@@ -205,8 +205,8 @@ def BwaMem(sample, platform, bwamem2=True):
         cmd.meta.version = '2.2.1_x64-linux'
         cmd.runtime.tool = 'bwa-mem2 mem -M -Y -v 3'
     else:
+        cmd.meta.version = '0.7.17-r1188'
         cmd.runtime.tool = 'bwa mem -M -Y -v 3'
-        cmd.runtime.tool = '0.7.17-r1188'
     cmd.runtime.memory = 30 * 1024 ** 3
     cmd.runtime.cpu = 8
     cmd.args['include_read_header'] = Argument(prefix='-C', type='bool', default=False, desc='Append FASTA/FASTQ comment to SAM output')
