@@ -535,12 +535,23 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
         markers = call_diploid_profile(ref_profile)
         markers_lst.append(set(markers.keys()))
         person2markers[source] = markers
+
     # 检查是否使用了相同的marker
     comm_markers = set.intersection(*markers_lst)
     if not comm_markers:
         raise Exception('No common markers found between contributors')
     else:
         print(f'There are {len(comm_markers)} common markers found between contributors')
+
+    # 检测有效marker
+    informative_markers = []
+    for marker in comm_markers:
+        alleles1 = set(person2markers[sources[0]][marker]['Alleles'])
+        alleles2 = set(person2markers[sources[1]][marker]['Alleles'])
+        if (alleles1 - alleles2) != (alleles2 - alleles1):
+            informative_markers.append([alleles1, alleles2])
+    print(f'There are {len(informative_markers)} informative markers', informative_markers)
+
     # 分析比例
     detected = dict()
     detected_example = {
