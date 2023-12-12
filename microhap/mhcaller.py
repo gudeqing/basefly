@@ -70,6 +70,9 @@ class MicroHapCaller(object):
         # 清洗
         alt_quals = [x for x in alt_quals if x is not None]
         ref_quals = [x for x in ref_quals if x is not None]
+        if sum(x != y for x, y in zip(alt_quals, ref_quals)) == 0:
+            # 两组数据一模一样
+            return 1.0, alt_quals, ref_quals
         # 比较
         # 优先进行mannwhitneyu检验，适合样本量较多的情况
         if len(alt_quals) >= 10 and len(ref_quals) >= 10:
@@ -79,7 +82,10 @@ class MicroHapCaller(object):
             # u, pvalue = stats.ttest_ind(alt_quals, ref_quals, alternative=alternative)
         elif len(alt_quals) >= 3 and len(ref_quals) >= 3:
             # 非配对独立t检验
-            s, pvalue = stats.ttest_ind(alt_quals, ref_quals, alternative=alternative)
+            try:
+                s, pvalue = stats.ttest_ind(alt_quals, ref_quals, alternative=alternative)
+            except TypeError:
+                s, pvalue = stats.ttest_ind(alt_quals, ref_quals)
         else:
             # 统计意义不足
             pvalue = 1.0
@@ -502,7 +508,7 @@ def get_marker_chemerism(donor_count: dict, recipient_count: dict):
         recipient_is_homo = True
     else:
         recipient_is_homo = False
-    total_count = sum((donor_count | recipient_count).values())
+    total_count = sum(dict(donor_count, **recipient_count).values())
     # 针对不同情形计算
     comm = donor_count.keys() & recipient_count.keys()
     if len(comm) == 0:
@@ -547,6 +553,14 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
             "marker2": {"A1": 2, "A2": 7},
         }
     }
+    # 初始化detected
+    for marker in comm_markers:
+        for person in person2markers.keys():
+            person_info = detected.setdefault(person, dict())
+            person_marker_info = person_info.setdefault(marker, dict())
+            for allele in person2markers[person][marker]['Alleles']:
+                person_marker_info[allele] = 0
+    # 更新detected
     with open(test_profile) as f:
         _header = f.readline()
         marker_found = set()
@@ -563,15 +577,10 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
             else:
                 marker_found.add(marker)
                 hap_assigned = False
-                for person in person2markers.keys():
-                    if haplotype in person2markers[person][marker]['Alleles']:
+                for person in detected.keys():
+                    if haplotype in detected[person][marker]:
                         hap_assigned = True
-                        person_info = detected.setdefault(person, dict())
-                        person_marker_info = person_info.setdefault(marker, dict())
-                        if haplotype not in person_marker_info:
-                            person_marker_info[haplotype] = int(count)
-                        else:
-                            raise Exception(f'duplicated marker {marker}:{haplotype}')
+                        detected[person][marker][haplotype] = int(count)
                 if not hap_assigned:
                     not_assigned_hap.setdefault(marker, dict())
                     not_assigned_hap[marker].update({haplotype: [count, count_cutoff, count_freq, flag]})
@@ -582,11 +591,11 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
     # with open('not_assigned_haplotype.json', 'w') as f:
     #     json.dump(not_assigned_hap, f, indent=2)
     if adjust_count:
-        for marker in marker_found:
+        for marker in not_assigned_hap:
             donor_count = detected[sources[0]][marker]
             recipient_count = detected[sources[1]][marker]
             assign_to = dict()
-            merged_count_dict = donor_count | recipient_count
+            merged_count_dict = dict(donor_count, **recipient_count)
             for un_hap in not_assigned_hap[marker]:
                 for target_hap in merged_count_dict.keys():
                     # 找到只有一个碱基差异的目标haplotype
