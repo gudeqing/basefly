@@ -190,6 +190,7 @@ def BwaMem(sample, platform, bwamem2=False):
 def MergeSamFiles():
     cmd = Command()
     cmd.meta.name = 'MergeSamFiles'
+    cmd.meta.version = '4.3.0.0'
     cmd.meta.desc = 'Merges multiple SAM and/or BAM files into a single file, and sorting and indexing are optional'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
     cmd.runtime.memory = 10 * 1024 ** 3
@@ -203,23 +204,24 @@ def MergeSamFiles():
     return cmd
 
 
-def SortAndIndexBam():
+def CollectSequencingArtifactMetrics():
     cmd = Command()
-    cmd.meta.name = 'SortAndIndexBam'
-    cmd.meta.source = 'https://www.htslib.org/doc/samtools-sort.html'
-    cmd.meta.desc = "sort and index bam using samtools"
+    cmd.meta.name = 'GetSeqErrorMetrics'
+    cmd.meta.version = '4.3.0.0'
+    cmd.meta.desc = 'Collect metrics to quantify single-base sequencing artifacts.'
     cmd.runtime.image = 'gudeqing/gatk4.3-bwa-fastp-gencore-mutscan:1.0'
-    cmd.runtime.memory = 12 * 1024 ** 3
-    cmd.runtime.cpu = 4
-    cmd.runtime.tool = 'samtools sort'
-    cmd.args['output'] = Argument(prefix='-o ', type='outstr', desc='The output BAM file.', format='bam')
-    cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='Number of additional threads to use')
-    cmd.args['output-fmt'] = Argument(prefix='--output-fmt ', default='BAM', desc='output format')
-    cmd.args['input'] = Argument(prefix='', type='infile', desc='input bam file')
-    cmd.args['_index_bam'] = Argument(type='fix', value=f'&& samtools index -@ {cmd.runtime.cpu} *.bam')
-    cmd.args['_flagstat'] = Argument(type='fix', value=f'&& samtools flagstat -@ {cmd.runtime.cpu} *.bam')
-    cmd.args['flagstat_name'] = Argument(prefix='> ', type='outstr', default='bam.flagstat.txt', desc='flagstat output file name')
-    cmd.outputs['out'] = Output(value='{output}', format='bam')
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.runtime.cpu = 2
+    cmd.runtime.tool = 'gatk --java-options -Xmx8g CollectSequencingArtifactMetrics'
+    cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', desc='SAM or BAM input file', format='bam')
+    cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', type='outstr', desc='prefix of file to write the output to')
+    cmd.args['ref'] = Argument(prefix='--REFERENCE_SEQUENCE ', type='infile', desc='Reference sequence file')
+    cmd.args['db_snp'] = Argument(prefix='--DB_SNP ', type='infile', level='optional', desc='VCF format dbSNP file, used to exclude regions around known polymorphisms from analysis')
+    cmd.outputs['out'] = Output(value='{OUTPUT}.error_summary_metrics')
+    cmd.outputs['bait_bias_detail_metrics'] = Output(value='{OUTPUT}.bait_bias_detail_metrics')
+    cmd.outputs['bait_bias_summary_metrics'] = Output(value='{OUTPUT}.bait_bias_summary_metrics')
+    cmd.outputs['pre_adapter_detail_metrics'] = Output(value='{OUTPUT}.pre_adapter_detail_metrics')
+    cmd.outputs['pre_adapter_summary_metrics'] = Output(value='{OUTPUT}.pre_adapter_summary_metrics')
     return cmd
 
 
@@ -288,6 +290,7 @@ def pipeline():
     # 其他输入文件
     wf.add_argument('-microhaps', help="micro-haplotype definition file for target region")
     wf.add_argument('-ref', default='/home/hxbio04/biosofts/MicroHapulator/microhapulator/data/hg38.fasta', help='reference fasta file')
+    wf.add_argument('-db_snp', default='/home/hxbio04/dbs/SNPdb/dbsnp_146.hg38.vcf.gz', help='VCF format dbSNP file, used to exclude regions around known polymorphisms from analysis')
     wf.add_argument('-donor_name', required=False, help='donor sample name, if donor profile not provided, we wil start from fastq file to get the profile')
     wf.add_argument('-recipient_name', required=False, help='recipient sample name, if recipient profile not provided, we wil start from fastq file to get the profile')
     wf.add_argument('-donor_profile', required=False, help='donor micro-hap typing result')
@@ -305,6 +308,7 @@ def pipeline():
         recipient_name=TopVar(value=wf.args.recipient_name, type='str'),
         forward_primer=TopVar(value=wf.args.forward_primer, type='infile'),
         reverse_primer=TopVar(value=wf.args.reverse_primer, type='infile'),
+        db_snp=TopVar(value=wf.args.db_snp, type='infile'),
     )
     wf.add_topvars(top_vars)
 
@@ -404,12 +408,20 @@ def pipeline():
         args['SORT_ORDER'].value = 'coordinate'
         args['OUTPUT'].value = sample + '.sorted.bam'
 
+        # get seq error metrics
+        error_metrics_task, args = wf.add_task(CollectSequencingArtifactMetrics(), tag=sample)
+        args['INPUT'].value = merge_bam_task.outputs['out']
+        args['OUTPUT'].value = sample
+        args['ref'].value = wf.topvars['ref']
+        args['db_snp'].value = wf.topvars['db_snp']
+
         # typing
         typing_task, args = wf.add_task(TypingMicroHap(), tag=sample)
         args['genome'].value = wf.topvars['ref']
         args['bam'].value = merge_bam_task.outputs['out']
         args['micro_haps'].value = wf.topvars['microhaps']
         args['out_prefix'].value = sample + '.typing'
+        args['error_rate_file'].value = error_metrics_task.outputs['out']
         typing_tasks.append(typing_task)
 
         if wf.topvars['donor_profile'].value:
@@ -431,6 +443,7 @@ def pipeline():
             args['recipient_profile'].value = recipient_typing_task.outputs['out']
             args['test_profile'].value = each.outputs['out']
             args['out'].value = each.tag + '.chimerism.json'
+
     wf.run()
     if wf.success:
         result = dict()
