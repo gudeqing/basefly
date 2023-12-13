@@ -3,6 +3,7 @@ import json
 import statistics
 import itertools
 import json
+import numpy as np
 import pandas as pd
 from collections import Counter
 from scipy import stats
@@ -513,14 +514,17 @@ def get_marker_chemerism(donor_count: dict, recipient_count: dict):
     comm = donor_count.keys() & recipient_count.keys()
     if len(comm) == 0:
         # 两者等位基因型完全不一样
-        return sum(recipient_count.values()) / total_count
+        target_count = sum(recipient_count.values())
+        return target_count / total_count, (target_count, total_count)
     else:
         # 两者等位基因型存在交集
         if not recipient_is_homo:
-            return 2 * recipient_count[recipient_uniq[0]] / total_count
+            target_count = 2 * recipient_count[recipient_uniq[0]]
+            return target_count / total_count, (target_count, total_count)
         else:
             recipient = list(recipient_count.keys())[0]
-            return (recipient_count[recipient] - donor_count[donor_uniq[0]]) / total_count
+            target_count = (recipient_count[recipient] - donor_count[donor_uniq[0]])
+            return target_count / total_count, (target_count, total_count)
 
 
 def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimerism.json', adjust_count=False):
@@ -590,6 +594,8 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
                 hap_assigned = False
                 for person in detected.keys():
                     if haplotype in detected[person][marker]:
+                        # chimerism的精确性很大程度依赖这一步的分配是否正确了
+                        # count比较小的,和其他主haplotype仅仅相差一个碱基的,往往很难区分是测序错误还是真实存在
                         hap_assigned = True
                         detected[person][marker][haplotype] = int(count)
                 if not hap_assigned:
@@ -603,6 +609,8 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
     #     json.dump(not_assigned_hap, f, indent=2)
     if adjust_count:
         for marker in not_assigned_hap:
+            if not(marker in detected[sources[0]] and marker in detected[sources[1]]):
+                continue
             donor_count = detected[sources[0]][marker]
             recipient_count = detected[sources[1]][marker]
             assign_to = dict()
@@ -632,19 +640,25 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
     if loss_markers:
         print('Some marker are not found in testing sample:', loss_markers)
     percent_dict = dict()
+    recipient_count_lst = []
+    total_count_lst = []
     for marker in marker_found:
         # 这个过程没有考虑到有些marker的部分基因型的count为0, 从而误判基因型
-        percent = get_marker_chemerism(detected[sources[0]][marker], detected[sources[1]][marker])
-        if percent is not None:
-            percent_dict[marker] = percent
+        chimer_info = get_marker_chemerism(detected[sources[0]][marker], detected[sources[1]][marker])
+        if chimer_info is not None:
+            percent_dict[marker] = chimer_info[0]
+            recipient_count_lst.append(chimer_info[1][0])
+            total_count_lst.append(chimer_info[1][1])
     if percent_dict:
         mean_percent = statistics.mean(percent_dict.values())
         print(f"We found {len(percent_dict)} Informative Markers", list(percent_dict.keys()))
-        print(percent_dict)
         print(f'Mean Recipient({sources[1]}) Chimerism: ', mean_percent)
+        # 线性拟合的方法求得比例
+        coeff, _ = np.polyfit(total_count_lst, recipient_count_lst, 1)
         if out_json:
             percent_dict = dict(sorted(zip(percent_dict.keys(), percent_dict.values()), key=lambda x: x[1]))
             percent_dict['mean_chimerism'] = mean_percent
+            percent_dict['linear_chimerism'] = coeff
             with open(out_json, 'w') as f:
                 json.dump(percent_dict, f, indent=2)
     else:
