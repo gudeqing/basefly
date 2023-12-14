@@ -470,7 +470,6 @@ def pipeline():
         df.to_csv(os.path.join(wf.wkdir, 'Report', "all.chimerism.csv"))
 
         # 合并多个样本的基因型结果信息,主要汇总基因型的count信息和测序深度信息
-        result = dict()
         hap_count_df_lst = []
         marker_depth_df_lst = []
         for task in typing_tasks:
@@ -485,11 +484,10 @@ def pipeline():
             marker_depth_df.columns = [task.tag]
             marker_depth_df_lst.append(marker_depth_df)
         hap_count_df = pd.concat(hap_count_df_lst, axis=1)
-        marker_count_df =
         hap_count_df.index = ['|'.join(x) for x in hap_count_df.index]
-        hap_count_df.to_csv('haplotype_count.merged.csv')
+        hap_count_df.to_csv(os.path.join(wf.wkdir, 'Report', 'haplotype_count.merged.csv'))
         marker_depth_df = pd.concat(marker_depth_df_lst, axis=1)
-        marker_depth_df.to_csv('marker_min_depth.merged.csv')
+        marker_depth_df.to_csv(os.path.join(wf.wkdir, 'Report', 'marker_min_depth.merged.csv'))
 
 
 if __name__ == '__main__':
