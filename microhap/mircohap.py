@@ -271,10 +271,10 @@ def pipeline():
     wf.meta.source = ""
     wf.meta.desc = \
     """
-    1. 原始数据处理: primer切除和质控
-    2. 比对
-    3. 基因定型
-    4. 嵌合率计算
+    1. 原始数据(multiplex pcr + NGS)处理: primer切除和质控, Cutadapt and Fastp
+    2. 比对, BWA-mem
+    3. 基因定型: 自研脚本
+    4. 嵌合率计算: 自研脚本
     """
     wf.meta.version = "1.0"
     # 定义流程输入参数
@@ -294,7 +294,7 @@ def pipeline():
     wf.add_argument('-donor_name', required=False, help='donor sample name, if donor profile not provided, we wil start from fastq file to get the profile')
     wf.add_argument('-recipient_name', required=False, help='recipient sample name, if recipient profile not provided, we wil start from fastq file to get the profile')
     wf.add_argument('-donor_profile', required=False, help='donor micro-hap typing result')
-    wf.add_argument('-recipient_profile', required=False, help='donor micro-hap typing result')
+    wf.add_argument('-recipient_profile', required=False, help='recipient micro-hap typing result')
     wf.add_argument('-forward_primer', required=True, help="read1 5'end primer")
     wf.add_argument('-reverse_primer', required=True, help="read2 5'end primer")
     # 收集参数
@@ -446,6 +446,7 @@ def pipeline():
 
     wf.run()
     if wf.success:
+        # 合并多个样本的chimerism的信息
         result = dict()
         for task in chimerism_tasks:
             chimer_json = os.path.join(task.wkdir, task.outputs['out'].value)
@@ -463,8 +464,32 @@ def pipeline():
                     exp_chimerism.append(0)
                 elif ratio_tag in ["2", "4"]:
                     exp_chimerism.append(1)
+                else:
+                    exp_chimerism.append(None)
         df.loc['exp_chimerism'] = exp_chimerism
         df.to_csv(os.path.join(wf.wkdir, 'Report', "all.chimerism.csv"))
+
+        # 合并多个样本的基因型结果信息,主要汇总基因型的count信息和测序深度信息
+        result = dict()
+        hap_count_df_lst = []
+        marker_depth_df_lst = []
+        for task in typing_tasks:
+            typing_table_file = os.path.join(task.wkdir, task.outputs['out'].value)
+            typing_df = pd.read_csv(typing_table_file, header=0)
+            typing_df = typing_df[typing_df['Pass']]
+            hap_count_df = typing_df.set_index(['marker', 'haplotype'])[['count']]
+            hap_count_df.columns = [task.tag]
+            hap_count_df_lst.append(hap_count_df)
+            marker_depth_df = typing_df.set_index('marker')[['depths']].drop_duplicates()
+            marker_depth_df['depths'] = marker_depth_df['depths'].apply(lambda x: min(eval(x)))
+            marker_depth_df.columns = [task.tag]
+            marker_depth_df_lst.append(marker_depth_df)
+        hap_count_df = pd.concat(hap_count_df_lst, axis=1)
+        marker_count_df =
+        hap_count_df.index = ['|'.join(x) for x in hap_count_df.index]
+        hap_count_df.to_csv('haplotype_count.merged.csv')
+        marker_depth_df = pd.concat(marker_depth_df_lst, axis=1)
+        marker_depth_df.to_csv('marker_min_depth.merged.csv')
 
 
 if __name__ == '__main__':

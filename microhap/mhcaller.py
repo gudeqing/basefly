@@ -344,18 +344,6 @@ class MicroHapCaller(object):
                 else:
                     each['Pass'] = False
                 result.append(each)
-
-        # 汇总所有Pass信息,统计一个基因型被测错的指标
-        # total_good = 0
-        # total_bad = 0
-        # for type_result in result:
-        #     if type_result['Pass']:
-        #         total_good += type_result['count']
-        #     else:
-        #         total_bad += type_result['count']
-        # bad_ratio = total_bad / (total_good + total_bad)
-        # print('bad ratio', bad_ratio)
-
         # 定制错误率相关cutoff,我们比较同一个marker的不同基因型的差异,根据碱基错误率计算一个阈值
         # 收集marker和haplotype的关系
         marker2type = dict()
@@ -597,7 +585,8 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
                         # chimerism的精确性很大程度依赖这一步的分配是否正确了
                         # count比较小的,和其他主haplotype仅仅相差一个碱基的,往往很难区分是测序错误还是真实存在
                         hap_assigned = True
-                        detected[person][marker][haplotype] = int(count)
+                        # detected[person][marker][haplotype] = int(count)
+                        detected[person][marker][haplotype] = max(int(count) - float(count_cutoff), 0)
                 if not hap_assigned:
                     not_assigned_hap.setdefault(marker, dict())
                     not_assigned_hap[marker].update({haplotype: [count, count_cutoff, count_freq, flag]})
@@ -659,6 +648,9 @@ def chemerism(donor_profile, recipient_profile, test_profile, out_json='chimeris
             percent_dict = dict(sorted(zip(percent_dict.keys(), percent_dict.values()), key=lambda x: x[1]))
             percent_dict['mean_chimerism'] = mean_percent
             percent_dict['linear_chimerism'] = coeff
+            # 加权平均,以depth作为加权
+            weight = [x/sum(total_count_lst) for x in total_count_lst]
+            percent_dict['depth_weighted_chimerism'] = sum(x * y for x, y in zip(weight, percent_dict.values()))
             with open(out_json, 'w') as f:
                 json.dump(percent_dict, f, indent=2)
     else:
