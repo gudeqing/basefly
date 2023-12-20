@@ -323,8 +323,8 @@ class ValidateMutationByBam(object):
                             if query_seq[query_pos:query_pos+alt_len].upper() == alt:
                                 # 由于未知原因，这里找到的read_name不一定在前面的query_names中
                                 support_reads.add(read_name)
-                                if start == 115256529:
-                                    print(read_name, query_seq[query_pos:])
+                                # if start == 115256529:
+                                #     print(read_name, query_seq[query_pos:])
                                 # 提取围绕SNV位点前后5个碱基，用于检查支持突变的read之间的一致性
                                 if (query_pos >= 5) and (query_len > query_pos+alt_len+5):
                                     support_read_seqs.append(query_seq[query_pos-5:query_pos+alt_len+5])
@@ -575,7 +575,8 @@ class ValidateMutationByBam(object):
             consenus_alt_seqs = self.consensus_seqs(alt_centered_seqs)
             if len(consenus_alt_seqs) > 6:
                 print(contig, start, 'insertion', alt)
-                print("上述突变的证据reads之间的一致性较弱，或许该突变附近存在较多germline的杂合突变?")
+                # print("上述突变的证据reads之间的一致性较弱，或许该突变附近存在较多germline的杂合突变?")
+                print('The mutation support reads are conflict with each other')
                 for each in alt_centered_seqs:
                     print(each)
             for alignment in self.bam.fetch(contig, start-50, start+51):
@@ -591,7 +592,7 @@ class ValidateMutationByBam(object):
                     # 例如：当插入的是3个GT重复单元，那么插入的是2或1个GT的证据也完全有可能算进来，所以只能是缓解
                     if seq in read_seq and ('I' in alignment.cigarstring):
                         support_reads.add(read_name)
-                        print('成功捞回证据:', contig, start, alt, seq, read_name, alignment.cigarstring)
+                        print('rescue back evidence:', contig, start, alt, seq, read_name, alignment.cigarstring)
                         see_pos = read_seq.find(seq)
                         print(read_seq[:see_pos] + '>>:' + read_seq[see_pos:])
                         # 将当前支持突变的read更新到all_read_tag_dict
@@ -702,7 +703,8 @@ class ValidateMutationByBam(object):
             consenus_alt_seqs = self.consensus_seqs(alt_centered_seqs)
             if len(consenus_alt_seqs) > 6:
                 print(contig, start, 'deletion', del_len)
-                print("上述突变的证据reads之间的一致性较弱，或许该突变附近存在较多germline的杂合突变?")
+                # print("上述突变的证据reads之间的一致性较弱，或许该突变附近存在较多germline的杂合突变?")
+                print('The mutation support reads are conflict with each other')
                 for each in alt_centered_seqs:
                     print(each)
             for alignment in self.bam.fetch(contig, start-50, start+51):
@@ -715,7 +717,7 @@ class ValidateMutationByBam(object):
                     # read包含围绕突变位点展开的超过36个碱基，则认为是证据
                     if seq in read_seq and ('D' in alignment.cigarstring):
                         support_reads.add(read_name)
-                        print('成功捞回证据:', contig, start, del_len, seq, read_name, alignment.cigarstring)
+                        print('rescue back evidence', contig, start, del_len, seq, read_name, alignment.cigarstring)
                         see_pos = read_seq.find(seq)
                         print(read_seq[:see_pos] + '>>:' + read_seq[see_pos:])
                         support_reads.add(read_name)
@@ -912,7 +914,8 @@ class ValidateMutationByBam(object):
             consenus_alt_seqs = self.consensus_seqs(alt_centered_seqs)
             if len(consenus_alt_seqs) > 6:
                 print(contig, start, 'insertion', alt)
-                print("上述突变的证据reads之间的一致性较弱，或许该突变附近存在较多germline的杂合突变?")
+                # print("上述突变的证据reads之间的一致性较弱，或许该突变附近存在较多germline的杂合突变?")
+                print('The mutation support reads are conflict with each other')
                 for each in alt_centered_seqs:
                     print(each)
             for alignment in self.bam.fetch(contig, start - 50, start + 51):
@@ -925,7 +928,7 @@ class ValidateMutationByBam(object):
                     # read包含围绕突变位点展开的超过36个碱基，则认为是证据
                     if seq in read_seq and ('D' in alignment.cigarstring or 'I' in alignment.cigarstring):
                         support_reads.add(read_name)
-                        print('成功捞回证据:', contig, start, seq, read_name, alignment.cigarstring)
+                        print('rescue back evidence', contig, start, seq, read_name, alignment.cigarstring)
                         see_pos = read_seq.find(seq)
                         print(read_seq[:see_pos] + '>>:' + read_seq[see_pos:])
                         support_reads.add(read_name)
@@ -1390,7 +1393,7 @@ class VcfFilter(ValidateMutationByBam):
         if mut_a.contig != mut_b.contig:
             return 10000
         if mut_a.pos > mut_b.pos:
-            print('第二个突变的起始坐标居然小于第一个突变的起始坐标:')
+            print('coordinate not in order!')
             print(mut_a.__str__())
             print(mut_b.__str__())
             return 10000
