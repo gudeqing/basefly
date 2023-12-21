@@ -174,10 +174,11 @@ class Output:
 @dataclass()
 class Meta:
     name: str = None
-    desc: str = 'This is description of the tool/workflow.'
-    author: str = 'unknown'
-    source: str = 'source URL for the tool'
-    version: str = 'unknown'
+    desc: str = 'Tool or workflow description'
+    author: str = 'Author'
+    source: str = 'source or reference URL'
+    version: str = 'v0.1'
+    function: str = 'Main function'
 
 
 @dataclass()
