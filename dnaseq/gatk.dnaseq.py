@@ -15,17 +15,22 @@ __author__ = 'gdq'
 
 def fastp():
     cmd = Command()
+    cmd.meta.version = '0.23.2'
     cmd.meta.name = 'fastp'
-    cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/fastp:0.21.0'
+    cmd.meta.desc = '一款超快速全功能的FASTQ文件自动化质控+过滤+校正+预处理软件'
+    cmd.meta.source = 'https://github.com/OpenGene/fastp'
+    cmd.runtime.image = 'gudeqing/dnaseq:1.0'
+    cmd.runtime.memory = 8 * 1024 ** 3
+    cmd.runtime.cpu = 4
     cmd.runtime.tool = 'fastp'
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', level='optional', desc='read2 fastq file')
-    cmd.args['threads'] = Argument(prefix='-w ', default=7, desc='thread number')
+    cmd.args['threads'] = Argument(prefix='-w ', default=cmd.runtime.cpu, desc='thread number')
     cmd.args['other_args'] = Argument(prefix='', default='', desc="other arguments you want to use, such as '-x val'")
-    cmd.args['out1'] = Argument(prefix='-o ', type='str', desc='clean read1 output fastq file')
-    cmd.args['out2'] = Argument(prefix='-O ', level='optional', type='str', desc='clean read2 output fastq file')
-    cmd.args['html'] = Argument(prefix='-h ', type='str', desc='html report file')
-    cmd.args['json'] = Argument(prefix='-j ', type='str', desc='json report file')
+    cmd.args['out1'] = Argument(prefix='-o ', type='outstr', desc='clean read1 output fastq file')
+    cmd.args['out2'] = Argument(prefix='-O ', level='optional', type='outstr', desc='clean read2 output fastq file')
+    cmd.args['html'] = Argument(prefix='-h ', type='outstr', desc='html report file')
+    cmd.args['json'] = Argument(prefix='-j ', type='outstr', desc='json report file')
     # 定义输出,这里使用”{}“引用其他Argument对象作为输入
     cmd.outputs['out1'] = Output(value="{out1}")
     cmd.outputs['out2'] = Output(value="{out2}")
@@ -36,10 +41,11 @@ def fastp():
 
 def creat_ref_dict():
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'CreateSequenceDictionary'
     cmd.meta.desc = 'Creates a sequence dictionary for a reference sequence. This tool creates a sequence dictionary file (with ".dict" extension) from a reference sequence provided in FASTA format, which is required by many processing and analysis tools. '
-    cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1'
-    cmd.runtime.memory = 3 * 1024 ** 3
+    cmd.runtime.image = 'gudeqing/dnaseq:1.0'
+    cmd.runtime.memory = 5 * 1024 ** 3
     cmd.args['copy_input_mode'] = Argument(prefix=f'cp -', default='L', range=['L', 'l', 's'], desc='indicate how to copy input fasta into work directory, "L": copy, "l": hard link, "s": softlink, do not use this if docker is used')
     cmd.args['ref_fasta'] = Argument(prefix='', type='infile', desc='reference fasta to index')
     cmd.args['_new_name'] = Argument(type='fix', value='ref_genome.fa && samtools faidx ref_genome.fa')
@@ -54,8 +60,9 @@ def creat_ref_dict():
 
 def BedToIntervalList():
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'BedToIntervalList'
-    cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1'
+    cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.runtime.tool = 'gatk BedToIntervalList'
     cmd.args['bed'] = Argument(prefix='-I ', type='infile', desc='input bed file')
@@ -70,7 +77,7 @@ def build_bwa_index():
     cmd.meta.name = 'buildBwaIndex'
     cmd.meta.desc = 'bwa index and create sequence dictionary and fasta fai file'
     cmd.meta.version = '0.7.17'
-    cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1'
+    cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 30 * 1024 ** 3
     cmd.args['copy_input_mode'] = Argument(prefix=f'cp -', default='s', range=['L', 'l', 's'], desc='indicate how to copy input fasta into work directory, "L": copy, "l": hard link, "s": softlink')
     cmd.args['ref_fasta'] = Argument(prefix='', type='infile', desc='reference fasta to index')
@@ -89,9 +96,10 @@ def build_bwa_index():
 
 def FastqToSam(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'FastqToSam'
     cmd.meta.desc = 'convert fastq to sam'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.tool = 'gatk FastqToSam'
     cmd.args['read1'] = Argument(prefix='-F1 ', type='infile', desc='read1 fastq file')
@@ -108,10 +116,11 @@ def FastqToSam(sample):
 
 def uBam2FastqBwaMem(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'uBam2FastqBwaMem'
     cmd.meta.desc = 'ubam to fastq and then mapping'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
-    cmd.runtime.memory = 5*1024**3
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
+    cmd.runtime.memory = 15*1024**3
     cmd.runtime.cpu = 4
     cmd.args['_fix0'] = Argument(type='fix', value='set -o pipefail; gatk SamToFastq')
     cmd.args['ubam'] = Argument(prefix='-I ', type='infile', desc='input ubam file')
@@ -130,9 +139,10 @@ def uBam2FastqBwaMem(sample):
 
 def MergeBamAlignment(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MergeBamAlignment'
     cmd.meta.desc = 'merge bam alignment'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.tool = 'gatk MergeBamAlignment'
     cmd.args['VALIDATION_STRINGENCY'] = Argument(prefix='--VALIDATION_STRINGENCY ', default='SILENT')
@@ -161,9 +171,10 @@ def MergeBamAlignment(sample):
 
 def MarkDuplicates(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MarkDuplicates'
     cmd.meta.desc = 'merge bam alignment'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.tool = 'gatk MarkDuplicates'
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='input bam file list')
@@ -179,9 +190,10 @@ def MarkDuplicates(sample):
 
 def SortAndFixTags(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'SortAndFixTags'
     cmd.meta.desc = 'sort bam and fix tags'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.args['_sort_sam'] = Argument(type='fix', value='set -o pipefail; gatk SortSam')
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', desc='input bam file list')
@@ -233,8 +245,9 @@ def CreateSequenceGroupingTSV(ref_dict):
 
 def BaseRecalibrator(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'BaseRecalibrator'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5*1024**3
     cmd.runtime.tool = 'gatk BaseRecalibrator'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -249,9 +262,10 @@ def BaseRecalibrator(sample):
 
 def GatherBQSRReports(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GatherBQSRReports'
     cmd.meta.desc = 'Gathers scattered BQSR recalibration reports into a single file'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3*1024**3
     cmd.runtime.tool = 'gatk GatherBQSRReports'
     cmd.args['INPUT'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input bqsr file list')
@@ -262,9 +276,10 @@ def GatherBQSRReports(sample):
 
 def ApplyBQSR(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'ApplyBQSR'
     cmd.meta.desc = 'Apply Base Quality Score Recalibration (BQSR) model'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.runtime.tool = 'gatk ApplyBQSR'
     cmd.args['INPUT'] = Argument(prefix='-I ', type='infile', desc='input bam file')
@@ -281,9 +296,10 @@ def ApplyBQSR(sample):
 
 def GatherBamFiles(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GatherBamFiles'
     cmd.meta.desc = 'Concatenate efficiently BAM files that resulted from a scattered parallel analysis.'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.runtime.tool = 'gatk GatherBamFiles'
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='input bam file')
@@ -297,9 +313,10 @@ def GatherBamFiles(sample):
 
 def SplitIntervals(scatter_number=10):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'SplitIntervals'
     cmd.meta.desc = 'This tool takes in intervals via the standard arguments of IntervalArgumentCollection and splits them into interval files for scattering. The resulting files contain equal number of bases.'
-    cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1'
+    cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.runtime.tool = 'gatk SplitIntervals'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -315,11 +332,12 @@ def SplitIntervals(scatter_number=10):
 
 def Mutect2(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'Mutect2'
     cmd.meta.desc = 'Call somatic short mutations via local assembly of haplotypes. Short mutations include single nucleotide (SNA) and insertion and deletion (indel) alterations.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360037593851-Mutect2'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
-    cmd.runtime.memory = 5*1024**3
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
+    cmd.runtime.memory = 8*1024**3
     cmd.runtime.cpu = 3
     cmd.runtime.tool = 'gatk Mutect2'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -345,6 +363,7 @@ def Mutect2(prefix):
 
 def bcftools_norm():
     cmd = Command()
+    cmd.meta.version = '1.13'
     cmd.meta.name = 'VcfLeftNorm'
     cmd.meta.desc = " Left-align and normalize indels; check if REF alleles match the reference; split multiallelic sites into multiple rows; recover multiallelics from multiple rows"
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
@@ -361,8 +380,9 @@ def bcftools_norm():
 
 def GetPileupSummaries(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GetPileupSummaries'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.desc = 'Summarizes counts of reads that support reference, alternate and other alleles for given sites. Results can be used with CalculateContamination'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360037593451-GetPileupSummaries'
     cmd.runtime.tool = 'gatk GetPileupSummaries'
@@ -378,9 +398,10 @@ def GetPileupSummaries(prefix):
 
 def MergeVcfs(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MergeVcfs'
     cmd.meta.desc = 'Combines multiple variant files into a single variant file.'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360056969852-MergeVcfs-Picard-'
     cmd.runtime.tool = 'gatk MergeVcfs'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input vcf list')
@@ -391,8 +412,9 @@ def MergeVcfs(prefix):
 
 def SortBam():
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'SortBam'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.desc = 'This tool sorts the input SAM or BAM file by coordinate, queryname (QNAME), or some other property of the SAM record. The SortOrder of a SAM/BAM file is found in the SAM file header tag @HD in the field labeled SO.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360036366932-SortSam-Picard-'
     cmd.runtime.tool = 'gatk SortSam'
@@ -407,8 +429,9 @@ def SortBam():
 
 def MergeMutectStats(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MergeMutectStats'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.tool = 'gatk MergeMutectStats'
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', multi_times=True)
     cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.vcf.stats', desc='output merged stat files')
@@ -418,8 +441,9 @@ def MergeMutectStats(sample):
 
 def GatherPileupSummaries(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GatherPileupSummaries'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.tool = 'gatk GatherPileupSummaries'
     cmd.args['sequence-dictionary'] = Argument(prefix='--sequence-dictionary ', type='infile')
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True)
@@ -430,8 +454,9 @@ def GatherPileupSummaries(sample):
 
 def LearnReadOrientationModel(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'LearnReadOrientationModel'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.desc = 'Learn the prior probability of read orientation artifact from the output of CollectF1R2Counts of Mutect2'
     cmd.runtime.tool = 'gatk LearnReadOrientationModel'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='One or more .tar.gz containing outputs of CollectF1R2Counts')
@@ -442,10 +467,11 @@ def LearnReadOrientationModel(sample):
 
 def CalculateContamination(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'CalculateContamination'
     cmd.meta.desc = 'Calculates the fraction of reads coming from cross-sample contamination, given results from GetPileupSummaries. The resulting contamination table is used with FilterMutectCalls.'
     cmd.runtime.tool = 'gatk CalculateContamination'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.args['tumor_pileups'] = Argument(prefix='-I ', type='infile', desc='input pileup table')
     cmd.args['normal_pileups'] = Argument(prefix='-matched ', type='infile', desc='The matched normal input table')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.contamination.table', desc='output table')
@@ -457,10 +483,11 @@ def CalculateContamination(prefix):
 
 def FilterMutectCalls(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'FilterMutectCalls'
     cmd.meta.desc = 'FilterMutectCalls applies filters to the raw output of Mutect2'
     cmd.runtime.tool = 'gatk FilterMutectCalls'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.filtered.vcf.gz', desc='output vcf file')
@@ -476,11 +503,12 @@ def FilterMutectCalls(sample):
 
 def FilterAlignmentArtifacts(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'FilterAlignmentArtifacts'
     cmd.meta.desc = 'Alignment artifacts can occur whenever there is sufficient sequence similarity between two or more regions in the genome to confuse the alignment algorithm. This can occur when the aligner for whatever reason overestimate how uniquely a read maps, thereby assigning it too high of a mapping quality. It can also occur through no fault of the aligner due to gaps in the reference, which can also hide the true position to which a read should map. By using a good alignment algorithm (the GATK wrapper of BWA-MEM), giving it sensitive settings (which may have been impractically slow for the original bam alignment) and mapping to the best available reference we can avoid these pitfalls. The last point is especially important: one can (and should) use a BWA-MEM index image corresponding to the best reference, regardless of the reference to which the bam was aligned.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4418051467035-FilterAlignmentArtifacts-EXPERIMENTAL-'
     cmd.runtime.tool = 'gatk FilterAlignmentArtifacts'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', desc='input bam file')
@@ -492,8 +520,9 @@ def FilterAlignmentArtifacts(sample):
 
 def vep(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'VEP'
-    cmd.runtime.image = 'ensemblorg/ensembl-vep:2.0.3'
+    cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.tool = 'vep'
     cmd.args['input_file'] = Argument(prefix='-i ', type='infile', desc='input file')
     cmd.args['fasta'] = Argument(prefix='--fasta ', type='infile', desc="Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache).")
@@ -542,8 +571,9 @@ def vep(sample):
 
 def Haplotyper(sample):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'Haplotyper'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.tool = 'gatk HaplotypeCaller'
     cmd.args['intervals'] = Argument(prefix='-L ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', desc='reccaled tumor and normal bam list')
@@ -561,10 +591,11 @@ def Haplotyper(sample):
 
 def GenomicsDBImport():
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GenomicsDBImport'
-    cmd.runtime.image = 'The GATK4 Best Practice Workflow for SNP and Indel calling uses GenomicsDBImport to merge GVCFs from multiple samples.  In brief, GenomicsDB utilises a data storage system optimized for storing/querying sparse arrays. Genomics data is typically sparse in that each sample has few variants with respect to the entire reference genome. GenomicsDB contains specialized code for genomics applications, such as VCF parsing and INFO field annotation calculation.'
+    cmd.meta.desc = 'The GATK4 Best Practice Workflow for SNP and Indel calling uses GenomicsDBImport to merge GVCFs from multiple samples.  In brief, GenomicsDB utilises a data storage system optimized for storing/querying sparse arrays. Genomics data is typically sparse in that each sample has few variants with respect to the entire reference genome. GenomicsDB contains specialized code for genomics applications, such as VCF parsing and INFO field annotation calculation.'
     cmd.runtime.tool = 'gatk GenomicsDBImport'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.args['gvcfs'] = Argument(prefix='-V ', type='infile', multi_times=True, desc='input gVcf files')
     cmd.args['genomicsdb-workspace-path'] = Argument(prefix='--genomicsdb-workspace-path ', default='genomicsdb', desc='Workspace for GenomicsDB. Can be a POSIX file system absolute or relative path or a HDFS/GCS URL. Use this argument when creating a new GenomicsDB workspace. Either this or genomicsdb-update-workspace-path must be specified. Must be an empty or non-existent directory.')
     cmd.args['batch-size'] = Argument(prefix='--batch-size ', default=50)
@@ -579,8 +610,9 @@ def GenomicsDBImport():
 
 def GenotypeGVCFs(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GenotypeGVCFs'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'Perform joint genotyping on one or more samples pre-called with HaplotypeCaller'
     cmd.runtime.tool = 'gatk GenotypeGVCFs'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -597,8 +629,9 @@ def GenotypeGVCFs(prefix):
 
 def VariantFiltration(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'VariantFiltration'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'This tool is designed for hard-filtering variant calls based on certain criteria. Records are hard-filtered by changing the value in the FILTER field to something other than PASS. Filtered records will be preserved in the output unless their removal is requested in the command line.'
     cmd.runtime.tool = 'gatk VariantFiltration'
     cmd.args['filters'] = Argument(prefix='', default=['--filter-name ExcessHet --filter-expression "ExcessHet > 54.69"',], multi_times=True, desc='filtering expressions, such as "AB < 0.2"')
@@ -610,8 +643,9 @@ def VariantFiltration(prefix):
 
 def MakeSitesOnlyVcf(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MakeSitesOnlyVcf'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'This tool reads a VCF/VCF.gz/BCF and removes all genotype information from it while retaining all site level information, including annotations based on genotypes (e.g. AN, AF).'
     cmd.runtime.tool = 'gatk MakeSitesOnlyVcf'
     cmd.args['vcf'] = Argument(prefix='-I ', type='infile', desc='input vcf file')
@@ -622,8 +656,9 @@ def MakeSitesOnlyVcf(prefix):
 
 def IndelsVariantRecalibrator(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'IndelsRecalibrator'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'Build a recalibration model to score variant quality for filtering purposes'
     cmd.runtime.tool = 'gatk VariantRecalibrator'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='site only variant filtered input vcf')
@@ -645,8 +680,9 @@ def IndelsVariantRecalibrator(prefix):
 
 def SNPsVariantRecalibrator(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'SNPsRecalibrator'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'Build a recalibration model to score variant quality for filtering purposes'
     cmd.runtime.tool = 'gatk VariantRecalibrator'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='site only variant filtered input vcf')
@@ -671,8 +707,9 @@ def SNPsVariantRecalibrator(prefix):
 
 def ApplyVQSR(prefix):
     cmd = Command()
+    cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'ApplyVQSR'
-    cmd.runtime.image = "registry-xdp-v3-yifang.xdp.basebit.me/basebitai/gatk:4.2.6.1"
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = "This tool performs the second pass in a two-stage process called Variant Quality Score Recalibration (VQSR). Specifically, it applies filtering to the input variants based on the recalibration table produced in the first step by VariantRecalibrator and a target sensitivity value, which the tool matches internally to a VQSLOD score cutoff based on the model's estimated sensitivity to a set of true variants."
     cmd.runtime.tool = 'gatk ApplyVQSR'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='input vcf')
@@ -691,14 +728,13 @@ def ApplyVQSR(prefix):
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'GATK-DNAseq-Workflow'
-    wf.meta.source = ""
     wf.meta.desc = """
-    当前流程是参考博得研究所最新的GATK-Best-Practice流程构建的DNAseq突变检测分析流程改写而成
+    当前流程是参考博得研究所的GATK-Best-Practice流程构建的DNAseq突变检测分析流程改写而成
     流程包含的主要功能：
-    * 使用fastp进行接头自动去除
+    * 使用fastp进行测序接头自动去除
     * 使用BWA进行比对分析
     * 使用GATK检测small SNP/Indel, 同时支持tumor-only和tumor-normal配对模式
-    * 使用GATK检测germline突变，如果输入多个normal样本，则直接进行joint-calling
+    * 使用GATK检测germline突变，如果输入多个normal样本，则会直接进行joint-calling
     * 基于VEP进行突变注释
     """
     wf.meta.version = "1.0"
@@ -708,7 +744,8 @@ def pipeline():
     wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
-    wf.add_argument('-pair_info', required=True, help='tumor normal pair info, two-column txt file, first column is tumor sample name. sample not in pair info will be skipped')
+    wf.add_argument('-pair_info', required=False, help='tumor normal pair info, two-column txt file, first column is tumor sample name. sample not in pair info will be skipped')
+    wf.add_argument('-tumor_sample_name', required=False, help='If you only input two paired samples, you may use this argument instead of "pair_info" to specify tumor sample. For multiple samples, you should provide sample pairing info file by "pair_info')
     wf.add_argument('-ref', default='/disk/biodatabase/testdata/TNpipelineTestData/references/chr17.fa', help='reference fasta file')
     wf.add_argument('-scatter', default=10, help='scatter number used for interval splitting of variant calling steps')
     wf.add_argument('-dbsnp', default='/enigma/datasets/broad-genome-references/Homo_sapiens_assembly19_1000genomes_decoy/Homo_sapiens_assembly19_1000genomes_decoy.dbsnp138.vcf', help='dbsnp vcf file')
@@ -762,6 +799,20 @@ def pipeline():
                     pairs = line.strip('\n').split('\t')[:2]
                     pair_list.append(pairs)
                     sample_list.extend(pairs)
+    elif wf.args.tumor_sample_name:
+        if len(fastq_info) == 2:
+            sample_list = list(fastq_info.keys())
+            ctrl_sample = set(sample_list) - {wf.args.tumor_sample_name}
+            pair_list = [[wf.args.tumor_sample_name, list(ctrl_sample)[0]]]
+
+        else:
+            raise Exception('sample number is not correct, please check')
+    if not sample_list:
+        sample_list = list(fastq_info.keys())
+    if not pair_list:
+        # 没有提供配对信息则认为都是tumor
+        for each in sample_list:
+            pair_list.append([each, 'none'])
 
     # create dict or fai if necessary
     dict_file = wf.topvars['ref'].value.rsplit('.', 1)[0] + '.dict'
@@ -791,6 +842,7 @@ def pipeline():
 
     # 建bwa索引
     make_index = False
+    index_task = None
     if not os.path.exists(wf.topvars['ref'].value + '.0123'):
         make_index = True
         index_task, args = wf.add_task(build_bwa_index(), name='buildIndex')
@@ -807,51 +859,56 @@ def pipeline():
             print(f'Skip {sample} for it is in excluded sample list or not found in pair info')
             continue
         # fastq预处理和比对 考虑一个样本存在多对fastq的处理
-        if sample in wf.args.exclude_samples:
-            continue
         if len(reads) == 2:
+            # pair-end
             r1s, r2s = reads
         else:
+            # single-end
             r1s = reads[0]
             r2s = [None]*len(r1s)
 
+        merge_bam_tasks = []
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
-            fastp_task, args = wf.add_task(fastp(), tag=f'{sample}-{ind}')
+            if len(r1s) > 1:
+                sample_tag = f'{sample}-{ind}'
+            else:
+                sample_tag = sample
+            fastp_task, args = wf.add_task(fastp(), tag=sample_tag)
             args['read1'].value = r1
-            args['out1'].value = f'{sample}-{ind}.clean.R1.fq.gz'
+            args['out1'].value = f'{sample_tag}.clean.R1.fq.gz'
             if r2 is not None:
                 args['read2'].value = r2
-                args['out2'].value = f'{sample}-{ind}.clean.R2.fq.gz'
-            args['html'].value = f'{sample}-{ind}.fastp.html'
-            args['json'].value = f'{sample}-{ind}.fastp.json'
+                args['out2'].value = f'{sample_tag}.clean.R2.fq.gz'
+            args['html'].value = f'{sample_tag}.fastp.html'
+            args['json'].value = f'{sample_tag}.fastp.json'
             fastp_task.outputs['html'].report = True
             fastp_task.outputs['json'].report = True
 
             # fastq2sam
-            fastq2sam_task, args = wf.add_task(FastqToSam(sample), tag=f'{sample}-{ind}', depends=[fastp_task])
+            fastq2sam_task, args = wf.add_task(FastqToSam(sample), tag=sample_tag, depends=[fastp_task])
             args['read1'].value = fastp_task.outputs['out1']
             args['read2'].value = fastp_task.outputs['out2']
-            args['out'].value = f'{sample}-{ind}.unmapped.bam'
+            args['out'].value = f'{sample_tag}.unmapped.bam'
 
             # bwa alignment
             if make_index:
                 depend_tasks = [index_task, fastq2sam_task]
             else:
                 depend_tasks = [fastq2sam_task]
-            bwa_task, args = wf.add_task(uBam2FastqBwaMem(f'{sample}-{ind}'), tag=f'{sample}-{ind}', depends=depend_tasks)
+            bwa_task, args = wf.add_task(uBam2FastqBwaMem(sample_tag), tag=sample_tag, depends=depend_tasks)
             args['ubam'].value = fastq2sam_task.outputs['out']
             args['ref'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
 
             # merge
-            merge_bam_task, args = wf.add_task(MergeBamAlignment(f'{sample}-{ind}'), tag=f'{sample}-{ind}', depends=[fastq2sam_task, bwa_task])
+            merge_bam_task, args = wf.add_task(MergeBamAlignment(sample_tag), tag=sample_tag, depends=[fastq2sam_task, bwa_task])
+            merge_bam_tasks.append(merge_bam_task)
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             args['ALIGNED_BAM'].value = bwa_task.outputs['out']
             args['UNMAPPED_BAM'].value = fastq2sam_task.outputs['out']
 
         # mark duplicates, 利用mark-duplicate自动把一个样本的多个fastq比对结果汇总到一起
-        depend_task_ids = [task_id for task_id in wf.tasks if wf.tasks[task_id].name.startswith(f'{merge_bam_task.cmd.meta.name}-{sample}')]
-        markdup_task, args = wf.add_task(MarkDuplicates(sample), tag=sample, depends=depend_task_ids)
-        args['INPUT'].value = [wf.tasks[task_id].outputs['out'] for task_id in depend_task_ids]
+        markdup_task, args = wf.add_task(MarkDuplicates(sample), tag=sample)
+        args['INPUT'].value = [tsk.outputs['out'] for tsk in merge_bam_tasks]
 
         # sort and fix tag
         sort_task, args = wf.add_task(SortAndFixTags(sample), tag=sample, depends=[markdup_task])
@@ -861,7 +918,7 @@ def pipeline():
         # Perform Base Quality Score Recalibration (BQSR) on the sorted BAM in parallel
         bqsr_tasks = []
         for ind, each in enumerate(seq_groups):
-            bsqr_task, args = wf.add_task(BaseRecalibrator(f'{sample}-{ind}'), tag=f'{sample}-{ind}', depends=[sort_task], parent_wkdir='BaseRecalibrator')
+            bsqr_task, args = wf.add_task(BaseRecalibrator(f'{sample}-g{ind}'), tag=f'{sample}-g{ind}', depends=[sort_task], parent_wkdir='BaseRecalibrator')
             bqsr_tasks.append(bsqr_task)
             args['INPUT'].value = sort_task.outputs['out']
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
@@ -876,7 +933,7 @@ def pipeline():
         # apply bqsr
         apply_tasks = []
         for ind, each in enumerate(seq_groups2):
-            apply_task, args = wf.add_task(ApplyBQSR(f'{sample}-{ind}'), tag=f'{sample}-{ind}', depends=[merge_bsqr_task], parent_wkdir='ApplyBQSR')
+            apply_task, args = wf.add_task(ApplyBQSR(f'{sample}-g{ind}'), tag=f'{sample}-g{ind}', parent_wkdir='ApplyBQSR')
             apply_tasks.append(apply_task)
             args['INPUT'].value = sort_task.outputs['out']
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
@@ -898,7 +955,7 @@ def pipeline():
     interval_files = [split_task.outputs[f'out{i}'] for i in range(int(wf.args.scatter))]
     # print(interval_files)
 
-    # 变异分析
+    # 变异检测分析
     germline_merge_vcf_tasks = []
     already_exist = set()
     for tumor_sample, normal_sample in pair_list:
@@ -909,13 +966,14 @@ def pipeline():
             print(f'Warning: skip normal sample {normal_sample} since it is not in target list: {list(bam_dict.keys())}')
             continue
 
-        # somatic variant calling
+        # paired somatic variant calling
         if normal_sample.lower() != 'none' and tumor_sample.lower() != 'none':
+            print(f'# performing paired somatic variant calling: {tumor_sample} vs {normal_sample}')
             mutect_tasks = []
             tumor_pileup_tasks = []
             normal_pileup_tasks = []
             for ind, interval_file in enumerate(interval_files):
-                mutect_task, args = wf.add_task(Mutect2(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}', depends=[bam_dict[normal_sample], bam_dict[tumor_sample], split_task], parent_wkdir='Mutect2')
+                mutect_task, args = wf.add_task(Mutect2(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}', parent_wkdir='Mutect2')
                 mutect_tasks.append(mutect_task)
                 args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['tumor_bam'].value = bam_dict[tumor_sample].outputs['out']
@@ -928,14 +986,14 @@ def pipeline():
                 args['alleles'].value = wf.topvars['alleles']
 
                 # get pileup summary
-                tumor_pileup_task, args = wf.add_task(GetPileupSummaries(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}', depends=[bam_dict[tumor_sample], split_task], parent_wkdir='GetPileupSummaries')
+                tumor_pileup_task, args = wf.add_task(GetPileupSummaries(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}', parent_wkdir='GetPileupSummaries')
                 tumor_pileup_tasks.append(tumor_pileup_task)
                 args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['intervals'].value = [interval_file]
                 args['variants_for_contamination'].value = wf.topvars['contamination_vcf']
                 args['bam'].value = bam_dict[tumor_sample].outputs['out']
 
-                normal_pileup_task, args = wf.add_task(GetPileupSummaries(f'{normal_sample}-{ind}'), tag=f'{normal_sample}-{ind}', depends=[bam_dict[normal_sample], split_task], parent_wkdir='GetPileupSummaries')
+                normal_pileup_task, args = wf.add_task(GetPileupSummaries(f'{normal_sample}-{ind}'), tag=f'{normal_sample}-{ind}', parent_wkdir='GetPileupSummaries')
                 normal_pileup_tasks.append(normal_pileup_task)
                 args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['intervals'].value = [interval_file]
@@ -956,6 +1014,7 @@ def pipeline():
             merge_stat_task.outputs['out'].report = True
 
             # merge pileup summary and calculate contamination
+            contaminate_task = None
             if wf.topvars['contamination_vcf'].value is not None:
                 # for tumor sample
                 merge_tumor_pileup_task, args = wf.add_task(GatherPileupSummaries(tumor_sample), tag=tumor_sample, depends=tumor_pileup_tasks)
@@ -966,18 +1025,15 @@ def pipeline():
                 args['sequence-dictionary'].value = index_task.outputs['ref_dict'] if make_index else wf.topvars['ref'].value.rsplit('.', 1)[0] + '.dict'
                 args['inputs'].value = [x.outputs['out'] for x in normal_pileup_tasks]
                 # calculate contamination
-                contaminate_task, args = wf.add_task(CalculateContamination(tumor_sample), tag=tumor_sample, depends=[merge_normal_pileup_task, merge_tumor_pileup_task])
+                contaminate_task, args = wf.add_task(CalculateContamination(tumor_sample), tag=tumor_sample)
                 args['tumor_pileups'].value = merge_tumor_pileup_task.outputs['out']
                 args['normal_pileups'].value = merge_normal_pileup_task.outputs['out']
 
             # filtering variant
-            depend_tasks = [merge_vcf_task, merge_stat_task, lrom_task]
-            if wf.topvars['contamination_vcf'].value is not None:
-                depend_tasks.append(contaminate_task)
-            filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample, depends=depend_tasks)
+            filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample)
             args['vcf'].value = merge_vcf_task.outputs['out']
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-            if wf.topvars['contamination_vcf'].value is not None:
+            if contaminate_task:
                 args['contamination-table'].value = contaminate_task.outputs['out']
                 args['tumor-segmentation'].value = contaminate_task.outputs['tumor-segmentation']
             args['ob-priors'].value = lrom_task.outputs['out']
@@ -987,7 +1043,7 @@ def pipeline():
             # filter alignment artifact
             filter_align_task = None
             if wf.topvars['bwaMemIndexImage'].value is not None:
-                filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor_sample), tag=tumor_sample, depends=[filter_task])
+                filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor_sample), tag=tumor_sample)
                 args['vcf'].value = filter_task.outputs['out']
                 args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['bam'].value = bam_dict[tumor_sample].outputs['out']
@@ -999,7 +1055,7 @@ def pipeline():
             norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample, depends=[depend_task])
             args['vcf'].value = depend_task.outputs['out']
             args['fasta-ref'].value = wf.topvars['ref']
-            args['out'].value = tumor_sample + '.somatic.raw.vcf'
+            args['out'].value = tumor_sample + '.somatic.vcf'
             norm_vcf_task.outputs['out'].report = True
 
             # VEP annotation
@@ -1014,6 +1070,7 @@ def pipeline():
 
         # tumor only analysis
         if normal_sample.lower() == 'none' and tumor_sample.lower() != 'none':
+            print(f'# performing tumor-only mode analysis for sample: {tumor_sample}')
             mutect_tasks = []
             for ind, interval_file in enumerate(interval_files):
                 mutect_task, args = wf.add_task(Mutect2(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}')
@@ -1035,20 +1092,13 @@ def pipeline():
             merge_vcf_task, args = wf.add_task(MergeVcfs(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
             args['inputs'].value = [x.outputs['out'] for x in mutect_tasks]
 
-            # normalize vcf
-            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample, depends=[merge_vcf_task])
-            args['vcf'].value = merge_vcf_task.outputs['out']
-            args['fasta-ref'].value = wf.topvars['ref']
-            args['out'].value = tumor_sample + '.somatic.raw.vcf'
-            norm_vcf_task.outputs['out'].report = True
-
             # merge stats
             merge_stat_task, args = wf.add_task(MergeMutectStats(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
             args['stats'].value = [x.outputs['stats'] for x in mutect_tasks]
 
             # filter
-            filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample, depends=[norm_vcf_task, merge_stat_task, lrom_task])
-            args['vcf'].value = norm_vcf_task.outputs['out']
+            filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample)
+            args['vcf'].value = merge_vcf_task.outputs['out']
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
             args['ob-priors'].value = lrom_task.outputs['out']
             args['stats'].value = merge_stat_task.outputs['out']
@@ -1064,10 +1114,17 @@ def pipeline():
                 args['bwa-mem-index-image'].value = wf.topvars['bwaMemIndexImage']
                 filter_align_task.outputs['out'].report = True
 
+            # normalize vcf
+            depend_task = filter_align_task or filter_task
+            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample)
+            args['vcf'].value = depend_task.outputs['out']
+            args['fasta-ref'].value = wf.topvars['ref']
+            args['out'].value = tumor_sample + '.somatic.vcf'
+            norm_vcf_task.outputs['out'].report = True
+
             if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-                depend_task = filter_align_task or filter_task
-                vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample, depends=[depend_task])
-                args['input_file'].value = depend_task.outputs['out']
+                vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample)
+                args['input_file'].value = norm_vcf_task.outputs['out']
                 args['fasta'].value = wf.topvars['ref']
                 args['dir_cache'].value = top_vars['vep_cache_dir']
                 args['dir_plugins'].value = top_vars['vep_plugin_dir']
@@ -1079,8 +1136,7 @@ def pipeline():
             already_exist.add(normal_sample)
             hap_tasks = []
             for ind, interval_file in enumerate(interval_files):
-                hap_task, args = wf.add_task(Haplotyper(f'{normal_sample}-{ind}'), tag=f'{normal_sample}-{ind}',
-                                             parent_wkdir='Haplotyper', depends=[bam_dict[normal_sample].task_id, recal_dict[normal_sample].task_id])
+                hap_task, args = wf.add_task(Haplotyper(f'{normal_sample}-{ind}'), tag=f'{normal_sample}-{ind}', parent_wkdir='Haplotyper')
                 hap_tasks.append(hap_task)
                 args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
                 args['bam'].value = bam_dict[normal_sample].outputs['out']
@@ -1094,61 +1150,64 @@ def pipeline():
             merge_vcf_task.outputs['out'].report = True
 
     # perform joint calling
-    # split intervals, 立即运算，获得结果
-    split_task = SplitIntervals(scatter_number=int(wf.args.scatter))
-    split_task.task_id = None
-    args = split_task.args
-    args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-    args['intervals'].value = [wf.topvars['intervals']]
-    args['mode'].value = "BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW"
-    args['outdir'].value = 'SplitIntervals-ForJointCalling'
-    split_task.run_now(wkdir=wf.args.outdir, wf_tasks=wf.tasks, docker=wf.args.docker)
-    interval_files = [x.value for x in split_task.outputs.values()]
-    # print(interval_files)
+    interval_files = []
+    if germline_merge_vcf_tasks:
+        # split intervals, 立即运算，获得结果
+        split_task = SplitIntervals(scatter_number=int(wf.args.scatter))
+        split_task.task_id = None
+        args = split_task.args
+        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
+        args['intervals'].value = [wf.topvars['intervals']]
+        args['mode'].value = "BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW"
+        args['outdir'].value = 'SplitIntervals-ForJointCalling'
+        split_task.run_now(wkdir=wf.args.outdir, wf_tasks=wf.tasks, docker=wf.args.docker)
+        interval_files = [x.value for x in split_task.outputs.values()]
+        # print(interval_files)
 
-    # split intervals，当实际生成的interval_files数量和指定的数量不一致时就会导致错误，因此采用上面立即运行的方式
-    # split_task, args = wf.add_task(SplitIntervals(scatter_number=int(wf.args.scatter)), tag='ForJoint')
-    # args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
-    # args['intervals'].value = [wf.topvars['intervals']]
-    # args['mode'].value = "BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW"
-    # args['outdir'].value = '.'
-    # interval_files = [split_task.outputs[f'out{i}'] for i in range(10)]
+        # split intervals，当实际生成的interval_files数量和指定的数量不一致时就会导致错误，因此采用上面立即运行的方式
+        # split_task, args = wf.add_task(SplitIntervals(scatter_number=int(wf.args.scatter)), tag='ForJoint')
+        # args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
+        # args['intervals'].value = [wf.topvars['intervals']]
+        # args['mode'].value = "BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW"
+        # args['outdir'].value = '.'
+        # interval_files = [split_task.outputs[f'out{i}'] for i in range(10)]
 
     scattered_tasks = []
     for ind, interval_file in enumerate(interval_files):
-        import_vcf_task, args = wf.add_task(GenomicsDBImport(), tag=f'{ind}', depends=germline_merge_vcf_tasks+[split_task], parent_wkdir='GenomicsDBImport')
+        import_vcf_task, args = wf.add_task(GenomicsDBImport(), tag=f'{ind}', parent_wkdir='GenomicsDBImport')
         args['gvcfs'].value = [x.outputs['out'] for x in germline_merge_vcf_tasks]
         args['interval'].value = interval_file
 
-        genotype_task, args = wf.add_task(GenotypeGVCFs(ind), tag=f'{ind}', depends=[import_vcf_task], parent_wkdir='GenotypeGVCFs')
+        genotype_task, args = wf.add_task(GenotypeGVCFs(ind), tag=f'{ind}', parent_wkdir='GenotypeGVCFs')
         args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
         args['dbsnp'].value = wf.topvars['dbsnp']
         args['gendb'].value = import_vcf_task.outputs['out']
         args['interval'].value = interval_file
 
-        hard_filter_task, args = wf.add_task(VariantFiltration(f'scatter{ind}'), tag=f'{ind}', depends=[genotype_task], parent_wkdir='VariantHardFiltration')
+        hard_filter_task, args = wf.add_task(VariantFiltration(f'scatter{ind}'), tag=f'{ind}', parent_wkdir='VariantHardFiltration')
         args['vcf'].value = genotype_task.outputs['out']
 
-        make_site_only_task, args = wf.add_task(MakeSitesOnlyVcf(f'scatter{ind}'), tag=f'{ind}', depends=[hard_filter_task], parent_wkdir='MakeSitesOnlyVcf')
+        make_site_only_task, args = wf.add_task(MakeSitesOnlyVcf(f'scatter{ind}'), tag=f'{ind}', parent_wkdir='MakeSitesOnlyVcf')
         args['vcf'].value = hard_filter_task.outputs['out']
         scattered_tasks.append(make_site_only_task)
 
-    gather_vcf_task, args = wf.add_task(MergeVcfs('Joint.SiteOnly'), tag='Joint', depends=scattered_tasks)
-    args['inputs'].value = [x.outputs['out'] for x in scattered_tasks]
-    gather_vcf_task.outputs['out'].report = True
+    if scattered_tasks:
+        gather_vcf_task, args = wf.add_task(MergeVcfs('Joint.SiteOnly'), tag='Joint', depends=scattered_tasks)
+        args['inputs'].value = [x.outputs['out'] for x in scattered_tasks]
+        gather_vcf_task.outputs['out'].report = True
 
-    indel_recal_task, args = wf.add_task(IndelsVariantRecalibrator('Joint'), tag='Joint', depends=[gather_vcf_task])
-    args['vcf'].value = gather_vcf_task.outputs['out']
-    args['mills'].value = wf.topvars['mills']
-    args['axiomPloly'].value = wf.topvars['axiomPoly']
-    args['dbsnp'].value = wf.topvars['dbsnp']
+        indel_recal_task, args = wf.add_task(IndelsVariantRecalibrator('Joint'), tag='Joint', depends=[gather_vcf_task])
+        args['vcf'].value = gather_vcf_task.outputs['out']
+        args['mills'].value = wf.topvars['mills']
+        args['axiomPloly'].value = wf.topvars['axiomPoly']
+        args['dbsnp'].value = wf.topvars['dbsnp']
 
-    snp_recal_task, args = wf.add_task(SNPsVariantRecalibrator('Joint'), tag='Joint', depends=[gather_vcf_task])
-    args['vcf'].value = gather_vcf_task.outputs['out']
-    args['hapmap'].value = wf.topvars['hapmap']
-    args['omni'].value = wf.topvars['omni']
-    args['dbsnp'].value = wf.topvars['dbsnp']
-    args['1000G'].value = wf.topvars['G1000']
+        snp_recal_task, args = wf.add_task(SNPsVariantRecalibrator('Joint'), tag='Joint', depends=[gather_vcf_task])
+        args['vcf'].value = gather_vcf_task.outputs['out']
+        args['hapmap'].value = wf.topvars['hapmap']
+        args['omni'].value = wf.topvars['omni']
+        args['dbsnp'].value = wf.topvars['dbsnp']
+        args['1000G'].value = wf.topvars['G1000']
 
     final_recal_tasks = []
     for idx, task in enumerate(scattered_tasks):
@@ -1165,25 +1224,26 @@ def pipeline():
         args['mode'].value = 'SNP'
         final_recal_tasks.append(apply_snp_task)
 
-    gather_final_vcf_task, args = wf.add_task(MergeVcfs('Joint.final'), tag='Final', depends=final_recal_tasks)
-    args['inputs'].value = [x.outputs['out'] for x in final_recal_tasks]
+    if final_recal_tasks:
+        gather_final_vcf_task, args = wf.add_task(MergeVcfs('Joint.final'), tag='Final', depends=final_recal_tasks)
+        args['inputs'].value = [x.outputs['out'] for x in final_recal_tasks]
 
-    # normalize vcf
-    norm_vcf_task, args = wf.add_task(bcftools_norm(), tag='Joint', depends=[gather_final_vcf_task])
-    args['vcf'].value = gather_final_vcf_task.outputs['out']
-    args['fasta-ref'].value = wf.topvars['ref']
-    args['out'].value = 'Joint.LeftNormalized.vcf'
-    norm_vcf_task.outputs['out'].report = True
+        # normalize vcf
+        norm_vcf_task, args = wf.add_task(bcftools_norm(), tag='Joint', depends=[gather_final_vcf_task])
+        args['vcf'].value = gather_final_vcf_task.outputs['out']
+        args['fasta-ref'].value = wf.topvars['ref']
+        args['out'].value = 'Joint.LeftNormalized.vcf'
+        norm_vcf_task.outputs['out'].report = True
 
-    if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-        depend_task = norm_vcf_task
-        vep_task, args = wf.add_task(vep('Joint'), tag='Joint', depends=[depend_task])
-        args['input_file'].value = depend_task.outputs['out']
-        args['fasta'].value = wf.topvars['ref']
-        args['dir_cache'].value = top_vars['vep_cache_dir']
-        args['dir_plugins'].value = top_vars['vep_plugin_dir']
-        vep_task.outputs['out_vcf'].report = True
-        vep_task.outputs['out_vcf_idx'].report = True
+        if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
+            depend_task = norm_vcf_task
+            vep_task, args = wf.add_task(vep('Joint'), tag='Joint', depends=[depend_task])
+            args['input_file'].value = depend_task.outputs['out']
+            args['fasta'].value = wf.topvars['ref']
+            args['dir_cache'].value = top_vars['vep_cache_dir']
+            args['dir_plugins'].value = top_vars['vep_plugin_dir']
+            vep_task.outputs['out_vcf'].report = True
+            vep_task.outputs['out_vcf_idx'].report = True
 
     wf.run()
 
