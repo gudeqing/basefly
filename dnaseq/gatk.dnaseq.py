@@ -1,4 +1,6 @@
 import os
+import time
+
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
 from basefly.basefly import Argument, Output, Command, Workflow, TopVar
@@ -779,12 +781,13 @@ def pipeline():
     wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
-    wf.add_argument('-pair_info', required=False, help='tumor normal pair info, two-column txt file, first column is tumor sample name. sample not in pair info will be skipped')
-    wf.add_argument('-tumor_sample_name', required=False, help='If you only input two paired samples, you may use this argument instead of "pair_info" to specify tumor sample. For multiple samples, you should provide sample pairing info file by "pair_info')
-    wf.add_argument('-scatter', default=10, help='scatter number used for interval splitting of variant calling steps')
-    wf.add_argument('-intervals', required=False, help="interval file, support bed file or picard interval file.")
+    wf.add_argument('-call_mode', default='somatic', help='somatic: somatic variant calling for tumor samples; germline: germline variant calling for all input samples, this mode is suitable for WES and WGS; mix: somatic variant calling for tumor samples and germline variant calling for paired normal samples')
+    wf.add_argument('-pair_info', required=False, help='File containing tumor normal pair info, two-column txt file, first column is tumor sample name. sample not in pair info will be skipped. In "germline" mode, this input is ignored')
+    wf.add_argument('-tumor_sample_name', required=False, help='If you only input two paired samples, for convenient, you may use this argument instead of "pair_info" to specify tumor sample. For multiple samples, you should provide sample pairing info file by "pair_info')
+    wf.add_argument('-scatter', default=10, help='Scatter number used for interval splitting of variant calling steps')
+    wf.add_argument('-intervals', required=False, help="Interval file, support bed file or picard interval file.")
     wf.add_argument('-alleles', required=False, help='The set of alleles to force-call regardless of evidence')
-    wf.add_argument('-pon', required=False, help='panel of normal vcf file for germline variant filtering, this will be required for tumor only analysis')
+    wf.add_argument('-pon', required=False, help='Panel of normal vcf file for germline variant filtering, this will be required for tumor only analysis')
     wf.add_argument('-ref_dir', default='/enigma/datasets/*/hg38/', help='The directory containing all reference files for gatk input. The following input files need to be in this file')
     wf.add_argument('--ref', default='Homo_sapiens_assembly38.fasta', help='reference fasta file. It should be in "ref_dir"')
     wf.add_argument('--dbsnp', default='dbsnp_146.hg38.vcf.gz', help='dbsnp vcf file')
@@ -824,11 +827,16 @@ def pipeline():
     fastq_info = get_fastq_info(fastq_info=wf.args.fastq_info, r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
     if len(fastq_info) <= 0:
         raise Exception('No fastq file found !')
-
+    # 检测参数
+    if wf.args.call_mode not in ['somatic', 'germline', 'mix']:
+        raise Exception("call mode is invalid. candidate are from ['somatic', 'germline', 'mix']")
     # 提取配对信息
     pair_list = []
     sample_list = []
     if wf.args.pair_info:
+        if wf.args.call_mode == 'germline':
+            print('warn: you provide pair information, but "germline" mode is enabled !')
+            time.sleep(8)
         with open(wf.args.pair_info) as f:
             for line in f:
                 if line.strip():
@@ -841,13 +849,24 @@ def pipeline():
             ctrl_sample = set(sample_list) - {wf.args.tumor_sample_name}
             pair_list = [[wf.args.tumor_sample_name, list(ctrl_sample)[0]]]
         else:
-            raise Exception('sample number is not correct, please check')
+            raise Exception('you used the argument "tumor_sample_name", thus we expect only two input samples!')
+        if wf.args.call_mode == 'germline':
+            print('warn: you used the argument "tumor_sample_name", but "germline" mode is enabled !')
+            time.sleep(8)
     if not sample_list:
         sample_list = list(fastq_info.keys())
-    if not pair_list:
-        # 没有提供配对信息则认为都是tumor
-        for each in sample_list:
-            pair_list.append([each, 'none'])
+    if wf.args.call_mode in ['somatic', 'mix']:
+        if wf.args.call_mode == 'somatic':
+            print('Analysis mode: somatic variant calling')
+        else:
+            print('Analysis mode: somatic variant calling for tumor samples and germline variant calling for normal samples')
+        if not pair_list:
+            print('No pair information provided, we assume all samples are tumor sample')
+            pair_list = [[x, 'none'] for x in sample_list]
+    else:
+        print('Analysis mode: germline variant calling for all input samples')
+        print('Caution: This mode is suitable for WES and WGS or large panel. For small panel, error may happen in recalibration stage!')
+        pair_list = [['none', x] for x in sample_list]
 
     # create dict or fai if necessary
     dict_file = wf.topvars['ref'].value.rsplit('.', 1)[0] + '.dict'
@@ -1165,7 +1184,7 @@ def pipeline():
                 vep_task.outputs['out_vcf_idx'].report = True
 
         # germline variant calling
-        if normal_sample.lower() != 'none' and normal_sample not in already_exist:
+        if normal_sample.lower() != 'none' and (normal_sample not in already_exist) and (wf.args.call_mode in ['mix', 'germline']):
             already_exist.add(normal_sample)
             hap_tasks = []
             for ind, interval_file in enumerate(interval_files):
