@@ -33,9 +33,9 @@ if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('outdir', help='fastq outdir')
-    parser.add_argument('fastqs', nargs='+', help='fastq info, sep by comma and white space for intra-group and between group')
+    parser.add_argument('fastqs', help='fastq info, sep by comma and white space for intra-group and between group')
     args = parser.parse_args()
-    fastq_group_lst = args.fastqs
+    fastq_group_lst = args.fastqs.split()
     normal = None
     if len(fastq_group_lst) == 1:
         tumor = fastq_group_lst[0]
@@ -46,6 +46,5 @@ if __name__ == '__main__':
     merge_fq(tumor.split(','), args.outdir, group='tumor')
     if normal:
         merge_fq(normal.split(','), args.outdir, group='normal')
-
 
 
