@@ -1432,7 +1432,10 @@ class VcfFilter(ValidateMutationByBam):
         #         af = float(af.strip('%')) * 0.01
         # else:
         #     raise Exception('No AF or FREQ field found !')
-        af = self.get_alt_depth(record, sample)/self.get_depth(record, sample)
+        depth = self.get_depth(record, sample)
+        if depth == 0:
+            return 0
+        af = self.get_alt_depth(record, sample)/depth
         return af
 
     def get_normal_af(self, record):
