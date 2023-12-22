@@ -64,7 +64,7 @@ def BedToIntervalList():
     cmd.meta.name = 'BedToIntervalList'
     cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
-    cmd.runtime.tool = 'gatk BedToIntervalList'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g BedToIntervalList'
     cmd.args['bed'] = Argument(prefix='-I ', type='infile', desc='input bed file')
     cmd.args['ref_dict'] = Argument(prefix='-SD ', type='infile', desc='input sequence dictionary file')
     cmd.args['out'] = Argument(prefix='-O ',  desc='output interval file')
@@ -101,7 +101,7 @@ def FastqToSam(sample):
     cmd.meta.desc = 'convert fastq to sam'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
-    cmd.runtime.tool = 'gatk FastqToSam'
+    cmd.runtime.tool = 'gatk --java-options -Xmx12g FastqToSam'
     cmd.args['read1'] = Argument(prefix='-F1 ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-F2 ', level='optional', type='infile', desc='read2 fastq file')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.unmapped.bam', desc='output sam file')
@@ -144,7 +144,7 @@ def MergeBamAlignment(sample):
     cmd.meta.desc = 'merge bam alignment'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
-    cmd.runtime.tool = 'gatk MergeBamAlignment'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g MergeBamAlignment'
     cmd.args['VALIDATION_STRINGENCY'] = Argument(prefix='--VALIDATION_STRINGENCY ', default='SILENT')
     cmd.args['EXPECTED_ORIENTATIONS'] = Argument(prefix='--EXPECTED_ORIENTATIONS ', level='optional')
     cmd.args['ATTRIBUTES_TO_RETAIN'] = Argument(prefix='--ATTRIBUTES_TO_RETAIN ', default='X0')
@@ -176,7 +176,7 @@ def MarkDuplicates(sample):
     cmd.meta.desc = 'merge bam alignment'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
-    cmd.runtime.tool = 'gatk MarkDuplicates'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g MarkDuplicates'
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='input bam file list')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', default=f'{sample}.unsorted.dup_marked.bam', desc='output bam file')
     cmd.args['METRICS_FILE'] = Argument(prefix='--METRICS_FILE ', default=f'{sample}.dup_metrics.txt')
@@ -195,13 +195,13 @@ def SortAndFixTags(sample):
     cmd.meta.desc = 'sort bam and fix tags'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
-    cmd.args['_sort_sam'] = Argument(type='fix', value='set -o pipefail; gatk SortSam')
+    cmd.args['_sort_sam'] = Argument(type='fix', value='set -o pipefail; gatk --java-options -Xmx15g SortSam')
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', desc='input bam file list')
     cmd.args['_OUTPUT'] = Argument(prefix='--OUTPUT ', default='/dev/stdout', desc='output bam file')
     cmd.args['SORT_ORDER'] = Argument(prefix='--SORT_ORDER ', default='"coordinate"')
     cmd.args['CREATE_INDEX'] = Argument(prefix='--CREATE_INDEX ', default='false')
     cmd.args['tmpdir'] = Argument(prefix='--TMP_DIR ', default='.', desc='directorie with space available to be used by this program for temporary storage of working files')
-    cmd.args['_fix_tags'] = Argument(type='fix', value='| gatk SetNmMdAndUqTags --CREATE_INDEX true --INPUT /dev/stdin')
+    cmd.args['_fix_tags'] = Argument(type='fix', value='| gatk --java-options -Xmx15g SetNmMdAndUqTags --CREATE_INDEX true --INPUT /dev/stdin')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', default=f'{sample}.sorted.dup_marked.bam', desc='output bam file')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='--REFERENCE_SEQUENCE ', type='infile', desc='reference fasta file')
     cmd.outputs['out'] = Output(value='{OUTPUT}')
@@ -249,7 +249,7 @@ def BaseRecalibrator(sample):
     cmd.meta.name = 'BaseRecalibrator'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5*1024**3
-    cmd.runtime.tool = 'gatk BaseRecalibrator'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g BaseRecalibrator'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['INPUT'] = Argument(prefix='-I ', type='infile', desc='input bam file')
     cmd.args['use-original-qualities'] = Argument(prefix='--use-original-qualities', type='bool', default=True)
@@ -267,7 +267,7 @@ def GatherBQSRReports(sample):
     cmd.meta.desc = 'Gathers scattered BQSR recalibration reports into a single file'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3*1024**3
-    cmd.runtime.tool = 'gatk GatherBQSRReports'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g GatherBQSRReports'
     cmd.args['INPUT'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input bqsr file list')
     cmd.args['OUTPUT'] = Argument(prefix='-O ', default=f'{sample}.recal_table', desc='The output recalibration table file to create')
     cmd.outputs['out'] = Output(value='{OUTPUT}')
@@ -281,7 +281,7 @@ def ApplyBQSR(sample):
     cmd.meta.desc = 'Apply Base Quality Score Recalibration (BQSR) model'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3 * 1024 ** 3
-    cmd.runtime.tool = 'gatk ApplyBQSR'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g ApplyBQSR'
     cmd.args['INPUT'] = Argument(prefix='-I ', type='infile', desc='input bam file')
     cmd.args['OUTPUT'] = Argument(prefix='-O ', default=f'{sample}.recalibrated.bam', desc='The output recalibration table file to create')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -301,7 +301,7 @@ def GatherBamFiles(sample):
     cmd.meta.desc = 'Concatenate efficiently BAM files that resulted from a scattered parallel analysis.'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3 * 1024 ** 3
-    cmd.runtime.tool = 'gatk GatherBamFiles'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g GatherBamFiles'
     cmd.args['INPUT'] = Argument(prefix='--INPUT ', type='infile', multi_times=True, desc='input bam file')
     cmd.args['OUTPUT'] = Argument(prefix='--OUTPUT ', default=f'{sample}.recalibrated.bam', desc='output bam file')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', level='optional', desc='reference fasta file')
@@ -318,7 +318,7 @@ def SplitIntervals(scatter_number=10):
     cmd.meta.desc = 'This tool takes in intervals via the standard arguments of IntervalArgumentCollection and splits them into interval files for scattering. The resulting files contain equal number of bases.'
     cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
-    cmd.runtime.tool = 'gatk SplitIntervals'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g SplitIntervals'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['intervals'] = Argument(prefix='-L ', level='optional', type='infile', multi_times=True, desc='One or more genomic intervals over which to operate')
     cmd.args['scatter'] = Argument(prefix='-scatter ', type='fix', value=scatter_number, desc='number of output interval files to split into')
@@ -339,7 +339,7 @@ def Mutect2(prefix):
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 8*1024**3
     cmd.runtime.cpu = 3
-    cmd.runtime.tool = 'gatk Mutect2'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g Mutect2'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['tumor_bam'] = Argument(prefix='-I ', type='infile', desc='tumor bam')
     cmd.args['normal_bam'] = Argument(prefix='-I ', type='infile', level='optional', desc='normal bam')
@@ -385,7 +385,7 @@ def GetPileupSummaries(prefix):
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.desc = 'Summarizes counts of reads that support reference, alternate and other alleles for given sites. Results can be used with CalculateContamination'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360037593451-GetPileupSummaries'
-    cmd.runtime.tool = 'gatk GetPileupSummaries'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g GetPileupSummaries'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', desc='BAM/SAM/CRAM file containing reads')
     cmd.args['interval-set-rule'] = Argument(prefix='--interval-set-rule ', default='INTERSECTION', desc='Set merging approach to use for combining interval inputs')
@@ -403,7 +403,7 @@ def MergeVcfs(prefix):
     cmd.meta.desc = 'Combines multiple variant files into a single variant file.'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360056969852-MergeVcfs-Picard-'
-    cmd.runtime.tool = 'gatk MergeVcfs'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g MergeVcfs'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='input vcf list')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.vcf.gz', desc='The merged VCF or BCF file. File format is determined by file extension.')
     cmd.outputs['out'] = Output(value='{out}')
@@ -417,7 +417,7 @@ def SortBam():
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.desc = 'This tool sorts the input SAM or BAM file by coordinate, queryname (QNAME), or some other property of the SAM record. The SortOrder of a SAM/BAM file is found in the SAM file header tag @HD in the field labeled SO.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360036366932-SortSam-Picard-'
-    cmd.runtime.tool = 'gatk SortSam'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g SortSam'
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', desc='BAM/SAM/CRAM file containing reads')
     cmd.args['out'] = Argument(prefix='-O ', desc='Sorted BAM or SAM output file.')
     cmd.args['SORT_ORDER'] = Argument(prefix='--SORT_ORDER ', default='coordinate', desc='Sort order of output file.')
@@ -432,7 +432,7 @@ def MergeMutectStats(sample):
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MergeMutectStats'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.tool = 'gatk MergeMutectStats'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g MergeMutectStats'
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', multi_times=True)
     cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.vcf.stats', desc='output merged stat files')
     cmd.outputs['out'] = Output(value='{out}')
@@ -444,7 +444,7 @@ def GatherPileupSummaries(sample):
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GatherPileupSummaries'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.tool = 'gatk GatherPileupSummaries'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g GatherPileupSummaries'
     cmd.args['sequence-dictionary'] = Argument(prefix='--sequence-dictionary ', type='infile')
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True)
     cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.pileup.table', desc='output merged pileup summary file')
@@ -458,7 +458,7 @@ def LearnReadOrientationModel(sample):
     cmd.meta.name = 'LearnReadOrientationModel'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.desc = 'Learn the prior probability of read orientation artifact from the output of CollectF1R2Counts of Mutect2'
-    cmd.runtime.tool = 'gatk LearnReadOrientationModel'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g LearnReadOrientationModel'
     cmd.args['inputs'] = Argument(prefix='-I ', type='infile', multi_times=True, desc='One or more .tar.gz containing outputs of CollectF1R2Counts')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{sample}.artifact-priors.tar.gz', desc='tar.gz of artifact prior tables')
     cmd.outputs['out'] = Output(value='{out}')
@@ -470,7 +470,7 @@ def CalculateContamination(prefix):
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'CalculateContamination'
     cmd.meta.desc = 'Calculates the fraction of reads coming from cross-sample contamination, given results from GetPileupSummaries. The resulting contamination table is used with FilterMutectCalls.'
-    cmd.runtime.tool = 'gatk CalculateContamination'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g CalculateContamination'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.args['tumor_pileups'] = Argument(prefix='-I ', type='infile', desc='input pileup table')
     cmd.args['normal_pileups'] = Argument(prefix='-matched ', type='infile', desc='The matched normal input table')
@@ -486,7 +486,7 @@ def FilterMutectCalls(sample):
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'FilterMutectCalls'
     cmd.meta.desc = 'FilterMutectCalls applies filters to the raw output of Mutect2'
-    cmd.runtime.tool = 'gatk FilterMutectCalls'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g FilterMutectCalls'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -507,7 +507,7 @@ def FilterAlignmentArtifacts(sample):
     cmd.meta.name = 'FilterAlignmentArtifacts'
     cmd.meta.desc = 'Alignment artifacts can occur whenever there is sufficient sequence similarity between two or more regions in the genome to confuse the alignment algorithm. This can occur when the aligner for whatever reason overestimate how uniquely a read maps, thereby assigning it too high of a mapping quality. It can also occur through no fault of the aligner due to gaps in the reference, which can also hide the true position to which a read should map. By using a good alignment algorithm (the GATK wrapper of BWA-MEM), giving it sensitive settings (which may have been impractically slow for the original bam alignment) and mapping to the best available reference we can avoid these pitfalls. The last point is especially important: one can (and should) use a BWA-MEM index image corresponding to the best reference, regardless of the reference to which the bam was aligned.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4418051467035-FilterAlignmentArtifacts-EXPERIMENTAL-'
-    cmd.runtime.tool = 'gatk FilterAlignmentArtifacts'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g FilterAlignmentArtifacts'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='A VCF file containing variants')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -576,7 +576,7 @@ def Haplotyper(sample):
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'Haplotyper'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.tool = 'gatk HaplotypeCaller'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g HaplotypeCaller'
     cmd.args['intervals'] = Argument(prefix='-L ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', desc='reccaled tumor and normal bam list')
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
@@ -596,7 +596,7 @@ def GenomicsDBImport():
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GenomicsDBImport'
     cmd.meta.desc = 'The GATK4 Best Practice Workflow for SNP and Indel calling uses GenomicsDBImport to merge GVCFs from multiple samples.  In brief, GenomicsDB utilises a data storage system optimized for storing/querying sparse arrays. Genomics data is typically sparse in that each sample has few variants with respect to the entire reference genome. GenomicsDB contains specialized code for genomics applications, such as VCF parsing and INFO field annotation calculation.'
-    cmd.runtime.tool = 'gatk GenomicsDBImport'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g GenomicsDBImport'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.args['gvcfs'] = Argument(prefix='-V ', type='infile', multi_times=True, desc='input gVcf files')
     cmd.args['genomicsdb-workspace-path'] = Argument(prefix='--genomicsdb-workspace-path ', default='genomicsdb', desc='Workspace for GenomicsDB. Can be a POSIX file system absolute or relative path or a HDFS/GCS URL. Use this argument when creating a new GenomicsDB workspace. Either this or genomicsdb-update-workspace-path must be specified. Must be an empty or non-existent directory.')
@@ -616,7 +616,7 @@ def GenotypeGVCFs(prefix):
     cmd.meta.name = 'GenotypeGVCFs'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'Perform joint genotyping on one or more samples pre-called with HaplotypeCaller'
-    cmd.runtime.tool = 'gatk GenotypeGVCFs'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g GenotypeGVCFs'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.genotyped.gvcf', desc='output vcf file name')
     cmd.args['dbsnp'] = Argument(prefix='-D ', type='infile', desc='input dbsnp vcf file')
@@ -635,7 +635,7 @@ def VariantFiltration(prefix):
     cmd.meta.name = 'VariantFiltration'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'This tool is designed for hard-filtering variant calls based on certain criteria. Records are hard-filtered by changing the value in the FILTER field to something other than PASS. Filtered records will be preserved in the output unless their removal is requested in the command line.'
-    cmd.runtime.tool = 'gatk VariantFiltration'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g VariantFiltration'
     cmd.args['filters'] = Argument(prefix='', default=['--filter-name ExcessHet --filter-expression "ExcessHet > 54.69"',], multi_times=True, desc='filtering expressions, such as "AB < 0.2"')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.hard_filtered.vcf.gz', desc='output vcf file')
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='input vcf file')
@@ -649,7 +649,7 @@ def MakeSitesOnlyVcf(prefix):
     cmd.meta.name = 'MakeSitesOnlyVcf'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'This tool reads a VCF/VCF.gz/BCF and removes all genotype information from it while retaining all site level information, including annotations based on genotypes (e.g. AN, AF).'
-    cmd.runtime.tool = 'gatk MakeSitesOnlyVcf'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g MakeSitesOnlyVcf'
     cmd.args['vcf'] = Argument(prefix='-I ', type='infile', desc='input vcf file')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.site_only.vcf.gz', desc='output vcf file')
     cmd.outputs['out'] = Output(value='{out}')
@@ -662,7 +662,7 @@ def IndelsVariantRecalibrator(prefix):
     cmd.meta.name = 'IndelsRecalibrator'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'Build a recalibration model to score variant quality for filtering purposes'
-    cmd.runtime.tool = 'gatk VariantRecalibrator'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g VariantRecalibrator'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='site only variant filtered input vcf')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.indel.recal', desc='The output recal file used by ApplyVQSR')
     cmd.args['out-tranches-file'] = Argument(prefix='--tranches-file ', default=f'{prefix}.indel.tranches', desc='The output tranches file used by ApplyVQSR')
@@ -686,7 +686,7 @@ def SNPsVariantRecalibrator(prefix):
     cmd.meta.name = 'SNPsRecalibrator'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = 'Build a recalibration model to score variant quality for filtering purposes'
-    cmd.runtime.tool = 'gatk VariantRecalibrator'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g VariantRecalibrator'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='site only variant filtered input vcf')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.snp.recal', desc='The output recal file used by ApplyVQSR')
     cmd.args['out-tranches-file'] = Argument(prefix='--tranches-file ', default=f'{prefix}.snp.tranches', desc='The output tranches file used by ApplyVQSR')
@@ -713,7 +713,7 @@ def ApplyVQSR(prefix):
     cmd.meta.name = 'ApplyVQSR'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.desc = "This tool performs the second pass in a two-stage process called Variant Quality Score Recalibration (VQSR). Specifically, it applies filtering to the input variants based on the recalibration table produced in the first step by VariantRecalibrator and a target sensitivity value, which the tool matches internally to a VQSLOD score cutoff based on the model's estimated sensitivity to a set of true variants."
-    cmd.runtime.tool = 'gatk ApplyVQSR'
+    cmd.runtime.tool = 'gatk --java-options -Xmx15g ApplyVQSR'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='input vcf')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.filtered.vcf.gz', desc='The output vcf')
     cmd.args['recal-file'] = Argument(prefix='--recal-file ', type='infile', desc='The input recal file used by ApplyVQSR')
@@ -1182,7 +1182,7 @@ def pipeline():
             germline_merge_vcf_tasks.append(merge_vcf_task)
             merge_vcf_task.outputs['out'].report = True
 
-    # perform joint calling
+    # perform joint calling based on germline variants
     interval_files = []
     if germline_merge_vcf_tasks:
         # split intervals, 立即运算，获得结果
@@ -1241,41 +1241,41 @@ def pipeline():
         args['dbsnp'].value = wf.topvars['dbsnp']
         args['1000G'].value = wf.topvars['G1000']
 
-    final_recal_tasks = []
-    for idx, task in enumerate(scattered_tasks):
-        apply_indel_task, args = wf.add_task(ApplyVQSR(f'joint.{idx}.indel'), tag=f'Indel{idx}', depends=[task, indel_recal_task], parent_wkdir='ApplyIndelRecalibration')
-        args['vcf'].value = task.outputs['out']
-        args['recal-file'].value = indel_recal_task.outputs['out']
-        args['tranches-file'].value = indel_recal_task.outputs['tranches']
-        args['mode'].value = 'INDEL'
+        final_recal_tasks = []
+        for idx, task in enumerate(scattered_tasks):
+            apply_indel_task, args = wf.add_task(ApplyVQSR(f'joint.{idx}.indel'), tag=f'Indel{idx}', parent_wkdir='ApplyIndelRecalibration')
+            args['vcf'].value = task.outputs['out']
+            args['recal-file'].value = indel_recal_task.outputs['out']
+            args['tranches-file'].value = indel_recal_task.outputs['tranches']
+            args['mode'].value = 'INDEL'
 
-        apply_snp_task, args = wf.add_task(ApplyVQSR(f'joint.{idx}.snp'), tag=f'SNP{idx}', depends=[snp_recal_task, apply_indel_task], parent_wkdir='ApplySnpRecalibration')
-        args['vcf'].value = apply_indel_task.outputs['out']
-        args['recal-file'].value = snp_recal_task.outputs['out']
-        args['tranches-file'].value = snp_recal_task.outputs['tranches']
-        args['mode'].value = 'SNP'
-        final_recal_tasks.append(apply_snp_task)
+            apply_snp_task, args = wf.add_task(ApplyVQSR(f'joint.{idx}.snp'), tag=f'SNP{idx}', parent_wkdir='ApplySnpRecalibration')
+            args['vcf'].value = apply_indel_task.outputs['out']
+            args['recal-file'].value = snp_recal_task.outputs['out']
+            args['tranches-file'].value = snp_recal_task.outputs['tranches']
+            args['mode'].value = 'SNP'
+            final_recal_tasks.append(apply_snp_task)
 
-    if final_recal_tasks:
-        gather_final_vcf_task, args = wf.add_task(MergeVcfs('Joint.final'), tag='Final', depends=final_recal_tasks)
-        args['inputs'].value = [x.outputs['out'] for x in final_recal_tasks]
+        if final_recal_tasks:
+            gather_final_vcf_task, args = wf.add_task(MergeVcfs('Joint.final'), tag='Final', depends=final_recal_tasks)
+            args['inputs'].value = [x.outputs['out'] for x in final_recal_tasks]
 
-        # normalize vcf
-        norm_vcf_task, args = wf.add_task(bcftools_norm(), tag='JointGermline', depends=[gather_final_vcf_task])
-        args['vcf'].value = gather_final_vcf_task.outputs['out']
-        args['fasta-ref'].value = wf.topvars['ref']
-        args['out'].value = 'Germline.Joint.LeftNormalized.vcf'
-        norm_vcf_task.outputs['out'].report = True
+            # normalize vcf
+            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag='JointGermline', depends=[gather_final_vcf_task])
+            args['vcf'].value = gather_final_vcf_task.outputs['out']
+            args['fasta-ref'].value = wf.topvars['ref']
+            args['out'].value = 'Germline.Joint.LeftNormalized.vcf'
+            norm_vcf_task.outputs['out'].report = True
 
-        if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-            depend_task = norm_vcf_task
-            vep_task, args = wf.add_task(vep('Joint'), tag='JointGermline', depends=[depend_task])
-            args['input_file'].value = depend_task.outputs['out']
-            args['fasta'].value = wf.topvars['ref']
-            args['dir_cache'].value = top_vars['vep_cache_dir']
-            args['dir_plugins'].value = top_vars['vep_plugin_dir']
-            vep_task.outputs['out_vcf'].report = True
-            vep_task.outputs['out_vcf_idx'].report = True
+            if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
+                depend_task = norm_vcf_task
+                vep_task, args = wf.add_task(vep('Joint'), tag='JointGermline', depends=[depend_task])
+                args['input_file'].value = depend_task.outputs['out']
+                args['fasta'].value = wf.topvars['ref']
+                args['dir_cache'].value = top_vars['vep_cache_dir']
+                args['dir_plugins'].value = top_vars['vep_plugin_dir']
+                vep_task.outputs['out_vcf'].report = True
+                vep_task.outputs['out_vcf_idx'].report = True
 
     wf.run()
 
