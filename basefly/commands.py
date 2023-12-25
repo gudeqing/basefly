@@ -1269,20 +1269,20 @@ def mixcr_rnaseq():
     cmd.meta.name = 'mixcrRNAseq'
     cmd.meta.desc = 'MiXCR is a universal software for fast and accurate analysis of raw T- or B- cell receptor repertoire sequencing data. https://docs.milaboratories.com/mixcr/reference/mixcr-analyze/#generic-non-targeted-shotgun-data-rna-seq'
     cmd.meta.source = "https://github.com/milaboratory/mixcr"
-    cmd.runtime.image = '?'
-    cmd.runtime.memory = 5*1024**3
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
+    cmd.runtime.memory = 8*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'mixcr analyze rnaseq-tcr-cdr3'
     cmd.args['species'] = Argument(prefix='--species ', default='hsa', desc="Possible values: hsa (or HomoSapiens), mmu (or MusMusculus), rat, spalax, alpaca, lamaGlama, mulatta (Macaca Mulatta), fascicularis (Macaca Fascicularis) or any species from IMGT ® library")
     cmd.args['read1'] = Argument(prefix='', type='infile', desc='input read1 file')
     cmd.args['read2'] = Argument(prefix='', type='infile', level='optional', desc='input read2 file')
     cmd.args['out_prefix'] = Argument(prefix='', desc='output prefix')
-    cmd.outputs['TRAD'] = Output(value='{out_prefix}.clonotypes.TRAD.tsv')
-    cmd.outputs['TRA'] = Output(value='{out_prefix}.clonotypes.TRA.tsv')
-    cmd.outputs['TRB'] = Output(value='{out_prefix}.clonotypes.TRB.tsv')
-    cmd.outputs['TRG'] = Output(value='{out_prefix}.clonotypes.TRG.tsv')
-    cmd.outputs['TRD'] = Output(value='{out_prefix}.clonotypes.TRD.tsv')
-    cmd.outputs['clns'] = Output(value='{out_prefix}.clns')
+    cmd.outputs['TRAD'] = Output(value='{out_prefix}.clonotypes.TRAD.tsv', report=True)
+    cmd.outputs['TRA'] = Output(value='{out_prefix}.clonotypes.TRA.tsv', report=True)
+    cmd.outputs['TRB'] = Output(value='{out_prefix}.clonotypes.TRB.tsv', report=True)
+    cmd.outputs['TRG'] = Output(value='{out_prefix}.clonotypes.TRG.tsv', report=True)
+    cmd.outputs['TRD'] = Output(value='{out_prefix}.clonotypes.TRD.tsv', report=True)
+    cmd.outputs['clns'] = Output(value='{out_prefix}.clns', report=True)
     return cmd
 
 

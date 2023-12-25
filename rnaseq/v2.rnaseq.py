@@ -11,10 +11,7 @@ from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
 """
-to do list:
-3. 引入输出数据库的概念，目前考虑使用mongodb
-4. 定义输出结果的标准元数据
-
+申明: 本流程仅作科研学术研究用途,不能用作医学检测依据
 本流程功能
 输入：
     bulk RNA-seq数据, 可以接收正常对照数据
@@ -59,20 +56,6 @@ to do list:
     免疫浸润比例
     TCR clone鉴定（后续可以考虑用vdjtools做克隆多样性分析）
     内含子来源新抗原及质谱验证率
-
-Mongo数据库:
-    1. hg19/hg38基因信息表: 记录基因ID，基因名称，编码与否等功能
-    2. 样本信息表:
-        sample_id, r1, r2, patient_id, tissue_type, disease_type, primary_site, metastasis_site, ....
-    3. 基因表达量表count/tpm
-    3. 转录本表达量表count/tpm
-    4. quantiseq免疫细胞比例表
-    5. 融合基因检测表
-    6. HLA定型结果表
-    7. TCR结果表
-    8. 新抗原结果表
-    
-    
 """
 
 
@@ -80,7 +63,7 @@ def filter_gtf_by_class_code():
     cmd = Command()
     cmd.meta.name = 'filterGTFByClassCode'
     cmd.meta.desc = 'filter gtf by class code'
-    cmd.runtime.image = ''
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py filter_by_class_code'
     cmd.runtime.cpu = 2
     cmd.runtime.memory = 2 * 1024 ** 3
@@ -95,7 +78,7 @@ def filter_gtf_by_exp():
     cmd = Command()
     cmd.meta.name = 'filterGTFByExp'
     cmd.meta.desc = 'filter gtf by expression'
-    cmd.runtime.image = ''
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py filter_gtf_by_exp'
     cmd.runtime.cpu = 2
     cmd.runtime.memory = 2 * 1024 ** 3
@@ -113,7 +96,7 @@ def find_potential_intron_peptides():
     cmd = Command()
     cmd.meta.name = 'findNovelPeptides'
     cmd.meta.desc = '提取内含子保留序列对应的潜在编码肽段，并根据对照样本进行过滤，保留肿瘤样本特有的'
-    cmd.runtime.image = ''
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py find_potential_intron_peptides'
     cmd.runtime.cpu = 2
     cmd.runtime.memory = 2 * 1024 ** 3
@@ -139,7 +122,7 @@ def filter_pep_by_blast_id():
     cmd = Command()
     cmd.meta.name = 'filterPepByBlastProteome'
     cmd.meta.desc = '和参考蛋白组比对后，过滤掉能够100%比对上的petides，剩下的将用于新抗原预测'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py filter_pep_by_blast_id'
     cmd.runtime.cpu = 2
     cmd.runtime.memory = 3 * 1024 ** 3
@@ -156,7 +139,7 @@ def annotate_mhcflurry_result():
     cmd = Command()
     cmd.meta.name = 'annotateMhcflurryResult'
     cmd.meta.desc = '根据gffcompare的结果文件tmap注释MHCfluryy的结果，主要补充表达量和基因信息'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py annotate_mhcflurry_result'
     cmd.runtime.cpu = 1
     cmd.runtime.memory = 3 * 1024 ** 3
@@ -172,8 +155,8 @@ def annotate_mhcflurry_result():
 def check_and_convert_alleles_for_netMHCIIpan4():
     cmd = Command()
     cmd.meta.name = 'convertAllelesForNetMHCIIpan4'
-    cmd.meta.desc = '根据gffcompare的结果文件tmap注释netMHCPan的结果，主要补充表达量和基因信息'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.meta.desc = '为netMHCIIpan4准备输入文件'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py check_and_convert_alleles_for_netMHCIIpan4'
     cmd.runtime.cpu = 1
     cmd.runtime.memory = 3 * 1024 ** 3
@@ -188,8 +171,8 @@ def check_and_convert_alleles_for_netMHCIIpan4():
 def annotate_netMHCPan_result():
     cmd = Command()
     cmd.meta.name = 'annotateNetMHCPanResult'
-    cmd.meta.desc = '根据gffcompare的结果文件tmap注释netMHCPan的结果，主要补充表达量和基因信息'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.meta.desc = '注释netMHCpan的预测结果'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py annotate_netMHCpan_result'
     cmd.runtime.cpu = 1
     cmd.runtime.memory = 3 * 1024 ** 3
@@ -206,8 +189,8 @@ def annotate_netMHCPan_result():
 def prepare_pMTnet_input():
     cmd = Command()
     cmd.meta.name = 'PreparepMTnetInput'
-    cmd.meta.desc = '根据gffcompare的结果文件tmap注释netMHCPan的结果，主要补充表达量和基因信息'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.3'
+    cmd.meta.desc = '给pMTnet准备输入文件'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py prepare_pMTnet_input'
     cmd.args['mixcr_trb'] = Argument(prefix='-mixcr_trb ', type='infile', desc='input TRB file from mixcr')
     cmd.args['antigen_seq'] = Argument(prefix='-antigen_seq ', type='infile', desc='tab separated input peptide file with one column named "peptide"')
@@ -222,7 +205,7 @@ def prepare_pMTnet_input():
 def prepare_quantiseq_input():
     cmd = Command()
     cmd.meta.name = 'PreparepQuantiseqInput'
-    cmd.meta.desc = '根据gffcompare的结果文件tmap注释netMHCPan的结果，主要补充表达量和基因信息'
+    cmd.meta.desc = '给Quantiseq准备输入文件'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:2.0'
     cmd.runtime.tool = f'python {script_path}/utils/rna_tools.py prepare_quantiseq_input'
     cmd.args['expr'] = Argument(prefix='-expr ', type='infile', desc='input salmon quan.gene.sf')
@@ -242,16 +225,18 @@ def pipeline():
     wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
-    wf.add_argument('-pair_info', required=False, help='tumor normal pair info, two-column txt file, first column is tumor sample name.')
     wf.add_argument('-strandness', default='none', help='strandness of the rna-seq library, value could be one of ["none", "rf", "fr"]')
     wf.add_argument('-ctat_genome_lib_build_dir', required=True, help='star-fusion database dir: ctat_genome_lib_build_dir from https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz; In addition, you need to CreateSequenceDictionary for ref_genome.fa')
-    wf.add_argument('-hla_db', required=False, help='arcasHLA database, please refer to https://github.com/RabadanLab/arcasHLA')
-    wf.add_argument('-hla_file', required=False, help='hla genotype result file: sample_id as row name, gene name as header. At least one input of hla_db and hla_file must be provided!')
+    wf.add_argument('-hla_db', required=False, help='Optional. arcasHLA database, please refer to https://github.com/RabadanLab/arcasHLA')
+    wf.add_argument('-hla_file', required=False, help='Optional. hla genotype result file: sample_id as row name, gene name as header. At least one input of hla_db and hla_file must be provided!')
+    wf.add_argument('--tcr', default=False, action='store_true', help='Enable TCR repertoire profiling')
+    wf.add_argument('--intron_antigen', default=False, action='store_true', help='Enable Intron-Retention Neoantigen Prediction')
+    wf.add_argument('-pair_info', required=False, help='Optional. tumor normal pair info, two-column txt file, first column is tumor sample name. This file is only required for Intron-Retention Neoantigen Prediction')
     wf.add_argument('-mhc1_genes', default=('A', 'B', 'C'), nargs='+', help='HLA alleles gene list, such as A,B,C')
     wf.add_argument('-mhc2_genes', default=('DRA', 'DRB1', 'DRB3', 'DRB4', 'DRB5', 'DQA1', 'DQB1', 'DPA1', 'DPB1', 'DPB2'), nargs='+', help='HLA alleles gene list, such as DRA(B),DQA(B),DPA(B), 这里并不意味着预测软件能处理这里能提供的所有HLA基因，因此后续结果统计时，应该以实际能用的基因为主')
-    wf.add_argument('-genome_pep', required=False, help='reference proteome fasta file, you may download this file from https://www.gencodegenes.org/. default will use pep file in ctat_genome_lib_build_dir, but you are recommended to use the latest pep from GENCODE to reduce false prediction of neoantigen')
-    wf.add_argument('-ms_data', required=False, help='raw thermo MS data information, with two columns, first column is sample id, and the second column is raw data directory')
-    wf.add_argument('-comet_params', required=False, help='parameter file for comet, please refer to https://comet-ms.sourceforge.net/parameters/parameters_202101/')
+    wf.add_argument('-genome_pep', required=False, help='Optional. reference proteome fasta file, you may download this file from https://www.gencodegenes.org/. default will use pep file in ctat_genome_lib_build_dir, but you are recommended to use the latest pep from GENCODE to reduce false prediction of neoantigen')
+    wf.add_argument('-ms_data', required=False, help='Optional. raw thermo MS data information, with two columns, first column is sample id, and the second column is raw data directory')
+    wf.add_argument('-comet_params', required=False, help='Optional. parameter file for comet, please refer to https://comet-ms.sourceforge.net/parameters/parameters_202101/')
     wf.parse_args()
 
     # add top_vars
@@ -384,6 +369,7 @@ def pipeline():
         else:
             args['is_tumor'].value = 'FALSE'
         args['prefix'].value = sample
+        quantiseq_task.outputs['out'].report = True
 
         # fusion identification
         fusion_task, args = wf.add_task(star_fusion(), tag=sample, depends=[star_task.task_id])
@@ -407,246 +393,249 @@ def pipeline():
             args['link'].value = True
 
         # TCR分析,直接以原始数据为输入
-        mixcr_rnaseq_task, args = wf.add_task(mixcr_rnaseq(), tag=sample)
-        args['out_prefix'].value = sample
-        if len(r1s) > 1:
-            args['read1'].value = '<(gzcat {})'.format(" ".join(r1s))
-            if len(reads) == 2:
-                args['read2'].value = '<(gzcat {})'.format(" ".join(r2s))
-        else:
-            args['read1'].value = r1s[0]
-            if len(reads) == 2:
-                args['read2'].value = r2s[0]
-        args['out_prefix'].value = sample
+        if wf.args.tcr:
+            mixcr_rnaseq_task, args = wf.add_task(mixcr_rnaseq(), tag=sample)
+            args['out_prefix'].value = sample
+            if len(r1s) > 1:
+                args['read1'].value = '<(gzcat {})'.format(" ".join(r1s))
+                if len(reads) == 2:
+                    args['read2'].value = '<(gzcat {})'.format(" ".join(r2s))
+            else:
+                args['read1'].value = r1s[0]
+                if len(reads) == 2:
+                    args['read2'].value = r2s[0]
+            args['out_prefix'].value = sample
 
-        # stringtie组装转录本
-        assemble_task, args = wf.add_task(stringtie(), tag=sample, depends=[star_task])
-        args['bam'].value = [star_task.outputs['bam']]
-        args['gene_model'].value = os.path.abspath(ref_genome_gtf)
-        args['out_gtf'].value = sample + '.assembled.gtf'
-        args['conservative'].value = True
+        if wf.args.intron_antigen:
+            # stringtie组装转录本
+            assemble_task, args = wf.add_task(stringtie(), tag=sample, depends=[star_task])
+            args['bam'].value = [star_task.outputs['bam']]
+            args['gene_model'].value = os.path.abspath(ref_genome_gtf)
+            args['out_gtf'].value = sample + '.assembled.gtf'
+            args['conservative'].value = True
 
-        # filter gtf by exp
-        filterbyexp_task, args = wf.add_task(filter_gtf_by_exp(), tag=sample, depends=[assemble_task])
-        args['gtf'].value = assemble_task.outputs['out_gtf']
-        args['out_gtf'].value = sample + '.filteredByExp.gtf'
+            # filter gtf by exp
+            filterbyexp_task, args = wf.add_task(filter_gtf_by_exp(), tag=sample, depends=[assemble_task])
+            args['gtf'].value = assemble_task.outputs['out_gtf']
+            args['out_gtf'].value = sample + '.filteredByExp.gtf'
 
-        # gffcompare注释gtf
-        annot_task, args = wf.add_task(gffcompare(), tag=sample, depends=[filterbyexp_task])
-        args['gtfs'].value = [filterbyexp_task.outputs['out_gtf']]
-        args['strict_match'].value = True
-        args['ref'].value = os.path.abspath(ref_genome_gtf)
-        args['genome'].value = os.path.abspath(ref_genome_fa)
+            # gffcompare注释gtf
+            annot_task, args = wf.add_task(gffcompare(), tag=sample, depends=[filterbyexp_task])
+            args['gtfs'].value = [filterbyexp_task.outputs['out_gtf']]
+            args['strict_match'].value = True
+            args['ref'].value = os.path.abspath(ref_genome_gtf)
+            args['genome'].value = os.path.abspath(ref_genome_fa)
 
-        # 根据class_code过滤转录本，筛选出包含非编码区的转录本用于新抗原预测
-        filter_task, args = wf.add_task(filter_gtf_by_class_code(), tag=sample, depends=[annot_task])
-        args['gtf'].value = annot_task.outputs['annotated_gtf']
-        args['out_gtf'].value = sample + '.filteredByClassCode.gtf'
-        args['exclude_class_codes'].value = ('c', 's', 'p', 'r', '=', 'u')
+            # 根据class_code过滤转录本，筛选出包含非编码区的转录本用于新抗原预测
+            filter_task, args = wf.add_task(filter_gtf_by_class_code(), tag=sample, depends=[annot_task])
+            args['gtf'].value = annot_task.outputs['annotated_gtf']
+            args['out_gtf'].value = sample + '.filteredByClassCode.gtf'
+            args['exclude_class_codes'].value = ('c', 's', 'p', 'r', '=', 'u')
 
-        # 提取转录本序列
-        get_seq_task, args = wf.add_task(gffread(), tag=sample, depends=[filter_task])
-        args['input_gff'].value = filter_task.outputs['out_gtf']
-        args['w'].value = sample + '.target_novel_transcript.fa'
-        args['genome'].value = os.path.abspath(ref_genome_fa)
+            # 提取转录本序列
+            get_seq_task, args = wf.add_task(gffread(), tag=sample, depends=[filter_task])
+            args['input_gff'].value = filter_task.outputs['out_gtf']
+            args['w'].value = sample + '.target_novel_transcript.fa'
+            args['genome'].value = os.path.abspath(ref_genome_fa)
 
-        # 使用RNAmining进行编码潜能预测
-        coding_predict_task, args = wf.add_task(RNAmining(), tag=sample, depends=[get_seq_task])
-        args['query'].value = get_seq_task.outputs['transcript_fa']
+            # 使用RNAmining进行编码潜能预测
+            coding_predict_task, args = wf.add_task(RNAmining(), tag=sample, depends=[get_seq_task])
+            args['query'].value = get_seq_task.outputs['transcript_fa']
 
-        # 转录本编码能力预测 transdecoder
-        LongOrfs_task, args = wf.add_task(TransDecoder_LongOrfs(), tag=sample, depends=[coding_predict_task])
-        args['t'].value = coding_predict_task.outputs['codings']
+            # 转录本编码能力预测 transdecoder
+            LongOrfs_task, args = wf.add_task(TransDecoder_LongOrfs(), tag=sample, depends=[coding_predict_task])
+            args['t'].value = coding_predict_task.outputs['codings']
 
-        # predict coding region
-        decoder_task, args = wf.add_task(transdecoder_predict(), tag=sample, depends=[LongOrfs_task])
-        args['t'].value = coding_predict_task.outputs['codings']
-        args['output_dir'].value = LongOrfs_task.outputs['outdir']
-        args['single_best_only'].value = True
+            # predict coding region
+            decoder_task, args = wf.add_task(transdecoder_predict(), tag=sample, depends=[LongOrfs_task])
+            args['t'].value = coding_predict_task.outputs['codings']
+            args['output_dir'].value = LongOrfs_task.outputs['outdir']
+            args['single_best_only'].value = True
 
     # ===============-以下进行内含子来源的新抗原分析-===================
-    for tumor, normal in pair_list:
-        # 结合肿瘤样本和对照样本的组装结果和蛋白编码预测结果进行特异性的肿瘤新肽段提取和筛选
-        tumor_filter_task = wf.get_task_by_name('filterGTFByClassCode-'+tumor)
-        tumor_decoder_task = wf.get_task_by_name('TransDecoderPredict-'+tumor)
-        if normal in fastq_info:
-            normal_filter_task = wf.get_task_by_name('filterGTFByClassCode-'+normal)
-            normal_decoder_task = wf.get_task_by_name('TransDecoderPredict-'+normal)
-            if 'hla_database' in wf.topvars:
-                hla_task = wf.get_task_by_name('arcasHLA-'+normal)
+    if wf.args.intron_antigen:
+        for tumor, normal in pair_list:
+            # 结合肿瘤样本和对照样本的组装结果和蛋白编码预测结果进行特异性的肿瘤新肽段提取和筛选
+            tumor_filter_task = wf.get_task_by_name('filterGTFByClassCode-'+tumor)
+            tumor_decoder_task = wf.get_task_by_name('TransDecoderPredict-'+tumor)
+            if normal in fastq_info:
+                normal_filter_task = wf.get_task_by_name('filterGTFByClassCode-'+normal)
+                normal_decoder_task = wf.get_task_by_name('TransDecoderPredict-'+normal)
+                if 'hla_database' in wf.topvars:
+                    hla_task = wf.get_task_by_name('arcasHLA-'+normal)
+                else:
+                    hla_task = None
             else:
-                hla_task = None
-        else:
-            normal = None
-            normal_filter_task = None
-            normal_decoder_task = None
-            if 'hla_database' in wf.topvars:
-                hla_task = wf.get_task_by_name('arcasHLA-'+tumor)
-            else:
-                hla_task = None
-        find_novel_peptide_task, args = wf.add_task(find_potential_intron_peptides(),
-                                                    name='findNovelPeptides-' + tumor,
-                                                    depends=[tumor_filter_task, tumor_decoder_task, hla_task])
-        args['tumor_gtf'].value = tumor_filter_task.outputs['out_gtf']
-        args['ref_gtf'].value = os.path.abspath(ref_genome_gtf)
-        args['tumor_transdecoder_pep'].value = tumor_decoder_task.outputs['pep_file']
-        if normal in fastq_info:
-            find_novel_peptide_task.depends.append(normal_decoder_task)
-            args['normal_transdecoder_pep'].value = normal_decoder_task.outputs['pep_file']
-        args['out_prefix'].value = tumor
-        args['alleles_file'].value = hla_task.outputs['hla_genotype_tsv'] if hla_task else wf.topvars['hla_file']
-        args['sample_id'].value = normal or tumor
+                normal = None
+                normal_filter_task = None
+                normal_decoder_task = None
+                if 'hla_database' in wf.topvars:
+                    hla_task = wf.get_task_by_name('arcasHLA-'+tumor)
+                else:
+                    hla_task = None
+            find_novel_peptide_task, args = wf.add_task(find_potential_intron_peptides(), name='findNovelPeptides-' + tumor)
+            args['tumor_gtf'].value = tumor_filter_task.outputs['out_gtf']
+            args['ref_gtf'].value = os.path.abspath(ref_genome_gtf)
+            args['tumor_transdecoder_pep'].value = tumor_decoder_task.outputs['pep_file']
+            if normal in fastq_info:
+                find_novel_peptide_task.depends.append(normal_decoder_task)
+                args['normal_transdecoder_pep'].value = normal_decoder_task.outputs['pep_file']
+            args['out_prefix'].value = tumor
+            args['alleles_file'].value = hla_task.outputs['hla_genotype_tsv'] if hla_task else wf.topvars['hla_file']
+            args['sample_id'].value = normal or tumor
 
-        # 先和最新的参考蛋白组（假设里面不应该包含肿瘤新抗原肽段）比对，再过滤，最后预测
-        mhc1_blastp_task, args = wf.add_task(blastp(), tag=tumor + 'MHC1', depends=[makedb_task, find_novel_peptide_task])
-        args['query'].value = find_novel_peptide_task.outputs['mhc1_faa']
-        args['task'].value = 'blastp-short'
-        args['db'].value = makedb_task.outputs['out']
-        args['max_target_seqs'].value = 1
-        args['num_threads'].value = 4
-        args['ungapped'].value = True
-        args['comp_based_stats'].value = '0'
-        args['outfmt'].value = 6
-        args['evalue'].value = 1000
-        args['max_hsps'].value = 1
-        args['qcov_hsp_perc'].value = 100
-        args['out'].value = tumor + '.mhc1.blastp.txt'
+            # 先和最新的参考蛋白组（假设里面不应该包含肿瘤新抗原肽段）比对，再过滤，最后预测
+            mhc1_blastp_task, args = wf.add_task(blastp(), tag=tumor + 'MHC1')
+            args['query'].value = find_novel_peptide_task.outputs['mhc1_faa']
+            args['task'].value = 'blastp-short'
+            args['db'].value = makedb_task.outputs['out']
+            args['max_target_seqs'].value = 1
+            args['num_threads'].value = 4
+            args['ungapped'].value = True
+            args['comp_based_stats'].value = '0'
+            args['outfmt'].value = 6
+            args['evalue'].value = 1000
+            args['max_hsps'].value = 1
+            args['qcov_hsp_perc'].value = 100
+            args['out'].value = tumor + '.mhc1.blastp.txt'
 
-        mhc2_blastp_task, args = wf.add_task(blastp(), tag=tumor + 'MHC2', depends=[makedb_task, find_novel_peptide_task])
-        args['query'].value = find_novel_peptide_task.outputs['mhc2_faa']
-        args['task'].value = 'blastp-short'
-        args['db'].value = makedb_task.outputs['out']
-        args['max_target_seqs'].value = 1
-        args['num_threads'].value = 4
-        args['ungapped'].value = True
-        args['comp_based_stats'].value = '0'
-        args['outfmt'].value = 6
-        args['evalue'].value = 1000
-        args['max_hsps'].value = 1
-        args['qcov_hsp_perc'].value = 100
-        args['out'].value = tumor + '.mhc2.blastp.txt'
+            mhc2_blastp_task, args = wf.add_task(blastp(), tag=tumor + 'MHC2', depends=[makedb_task, find_novel_peptide_task])
+            args['query'].value = find_novel_peptide_task.outputs['mhc2_faa']
+            args['task'].value = 'blastp-short'
+            args['db'].value = makedb_task.outputs['out']
+            args['max_target_seqs'].value = 1
+            args['num_threads'].value = 4
+            args['ungapped'].value = True
+            args['comp_based_stats'].value = '0'
+            args['outfmt'].value = 6
+            args['evalue'].value = 1000
+            args['max_hsps'].value = 1
+            args['qcov_hsp_perc'].value = 100
+            args['out'].value = tumor + '.mhc2.blastp.txt'
 
-        # 根据比对结果过滤
-        filterMHC1_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor + 'MHC1', depends=[mhc1_blastp_task, find_novel_peptide_task])
-        args['blast_result'].value = mhc1_blastp_task.outputs['out']
-        args['raw_files'].value = [find_novel_peptide_task.outputs['mhc1_csv'], find_novel_peptide_task.outputs['mhc1_faa']]
-        args['out_prefix'].value = tumor + '.filtered.mhc1'
+            # 根据比对结果过滤
+            filterMHC1_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor + 'MHC1')
+            args['blast_result'].value = mhc1_blastp_task.outputs['out']
+            args['raw_files'].value = [find_novel_peptide_task.outputs['mhc1_csv'], find_novel_peptide_task.outputs['mhc1_faa']]
+            args['out_prefix'].value = tumor + '.filtered.mhc1'
 
-        filterMHC2_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor + 'MHC2', depends=[mhc2_blastp_task, find_novel_peptide_task])
-        args['blast_result'].value = mhc2_blastp_task.outputs['out']
-        args['raw_files'].value = [find_novel_peptide_task.outputs['mhc2_txt'], find_novel_peptide_task.outputs['mhc2_faa']]
-        args['out_prefix'].value = tumor + '.filtered.mhc2'
+            filterMHC2_task, args = wf.add_task(filter_pep_by_blast_id(), tag=tumor + 'MHC2')
+            args['blast_result'].value = mhc2_blastp_task.outputs['out']
+            args['raw_files'].value = [find_novel_peptide_task.outputs['mhc2_txt'], find_novel_peptide_task.outputs['mhc2_faa']]
+            args['out_prefix'].value = tumor + '.filtered.mhc2'
 
-        # ------------------run comet------------------
-        ms_search_task = None
-        ms_search_task2 = None
-        convert2mgf_task = None
-        if ms_data and (tumor in ms_data):
-            convert2mgf_task, args = wf.add_task(raw2mgf_with_rawtools(), tag=tumor)
-            args['d'].value = ms_data[tumor]
-            # 使用comet软件进行搜库，主要针对MHC-I类型的
-            ms_search_task, args = wf.add_task(comet(), tag=tumor + 'MHC1', depends=[convert2mgf_task])
-            if wf.args.genome_pep:
-                ms_search_task.depends.append(filterMHC1_task)
-                args['database'].value = filterMHC1_task.outputs['out_faa']
-            else:
-                ms_search_task.depends.append(find_novel_peptide_task)
-                args['database'].value = find_novel_peptide_task.outputs['mhc1_faa']
-            args['param_file'].value = wf.args.comet_params
-            args['input_files'].value = convert2mgf_task.outputs['out_files']
+            # ------------------run comet------------------
+            ms_search_task = None
+            ms_search_task2 = None
+            convert2mgf_task = None
+            if ms_data and (tumor in ms_data):
+                convert2mgf_task, args = wf.add_task(raw2mgf_with_rawtools(), tag=tumor)
+                args['d'].value = ms_data[tumor]
+                # 使用comet软件进行搜库，主要针对MHC-I类型的
+                ms_search_task, args = wf.add_task(comet(), tag=tumor + 'MHC1', depends=[convert2mgf_task])
+                if wf.args.genome_pep:
+                    ms_search_task.depends.append(filterMHC1_task)
+                    args['database'].value = filterMHC1_task.outputs['out_faa']
+                else:
+                    ms_search_task.depends.append(find_novel_peptide_task)
+                    args['database'].value = find_novel_peptide_task.outputs['mhc1_faa']
+                args['param_file'].value = wf.args.comet_params
+                args['input_files'].value = convert2mgf_task.outputs['out_files']
 
-            # 使用comet软件进行搜库，主要针对MHC-II类型的
-            ms_search_task2, args = wf.add_task(comet(), tag=tumor + 'MHC2', depends=[convert2mgf_task])
-            if wf.args.genome_pep:
-                ms_search_task.depends.append(filterMHC2_task)
-                args['database'].value = filterMHC2_task.outputs['out_faa']
-            else:
-                ms_search_task.depends.append(find_novel_peptide_task)
-                args['database'].value = find_novel_peptide_task.outputs['mhc2_faa']
-            args['param_file'].value = wf.topvars['comet_params']
-            args['input_files'].value = convert2mgf_task.outputs['out_files']
+                # 使用comet软件进行搜库，主要针对MHC-II类型的
+                ms_search_task2, args = wf.add_task(comet(), tag=tumor + 'MHC2', depends=[convert2mgf_task])
+                if wf.args.genome_pep:
+                    ms_search_task.depends.append(filterMHC2_task)
+                    args['database'].value = filterMHC2_task.outputs['out_faa']
+                else:
+                    ms_search_task.depends.append(find_novel_peptide_task)
+                    args['database'].value = find_novel_peptide_task.outputs['mhc2_faa']
+                args['param_file'].value = wf.topvars['comet_params']
+                args['input_files'].value = convert2mgf_task.outputs['out_files']
 
-        # --------------run mhcflurry and netMHCIIpan4--------------
-        # mhcflurry prediction for MHC-1
-        mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor, depends=[filterMHC1_task])
-        args['input_csv'].value = filterMHC1_task.outputs['out_csv']
-        args['out'].value = tumor + '.mhcflurry_prediction.csv'
+            # --------------run mhcflurry and netMHCIIpan4--------------
+            # mhcflurry prediction for MHC-1
+            mhcflurry_task, args = wf.add_task(mhcflurry_predict(), tag=tumor, depends=[filterMHC1_task])
+            args['input_csv'].value = filterMHC1_task.outputs['out_csv']
+            args['out'].value = tumor + '.mhcflurry_prediction.csv'
 
-        # check_and_convert_alleles_for_netMHCIIpan4
-        convert_task, args = wf.add_task(check_and_convert_alleles_for_netMHCIIpan4(), tag=tumor, depends=[hla_task])
-        args['alleles_file'].value = hla_task.outputs['hla_genotype_tsv'] if hla_task else wf.topvars['hla_file']
-        args['sample_id'].value = normal or tumor
+            # check_and_convert_alleles_for_netMHCIIpan4
+            convert_task, args = wf.add_task(check_and_convert_alleles_for_netMHCIIpan4(), tag=tumor, depends=[hla_task])
+            args['alleles_file'].value = hla_task.outputs['hla_genotype_tsv'] if hla_task else wf.topvars['hla_file']
+            args['sample_id'].value = normal or tumor
 
-        # netMHCIIpan4 for MHC-2 prediction
-        netmhcpanii_task, args = wf.add_task(netMHCIIPan(), tag=tumor, depends=[convert_task, filterMHC2_task])
-        args['infile'].value = filterMHC2_task.outputs['out_txt']
-        args['alleles_file'].value = convert_task.outputs['out']
-        args['inptype'].value = '1'
-        args['xls'].value = True
-        args['xlsfile'].value = tumor + '.netMHCPanII.txt'
-        args['stdout'].value = tumor + '.stdout.txt'
-        # --------------end of run mhcflurry and netMHCIIpan4--------------
+            # netMHCIIpan4 for MHC-2 prediction
+            netmhcpanii_task, args = wf.add_task(netMHCIIPan(), tag=tumor, depends=[convert_task, filterMHC2_task])
+            args['infile'].value = filterMHC2_task.outputs['out_txt']
+            args['alleles_file'].value = convert_task.outputs['out']
+            args['inptype'].value = '1'
+            args['xls'].value = True
+            args['xlsfile'].value = tumor + '.netMHCPanII.txt'
+            args['stdout'].value = tumor + '.stdout.txt'
+            # --------------end of run mhcflurry and netMHCIIpan4--------------
 
-        # -------------------run pMTnet------------------
-        # prepare_pMTnet_input for MHC1
-        mixcr_task = wf.get_task_by_name('mixcrRNAseq-'+(tumor or normal))
-        mhc1_pMTnet_input_task, args = wf.add_task(prepare_pMTnet_input(), tag=tumor + '-MHC1', depends=[mixcr_task, hla_task, filterMHC1_task])
-        args['mixcr_trb'].value = mixcr_task.outputs['TRB']
-        args['antigen_seq'].value = filterMHC1_task.outputs['out_faa']
-        args['hla_file'].value = hla_task.outputs['hla_genotype_tsv'] if hla_task else wf.topvars['hla_file']
-        args['sample_id'].value = normal or tumor
+            # -------------------run pMTnet------------------
+            # prepare_pMTnet_input for MHC1
+            mixcr_task = wf.get_task_by_name('mixcrRNAseq-'+(tumor or normal))
+            mhc1_pMTnet_input_task, args = wf.add_task(prepare_pMTnet_input(), tag=tumor + '-MHC1', depends=[mixcr_task, hla_task, filterMHC1_task])
+            args['mixcr_trb'].value = mixcr_task.outputs['TRB']
+            args['antigen_seq'].value = filterMHC1_task.outputs['out_faa']
+            args['hla_file'].value = hla_task.outputs['hla_genotype_tsv'] if hla_task else wf.topvars['hla_file']
+            args['sample_id'].value = normal or tumor
 
-        # prepare_pMTnet_input for MHC2
-        mhc2_pMTnet_input_task, args = wf.add_task(prepare_pMTnet_input(), tag=tumor + '-MHC2', depends=[mixcr_task, hla_task, filterMHC2_task])
-        args['mixcr_trb'].value = mixcr_task.outputs['TRB']
-        args['antigen_seq'].value = filterMHC2_task.outputs['out_faa']
-        args['hla_file'].value = hla_task.outputs['hla_genotype_tsv'] if hla_task else wf.topvars['hla_file']
-        args['sample_id'].value = normal or tumor
+            # prepare_pMTnet_input for MHC2
+            mhc2_pMTnet_input_task, args = wf.add_task(prepare_pMTnet_input(), tag=tumor + '-MHC2', depends=[mixcr_task, hla_task, filterMHC2_task])
+            args['mixcr_trb'].value = mixcr_task.outputs['TRB']
+            args['antigen_seq'].value = filterMHC2_task.outputs['out_faa']
+            args['hla_file'].value = hla_task.outputs['hla_genotype_tsv'] if hla_task else wf.topvars['hla_file']
+            args['sample_id'].value = normal or tumor
 
-        # run pMTnet for MHC1
-        mhc1_pmtnet_task, args = wf.add_task(pMTnet(), tag=tumor + '-MHC1', depends=[mhc1_pMTnet_input_task])
-        args['input'].value = mhc1_pmtnet_task.outputs['out']
+            # run pMTnet for MHC1
+            mhc1_pmtnet_task, args = wf.add_task(pMTnet(), tag=tumor + '-MHC1', depends=[mhc1_pMTnet_input_task])
+            args['input'].value = mhc1_pmtnet_task.outputs['out']
+            mhc1_pmtnet_task.outputs['out'].report = True
 
-        # run pMTnet for MHC2
-        mhc2_pmtnet_task, args = wf.add_task(pMTnet(), tag=tumor + '-MHC2', depends=[mhc2_pMTnet_input_task])
-        args['input'].value = mhc2_pmtnet_task.outputs['out']
-        # -----------------end of pMTnet------------------
+            # run pMTnet for MHC2
+            mhc2_pmtnet_task, args = wf.add_task(pMTnet(), tag=tumor + '-MHC2', depends=[mhc2_pMTnet_input_task])
+            args['input'].value = mhc2_pmtnet_task.outputs['out']
+            mhc2_pmtnet_task.outputs['out'].report = True
+            # -----------------end of pMTnet------------------
 
-        # annotate result of mhcflurry
-        tumor_assemble_task = wf.get_task_by_name('filterGTFByExp-'+tumor)
-        tumor_gffcompare_task = wf.get_task_by_name('gffcompare-'+tumor)
-        annotateMhcflurry, args = wf.add_task(annotate_mhcflurry_result(), tag=tumor, depends=[mhcflurry_task, tumor_assemble_task, tumor_gffcompare_task])
-        args['csv_file'].value = mhcflurry_task.outputs['out']
-        args['tmap'].value = tumor_assemble_task.outputs['tmap']
-        args['gtf'].value = tumor_gffcompare_task.outputs['annotated_gtf']
-        if convert2mgf_task is not None:
-            args['comet_results'].value = ms_search_task.outputs['out']
-        args['out'].value = tumor + '.annotated.mhcflurry.csv'
-
-        # annotate result of netMHCpanII
-        if netmhcpanii_task is not None:
-            annotNetMHCPan, args = wf.add_task(annotate_netMHCPan_result(), tag=tumor,
-                                               depends=[netmhcpanii_task, find_novel_peptide_task,
-                                                        tumor_assemble_task, tumor_gffcompare_task])
-            args['net_file'].value = netmhcpanii_task.outputs['out']
-            args['pep2id_file'].value = find_novel_peptide_task.outputs['mhc2_txt']
+            # annotate result of mhcflurry
+            tumor_assemble_task = wf.get_task_by_name('filterGTFByExp-'+tumor)
+            tumor_gffcompare_task = wf.get_task_by_name('gffcompare-'+tumor)
+            annotateMhcflurry, args = wf.add_task(annotate_mhcflurry_result(), tag=tumor)
+            args['csv_file'].value = mhcflurry_task.outputs['out']
             args['tmap'].value = tumor_assemble_task.outputs['tmap']
             args['gtf'].value = tumor_gffcompare_task.outputs['annotated_gtf']
             if convert2mgf_task is not None:
-                args['comet_results'].value = ms_search_task2.outputs['out']
-            args['out'].value = tumor + '.annotated.netMHCPanII.txt'
+                args['comet_results'].value = ms_search_task.outputs['out']
+            args['out'].value = tumor + '.annotated.mhcflurry.csv'
+            annotateMhcflurry.outputs['out'].report = True
+
+            # annotate result of netMHCpanII
+            if netmhcpanii_task is not None:
+                annotNetMHCPan, args = wf.add_task(annotate_netMHCPan_result(), tag=tumor)
+                args['net_file'].value = netmhcpanii_task.outputs['out']
+                args['pep2id_file'].value = find_novel_peptide_task.outputs['mhc2_txt']
+                args['tmap'].value = tumor_assemble_task.outputs['tmap']
+                args['gtf'].value = tumor_gffcompare_task.outputs['annotated_gtf']
+                if convert2mgf_task is not None:
+                    args['comet_results'].value = ms_search_task2.outputs['out']
+                args['out'].value = tumor + '.annotated.netMHCPanII.txt'
+                annotNetMHCPan.outputs['out'].report = True
     # final
     wf.run()
 
     # merger result
     if wf.success:
         print('Merging Results......')
-        merge_metrics(wf.args.outdir, filter_ref='', outdir=os.path.join(wf.args.outdir, 'merged_qc'))
-        merge_arcasHLA_genetype(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merged_HLA'))
-        merge_star_fusion(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merged_starfusion'))
-        merge_salmon_quant(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merged_expression'))
-        merge_mhcflurry_result(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merged_mhcflurry'))
-        # 还需要合并quantiseq、netMHCpanII、pmtnet
+        merge_metrics(wf.args.outdir, filter_ref='', outdir=os.path.join(wf.args.outdir, 'Report', 'merged_qc'))
+        merge_arcasHLA_genetype(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'Report', 'merged_HLA'))
+        merge_star_fusion(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'Report', 'merged_starfusion'))
+        merge_salmon_quant(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'Report', 'merged_expression'))
+        if wf.args.intron_antigen:
+            merge_mhcflurry_result(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'Report', 'merged_mhcflurry'))
         print('...end...')
 
 
