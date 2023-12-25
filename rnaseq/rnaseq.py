@@ -4,19 +4,8 @@ import sys; sys.path.append(script_path)
 from basefly.basefly import Argument, Output, Command, Workflow, TopVar, TmpVar
 from utils.tidy_tools import merge_metrics, merge_star_fusion, merge_arcasHLA_genetype
 from utils.get_fastq_info import get_fastq_info
-from basefly.commands import RNASplitReadsAtJunction, recalibration, Haplotyper
+from basefly.commands import RNASplitReadsAtJunction
 __author__ = 'gdq'
-
-"""
-1. fastp
-2. star | sentieon star
-3. salmon-alignment-based
-4. star-fusion
-5. picard collectrnaseqmetrics QC: rRNA, mRNA percent
-6. arcasHLA
-to do list:
-7. https://icbi-lab.github.io/immunedeconv/
-"""
 
 
 def fastp(sample):
@@ -236,14 +225,55 @@ def quant_merge():
     return cmd
 
 
+def recalibration(sample):
+    cmd = Command()
+    cmd.meta.name = 'recalibration'
+    cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
+    cmd.runtime.tool = 'sentieon driver'
+    cmd.args['t'] = Argument(prefix='-t ', default=16, desc='number of threads to use in computation, set to number of cores in the server')
+    cmd.args['intervals'] = Argument(prefix='--interval ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
+    cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='reference fasta file')
+    cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='input bam file')
+    cmd.args['_x'] = Argument(type='fix', value='--algo QualCal')
+    cmd.args['database'] = Argument(prefix='-k ', type='infile', multi_times=True, desc='known indel vcf file')
+    cmd.args['recal_data'] = Argument(desc="output recal_data.table", value=f'{sample}.recal_data.table')
+    cmd.outputs['recal_data'] = Output(value='{recal_data}')
+    return cmd
+
+
+def Haplotyper(normal_sample):
+    cmd = Command()
+    cmd.meta.name = 'Haplotyper'
+    cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02'
+    cmd.runtime.tool = 'sentieon driver'
+    cmd.args['intervals'] = Argument(prefix='--interval ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
+    cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='reccaled tumor and normal bam list')
+    cmd.args['recal_data'] = Argument(prefix='-q ', type='infile', desc='tumor and normal recal data list')
+    cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='reference fasta file')
+    cmd.args['method'] = Argument(type='fix', value='--algo Haplotyper')
+    cmd.args['emit_mode'] = Argument(prefix='--emit_mode ', default='gvcf', desc='determines what calls will be emitted. possible values:variant,confident,all,gvcf')
+    cmd.args['ploidy'] = Argument(prefix='--ploidy ', type='int', default=2, desc='determines the ploidy number of the sample being processed. The default value is 2.')
+    cmd.args['out_vcf'] = Argument(value=f'{normal_sample}.g.vcf.gz', desc='output vcf file')
+    cmd.outputs['out_vcf'] = Output(value='{out_vcf}')
+    cmd.outputs['out_vcf_idx'] = Output(value='{out_vcf}.tbi')
+    return cmd
+
+
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'RnaSeqPipeline'
-    wf.meta.desc = 'This is a pipeline for rnaseq analysis'
+    wf.meta.desc = """
+    RNA-Seq分析流程, 以转录本和基因定量及融合基因检测功能为主, 另外还可以进行HLA基因定型. 主要包含步骤如下:
+    1. 原始测序数据质控,包括测序接头自动去除,使用工具为fastp
+    2. 将测序reads和参考基因组进行比对,使用工具为STAR
+    3. 基于比对结果,对转录本和基因进行表达量定量,使用工具为Salmon
+    4. 基于比对结果,进行融合基因检测,使用工具为star-fusion
+    5. 对比对结果进行质控指标统计,使用工具为picard collectrnaseqmetrics
+    6. 基于比对结果,对HLA基因进行定型, 使用工具为arcasHLA
+    """
     wf.init_argparser()
     # add workflow args
     wf.add_argument('-star_index', required=True, help='star alignment index dir')
-    wf.add_argument('--sentieon', default=False, action="store_true", help='indicate to use sentieon STAR tool')
     wf.add_argument('-fusion_index', required=True, help='star-fusion database dir: CTAT_resource_lib from https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz')
     wf.add_argument('-transcripts_fa', required=True, help='transcriptome fasta file')
     wf.add_argument('-genome_fa', required=False, help='genome fasta file, needed for variant calling')
