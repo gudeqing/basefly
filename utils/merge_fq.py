@@ -9,14 +9,14 @@ def merge_fq(fq_lst, outdir, group='tumor'):
     r2_outdir = os.path.join(outdir, group + '_R2')
     os.makedirs(r1_outdir)
     os.makedirs(r2_outdir)
-    # 使用第一对fastq的原名作为合并后文件的名称
+    # 使用排序后的第一对fastq的原名作为合并后文件的名称
     fq_r1_name = os.path.basename(fq_lst[0])
     fq_r2_name = os.path.basename(fq_lst[1])
 
     r1 = []
     r2 = []
     if len(fq_lst) == 2:
-        print(f'Just one pair fastq for group {group}, no need to merge')
+        print(f'Just one pair fastq for group {group}, no need to merge, just copy')
         os.system(f'cp {fq_lst[0]} {r1_outdir}')
         os.system(f'cp {fq_lst[1]} {r2_outdir}')
     if len(fq_lst) % 2 != 0:
@@ -48,5 +48,4 @@ if __name__ == '__main__':
     merge_fq(tumor.split(','), args.outdir, group='tumor')
     if normal:
         merge_fq(normal.split(','), args.outdir, group='normal')
-
 
