@@ -233,7 +233,8 @@ def arcas_hla():
     cmd.meta.version = '0.2.5'
     cmd.meta.function = 'HLA gene genotying'
     cmd.meta.desc = """
-    A fast and accurate in silico tool that infers HLA genotypes from RNA-sequencing data. 
+    A fast and accurate in silico tool that infers HLA genotypes from RNA-sequencing data.  
+    arcasHLA performs high resolution genotyping for HLA class I and class II genes from RNA sequencing. 
     """
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 5*1024**3
