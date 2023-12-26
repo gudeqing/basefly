@@ -121,7 +121,7 @@ class Argument:
                 self.__annotations__['value'] = List[List[Any]]
         # 对于有集合候选的参数，先对默认值检查一番
         if type(self.range) in {set, list}:
-            if self.default not in self.range:
+            if self.default is not None and self.default not in self.range:
                 raise Exception(f'default value is not in {self.range}')
 
         if self.type == 'outstr':
