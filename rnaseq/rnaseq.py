@@ -13,6 +13,7 @@ def fastp(sample):
     cmd.meta.name = 'fastp'
     cmd.meta.version = '0.23.2'
     cmd.meta.source = 'https://github.com/OpenGene/fastp'
+    cmd.meta.function = 'fastq QC, adapter trimming'
     cmd.meta.desc = """
     fastp is a tool used in bioinformatics for the quality control and preprocessing of raw sequence data. 
     fastp is known for its speed and efficiency, and it can process data in parallel, making it suitable for large datasets.
@@ -47,6 +48,7 @@ def star(sample, platform='illumina', sentieon=False):
     cmd.meta.name = 'star'
     cmd.meta.version = 'v1.10'
     cmd.meta.source = 'https://github.com/alexdobin/STAR'
+    cmd.meta.function = 'Spliced Transcripts Alignment'
     cmd.meta.desc = """
     Spliced Transcripts Alignment to a Reference (STAR) is a fast RNA-seq read mapper, with support for splice-junction and fusion read detection.
     STAR aligns reads by finding the Maximal Mappable Prefix (MMP) hits between reads (or read pairs) and the genome, using a Suffix Array index.
@@ -55,7 +57,7 @@ def star(sample, platform='illumina', sentieon=False):
     STAR performs local alignment, automatically soft clipping ends of reads with high mismatches.
     """
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
-    cmd.runtime.memory = 25*1024**3
+    cmd.runtime.memory = 30*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'sentieon STAR' if sentieon else 'STAR'
     cmd.args['threads'] = Argument(prefix='--runThreadN ', default=4, desc='threads to use')
@@ -125,6 +127,7 @@ def salmon():
     cmd.meta.name = 'salmon'
     cmd.meta.version = '1.5.2'
     cmd.meta.source = 'https://github.com/COMBINE-lab/salmon'
+    cmd.meta.function = 'Transcript or Gene expression quantification'
     cmd.meta.desc = 'Perform dual-phase, selective-alignment-based estimation of transcript abundance from RNA-seq reads'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 2*1024**3
@@ -155,6 +158,7 @@ def star_fusion():
     cmd.meta.name = 'star-fusion'
     cmd.meta.source = "https://github.com/STAR-Fusion/STAR-Fusion"
     cmd.meta.version = 'v1.10.0'
+    cmd.meta.function = 'Fusion gene identification'
     cmd.meta.desc = """
     STAR-Fusion is a component of the Trinity Cancer Transcriptome Analysis Toolkit (CTAT). 
     STAR-Fusion uses the STAR aligner to identify candidate fusion transcripts supported by Illumina reads. 
@@ -194,6 +198,7 @@ def collect_metrics(sample):
     cmd = Command()
     cmd.meta.name = 'CollectRnaSeqMetrics'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360037057492-CollectRnaSeqMetrics-Picard-'
+    cmd.meta.function = 'Collect RnaSeq QC Metrics'
     cmd.meta.desc = """
     Produces RNA alignment metrics for a SAM or BAM file.
     This tool takes a SAM/BAM file containing the aligned reads from an RNAseq experiment and produces metrics describing the distribution of the bases within the transcripts. 
@@ -226,6 +231,7 @@ def arcas_hla():
     cmd.meta.name = 'arcasHLA'
     cmd.meta.source = 'https://github.com/RabadanLab/arcasHLA'
     cmd.meta.version = '0.2.5'
+    cmd.meta.function = 'HLA gene genotying'
     cmd.meta.desc = """
     A fast and accurate in silico tool that infers HLA genotypes from RNA-sequencing data. 
     """
@@ -250,6 +256,7 @@ def quant_merge():
     cmd.meta.name = 'quantMerge'
     cmd.meta.version = '1.5.2'
     cmd.meta.source = 'https://github.com/COMBINE-lab/salmon'
+    cmd.meta.function = 'merge quantification results'
     cmd.meta.desc = 'Merge multiple quantification results into a single file'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 5*1024**3
@@ -270,6 +277,7 @@ def recalibration(sample):
     cmd.meta.name = 'Recalibration'
     cmd.meta.version = '202010.02'
     cmd.meta.source = 'https://www.sentieon.com/'
+    cmd.meta.function = 'Base quality recalibration'
     cmd.meta.source = 'Generates recalibration table for Base Quality Score Recalibration (BQSR)'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.tool = 'sentieon driver'
@@ -291,6 +299,7 @@ def Haplotyper(normal_sample):
     cmd.meta.version = '202010.02'
     cmd.meta.source = 'https://www.sentieon.com/'
     cmd.meta.name = 'Haplotyper'
+    cmd.meta.function = 'Call SNPs and Indels'
     cmd.meta.desc = 'Call germline SNPs and indels via local re-assembly of haplotypes'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.tool = 'sentieon driver'
@@ -310,6 +319,7 @@ def Haplotyper(normal_sample):
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'RnaSeqPipeline'
+    wf.meta.function = '基于RNAseq数据进行转录本水平和基因水平的表达定量分析、融合基因鉴定等'
     wf.meta.desc = """
     本系统为RNA-Seq分析流程, 以转录本和基因表达定量及融合基因检测功能为主, 另外还可以进行HLA基因定型. 主要包含步骤如下:
     1. 原始测序数据质控,包括测序接头自动去除,使用工具为fastp
