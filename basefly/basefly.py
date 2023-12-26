@@ -1026,10 +1026,10 @@ class Workflow:
         contents += [f'{self.meta.desc}']
         contents += ['## 系统总体结构']
         contents += ['### 模块列表']
-        contents += ["| name | function | source | vesion |"]
+        contents += ["| name | version | source | function |"]
         contents += ["| :--- | :---: | :---: | :---: |"]
         for cmd in tools:
-            contents += [f"|{cmd.meta.name}|{cmd.meta.function.strip()}|{cmd.meta.source}|{cmd.meta.version}|"]
+            contents += [f"|{cmd.meta.name}|{cmd.meta.version}|{cmd.meta.source}|{cmd.meta.function.strip()}|"]
         contents += ['### 系统总体结构图']
         contents += ["本系统为数据分析流程，流程结构图可能随参数有所变化，下图仅为一个典型示例图"]
         contents += [f'![分析流程的有向无循环(DAG)图](./state.svg "{self.meta.name}")']
