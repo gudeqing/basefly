@@ -11,17 +11,26 @@ __author__ = 'gdq'
 def fastp(sample):
     cmd = Command()
     cmd.meta.name = 'fastp'
-    # cmd.runtime.image = 'gudeqing/fastp:0.21.0'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.meta.version = '0.23.2'
+    cmd.meta.source = 'https://github.com/OpenGene/fastp'
+    cmd.meta.desc = """
+    fastp is a tool used in bioinformatics for the quality control and preprocessing of raw sequence data. 
+    fastp is known for its speed and efficiency, and it can process data in parallel, making it suitable for large datasets.
+    fastp provides several key functions:
+    * It can filter out low-quality reads, which are sequences that have a high probability of containing errors. This is done based on quality scores that are assigned to each base in a read.
+    * It can trim adapter sequences, which are artificial sequences added during the preparation of sequencing libraries and are not part of the actual sample's genome.
+    * It provides comprehensive quality control reports, including information on sequence quality, GC content, sequence length distribution, and more.
+    """
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.tool = 'fastp'
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
     cmd.args['threads'] = Argument(prefix='-w ', default=5, desc='thread number')
     cmd.args['other_args'] = Argument(prefix='', default='', desc="other arguments you want to use, such as '-x val'")
-    cmd.args['out1'] = Argument(prefix='-o ', value=TmpVar(value=f'{sample}.clean.R1.fq.gz', name='~{sample}.clean.R1.fq.gz'), type='str', desc='clean read1 output fastq file')
-    cmd.args['out2'] = Argument(prefix='-O ', value=TmpVar(value=f'{sample}.clean.R2.fq.gz', name='~{sample}.clean.R2.fq.gz'), type='str', desc='clean read2 output fastq file')
-    cmd.args['html'] = Argument(prefix='-h ', value=TmpVar(value=f'{sample}.fastp.html', name='~{sample}.fastp.html'), type='str', desc='html report file')
-    cmd.args['json'] = Argument(prefix='-j ', value=TmpVar(value=f'{sample}.fastp.json', name='~{sample}.fastp.json') , type='str', desc='html report file')
+    cmd.args['out1'] = Argument(prefix='-o ', value=f'{sample}.clean.R1.fq.gz', type='str', desc='clean read1 output fastq file')
+    cmd.args['out2'] = Argument(prefix='-O ', value=f'{sample}.clean.R2.fq.gz', type='str', desc='clean read2 output fastq file')
+    cmd.args['html'] = Argument(prefix='-h ', value=f'{sample}.fastp.html', type='str', desc='html report file')
+    cmd.args['json'] = Argument(prefix='-j ', value=f'{sample}.fastp.json', type='str', desc='html report file')
     # 下面的outputs设置起初是为了能够生成wdl设置,
     cmd.outputs['out1'] = Output(value="{out1}", type='outfile')  # 这里使用”{}“引用其他Argument对象作为输入
     cmd.outputs['out2'] = Output(value="{out2}")
@@ -36,7 +45,16 @@ def star(sample, platform='illumina', sentieon=False):
     """
     cmd = Command()
     cmd.meta.name = 'star'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.meta.version = 'v1.10'
+    cmd.meta.source = 'https://github.com/alexdobin/STAR'
+    cmd.meta.desc = """
+    Spliced Transcripts Alignment to a Reference (STAR) is a fast RNA-seq read mapper, with support for splice-junction and fusion read detection.
+    STAR aligns reads by finding the Maximal Mappable Prefix (MMP) hits between reads (or read pairs) and the genome, using a Suffix Array index.
+    Different parts of a read can be mapped to different genomic positions, corresponding to splicing or RNA-fusions. 
+    The genome index includes known splice-junctions from annotated gene models, allowing for sensitive detection of spliced reads. 
+    STAR performs local alignment, automatically soft clipping ends of reads with high mismatches.
+    """
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 25*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'sentieon STAR' if sentieon else 'STAR'
@@ -105,8 +123,10 @@ def salmon():
     """
     cmd = Command()
     cmd.meta.name = 'salmon'
-    cmd.meta.desc = 'gene/transcript expression quantification'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.meta.version = '1.5.2'
+    cmd.meta.source = 'https://github.com/COMBINE-lab/salmon'
+    cmd.meta.desc = 'Perform dual-phase, selective-alignment-based estimation of transcript abundance from RNA-seq reads'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 2*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quant'
@@ -135,7 +155,16 @@ def star_fusion():
     cmd.meta.name = 'star-fusion'
     cmd.meta.source = "https://github.com/STAR-Fusion/STAR-Fusion"
     cmd.meta.version = 'v1.10.0'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.meta.desc = """
+    STAR-Fusion is a component of the Trinity Cancer Transcriptome Analysis Toolkit (CTAT). 
+    STAR-Fusion uses the STAR aligner to identify candidate fusion transcripts supported by Illumina reads. 
+    STAR-Fusion further processes the output generated by the STAR aligner to map junction reads and spanning reads to a reference annotation set.
+    There are two ways to run STAR-Fusion. The typical case is that you're staring with FASTQ files. 
+    Alternatively, in the context of a more comprehensive transcriptome analysis pipeline leveraging STAR and the human genome from our CTAT genome lib,
+    you may have a 'Chimeric.junction.out' file generated as one of the outputs from an earlier STAR alignment run. 
+    If so, you can 'kickstart' STAR-Fusion by using just this 'Chimeric.junction.out' file.
+    """
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 10*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = ' STAR-Fusion'
@@ -164,9 +193,14 @@ def collect_metrics(sample):
     """
     cmd = Command()
     cmd.meta.name = 'CollectRnaSeqMetrics'
-    # cmd.runtime.image = 'broadinstitute/picard:latest'
-    # cmd.runtime.tool = 'java -jar /usr/picard/picard.jar CollectRnaSeqMetrics'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360037057492-CollectRnaSeqMetrics-Picard-'
+    cmd.meta.desc = """
+    Produces RNA alignment metrics for a SAM or BAM file.
+    This tool takes a SAM/BAM file containing the aligned reads from an RNAseq experiment and produces metrics describing the distribution of the bases within the transcripts. 
+    It calculates the total numbers and the fractions of nucleotides within specific genomic regions including untranslated regions (UTRs), introns, intergenic sequences (between discrete genes), and peptide-coding sequences (exons).
+    This tool also determines the numbers of bases that pass quality filters that are specific to Illumina data (PF_BASES). 
+    """
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 10*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'java -jar /usr/local/src/picard.jar CollectRnaSeqMetrics'
@@ -181,7 +215,7 @@ def collect_metrics(sample):
     return cmd
 
 
-def arcas_hla(threads=4):
+def arcas_hla():
     """
     set -e
     arcasHLA extract --unmapped -t ~{threads} -o ./ ~{bam}
@@ -190,18 +224,22 @@ def arcas_hla(threads=4):
     """
     cmd = Command()
     cmd.meta.name = 'arcasHLA'
+    cmd.meta.source = 'https://github.com/RabadanLab/arcasHLA'
     cmd.meta.version = '0.2.5'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
+    cmd.meta.desc = """
+    A fast and accurate in silico tool that infers HLA genotypes from RNA-sequencing data. 
+    """
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 5*1024**3
-    cmd.runtime.cpu = 2
+    cmd.runtime.cpu = 4
     # 软链接数据库
     cmd.args['database'] = Argument(prefix='rm -r /home/arcasHLA-master/dat && ln -s ', type='indir', level='optional', desc='database of arcas_software')
     cmd.args['link'] = Argument(prefix='/home/arcasHLA-master/dat &', type='bool', default=False)
     # run software
-    cmd.args['_1'] = Argument(value=f'arcasHLA extract --temp ./ --unmapped -t {threads} -o .', type='fix')
+    cmd.args['_1'] = Argument(value=f'arcasHLA extract --temp ./ --unmapped -t {cmd.runtime.cpu} -o .', type='fix')
     cmd.args['bam'] = Argument(value='', type='infile', desc='input bam file')
     cmd.args['_2'] = Argument(value=' && arcasHLA genotype', type='fix')
-    cmd.args['_3'] = Argument(value=f'--min_count 75 -t {threads} -o ./ *.1.fq.gz *.2.fq.gz &&', type='fix')
+    cmd.args['_3'] = Argument(value=f'--min_count 75 -t {cmd.runtime.cpu} -o ./ *.1.fq.gz *.2.fq.gz &&', type='fix')
     cmd.args['_4'] = Argument(value='arcasHLA merge', type='fix')
     cmd.outputs['hla_genotype'] = Output(value='*.genotype.json')
     return cmd
@@ -210,9 +248,11 @@ def arcas_hla(threads=4):
 def quant_merge():
     cmd = Command()
     cmd.meta.name = 'quantMerge'
+    cmd.meta.version = '1.5.2'
+    cmd.meta.source = 'https://github.com/COMBINE-lab/salmon'
     cmd.meta.desc = 'Merge multiple quantification results into a single file'
-    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.0'
-    cmd.runtime.memory = 2*1024**3
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
+    cmd.runtime.memory = 5*1024**3
     cmd.runtime.cpu = 2
     cmd.runtime.tool = 'salmon quantmerge'
     # 下面的quants参数对应的是目录，所以type='indir'
@@ -221,16 +261,21 @@ def quant_merge():
     cmd.args['column'] = Argument(prefix='--column ', default='TPM', range=['TPM', 'NumReads'], desc='indicate which column to merge')
     cmd.args['genes'] = Argument(prefix='--genes ', type='bool', default=False, desc='indicate if to merge gene data, default to merge transcript data')
     cmd.args['out'] = Argument(prefix='--output ', desc='merged result file')
-    cmd.outputs['out'] = Output(path="{out}")
+    cmd.outputs['out'] = Output(path="{out}", report=True)
     return cmd
 
 
 def recalibration(sample):
     cmd = Command()
-    cmd.meta.name = 'recalibration'
-    cmd.runtime.image = 'docker-reg.basebit.me:5000/pipelines/sentieon-joint-call:2019.11'
+    cmd.meta.name = 'Recalibration'
+    cmd.meta.version = '202010.02'
+    cmd.meta.source = 'https://www.sentieon.com/'
+    cmd.meta.source = 'Generates recalibration table for Base Quality Score Recalibration (BQSR)'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.tool = 'sentieon driver'
-    cmd.args['t'] = Argument(prefix='-t ', default=16, desc='number of threads to use in computation, set to number of cores in the server')
+    cmd.runtime.cpu = 8
+    cmd.runtime.memory = 10 * 10234 ** 3
+    cmd.args['t'] = Argument(prefix='-t ', default=cmd.runtime.cpu, desc='number of threads to use in computation, set to number of cores in the server')
     cmd.args['intervals'] = Argument(prefix='--interval ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
     cmd.args['ref'] = Argument(prefix='-r ', type='infile', desc='reference fasta file')
     cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='input bam file')
@@ -243,8 +288,11 @@ def recalibration(sample):
 
 def Haplotyper(normal_sample):
     cmd = Command()
+    cmd.meta.version = '202010.02'
+    cmd.meta.source = 'https://www.sentieon.com/'
     cmd.meta.name = 'Haplotyper'
-    cmd.runtime.image = 'registry-xdp-v3-yifang.xdp.basebit.me/basebitai/sentieon:202010.02'
+    cmd.meta.desc = 'Call germline SNPs and indels via local re-assembly of haplotypes'
+    cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.tool = 'sentieon driver'
     cmd.args['intervals'] = Argument(prefix='--interval ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
     cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='reccaled tumor and normal bam list')
@@ -263,7 +311,7 @@ def pipeline():
     wf = Workflow()
     wf.meta.name = 'RnaSeqPipeline'
     wf.meta.desc = """
-    RNA-Seq分析流程, 以转录本和基因定量及融合基因检测功能为主, 另外还可以进行HLA基因定型. 主要包含步骤如下:
+    本系统为RNA-Seq分析流程, 以转录本和基因表达定量及融合基因检测功能为主, 另外还可以进行HLA基因定型. 主要包含步骤如下:
     1. 原始测序数据质控,包括测序接头自动去除,使用工具为fastp
     2. 将测序reads和参考基因组进行比对,使用工具为STAR
     3. 基于比对结果,对转录本和基因进行表达量定量,使用工具为Salmon
@@ -273,18 +321,20 @@ def pipeline():
     """
     wf.init_argparser()
     # add workflow args
-    wf.add_argument('-star_index', required=True, help='star alignment index dir')
-    wf.add_argument('-fusion_index', required=True, help='star-fusion database dir: CTAT_resource_lib from https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz')
-    wf.add_argument('-transcripts_fa', required=True, help='transcriptome fasta file')
-    wf.add_argument('-genome_fa', required=False, help='genome fasta file, needed for variant calling')
-    wf.add_argument('-gtf', required=True, help='genome annotation file')
-    wf.add_argument('-ref_flat', required=True, help='gene model file, genome annotation file, download site: http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refFlat.txt.gz')
-    wf.add_argument('-rRNA_interval', required=True, help='rRNA interval file generated by using picard BedToIntervalList command')
-    wf.add_argument('-hla_db', required=False, help='arcasHLA database, please refer to https://github.com/RabadanLab/arcasHLA')
-    wf.add_argument('-fastq_info', nargs='+', required=True, help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
-    wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
-    wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
+    wf.add_argument('-fastq_info', nargs='+', default='/enigma/datasets/', help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
+    wf.add_argument('-r1_name', default='(.*).R1.fastq.gz', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fastq.gz'")
+    wf.add_argument('-r2_name', default='(.*).R2.fastq.gz', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fastq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
+    wf.add_argument('-ref_dir', default='/enigma/datasets/*/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/', help='The directory containing all reference files for gatk input. The following input files need to be in this file')
+    wf.add_argument('-fusion_index', default='ctat_genome_lib_build_dir', help='star-fusion database directory relative to ref_dir. CTAT_resource_lib from https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz')
+    wf.add_argument('-star_index', default='ctat_genome_lib_build_dir/ref_genome.fa.star.idx', help='star alignment index directory relative to ref_dir')
+    wf.add_argument('-transcripts_fa', default='ctat_genome_lib_build_dir/ref_annot.cdna.fa', help='transcriptome fasta file relative to ref_dir')
+    wf.add_argument('-genome_fa', default='ctat_genome_lib_build_dir/ref_genome.fa', help='genome fasta file path relative to ref_dir, needed for variant calling')
+    wf.add_argument('-gtf', default='ctat_genome_lib_build_dir/ref_annot.gtf', help='genome annotation file')
+    wf.add_argument('-ref_flat', default='picard_inputs/hg19.refFlat.txt.gz', help='gene model file, genome annotation file, needed for QC. Download site: http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refFlat.txt.gz')
+    wf.add_argument('-rRNA_interval', default='picard_inputs/hg19.custom.rRNA.bed.interval_list', help='rRNA interval file generated by using picard BedToIntervalList command, needed for QC')
+    wf.add_argument('-hla_db', default='HLA_reference/arcasHLA_dat', help='arcasHLA database directory relative to ref_dir. please refer to https://github.com/RabadanLab/arcasHLA')
+    wf.add_argument('--sentieon_call', default=False, action='store_true', help='if you have sentieon license, you may enable variant calling by this argument')
     wf.add_argument('-dbsnp', required=False, help='dbsnp vcf file, only needed for variant calling')
     wf.add_argument('-known_indels', required=False, help='high confidence known indel vcf file, only needed for variant calling')
     wf.add_argument('-known_mills', required=False, help='high confidence known indel vcf file, only needed for variant calling')
@@ -292,19 +342,20 @@ def pipeline():
 
     # add top_vars
     wf.add_topvars(dict(
-        starIndex=TopVar(value=wf.args.star_index, type='indir'),
-        fusionIndex=TopVar(value=wf.args.fusion_index, type='indir'),
-        transcripts=TopVar(value=wf.args.transcripts_fa, type='infile'),
-        gtf=TopVar(value=wf.args.gtf, type='infile'),
-        ref_flat=TopVar(value=wf.args.ref_flat, type='infile'),
-        rRNA_interval=TopVar(value=wf.args.rRNA_interval, type='infile'),
-        genome_fa=TopVar(value=wf.args.genome_fa, type='infile'),
+        starIndex=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.star_index), type='indir'),
+        fusionIndex=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.fusion_index), type='indir'),
+        transcripts=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.transcripts_fa), type='infile'),
+        gtf=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.gtf), type='infile'),
+        ref_flat=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.ref_flat), type='infile'),
+        rRNA_interval=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.rRNA_interval), type='infile'),
+        genome_fa=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.genome_fa), type='infile'),
         known_dbsnp=TopVar(value=wf.args.dbsnp, type='infile'),
         known_indels=TopVar(value=wf.args.known_indels, type='infile'),
-        known_mills=TopVar(value=wf.args.known_mills)
+        known_mills=TopVar(value=wf.args.known_mills, type='infile')
     ))
-    if wf.args.hla_db:
-        wf.topvars['hla_database'] = TopVar(value=wf.args.hla_db, type='indir')
+
+    if wf.args.hla_db.strip():
+        wf.topvars['hla_database'] = TopVar(value=os.path.join(wf.args.ref_dir, wf.args.hla_db), type='indir')
 
     fastq_info = get_fastq_info(fastq_info=wf.args.fastq_info, r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
     if len(fastq_info) <= 0:
@@ -317,14 +368,18 @@ def pipeline():
         fastp_tasks = []
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
             # 向流程中添加task
-            fastp_task, args = wf.add_task(fastp(sample), name=f'fastp-{sample}-{ind}')
-            args['read1'].value = TmpVar(name='read1', value=r1, type='infile')
-            args['read2'].value = TmpVar(name='read2', value=r2, type='infile')
+            if len(r1s) > 1:
+                task_name = f'fastp-{sample}-{ind}'
+            else:
+                task_name = f'fastp-{sample}'
+            fastp_task, args = wf.add_task(fastp(sample), name=task_name)
+            args['read1'].value = r1
+            args['read2'].value = r2
             fastp_tasks.append(fastp_task)
 
         # star alignment
         fastp_task_ids = [x.task_id for x in fastp_tasks]
-        star_task, args = wf.add_task(star(sample, sentieon=wf.args.sentieon), name='star-'+sample, depends=fastp_task_ids)
+        star_task, args = wf.add_task(star(sample, sentieon=wf.args.sentieon_call), name='star-'+sample, depends=fastp_task_ids)
         args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
         args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
         args['genomeDir'].value = wf.topvars['starIndex']
@@ -355,25 +410,28 @@ def pipeline():
             args['database'].value = wf.topvars['hla_database']
             args['link'].value = True
 
-        # split bam
-        split_task, args = wf.add_task(RNASplitReadsAtJunction(sample), name=f'splitBam-{sample}', depends=[star_task.task_id])
-        args['bam'].value = star_task.outputs['bam']
-        args['ref'].value = wf.topvars['genome_fa']
+        if wf.args.sentieon_call:
+            # split bam
+            split_task, args = wf.add_task(RNASplitReadsAtJunction(sample), name=f'splitBam-{sample}', depends=[star_task.task_id])
+            args['bam'].value = star_task.outputs['bam']
+            args['ref'].value = wf.topvars['genome_fa']
 
-        # recalibration
-        recal_task, args = wf.add_task(recalibration(sample), name=f'recal-{sample}', depends=[split_task.task_id])
-        args['bam'].value = split_task.outputs['out_bam']
-        args['ref'].value = wf.topvars['genome_fa']
-        args['database'].value = [wf.topvars['known_dbsnp'], wf.topvars['known_indels'], wf.topvars['known_mills']]
+            # recalibration
+            recal_task, args = wf.add_task(recalibration(sample), name=f'recal-{sample}', depends=[split_task.task_id])
+            args['bam'].value = split_task.outputs['out_bam']
+            args['ref'].value = wf.topvars['genome_fa']
+            args['database'].value = [wf.topvars['known_dbsnp'], wf.topvars['known_indels'], wf.topvars['known_mills']]
 
-        # haplotyper
-        hap_task, args = wf.add_task(Haplotyper(sample), name=f'haplotyper-{sample}', depends=[recal_task.task_id])
-        args['ref'].value = wf.topvars['genome_fa']
-        args['bam'].value = split_task.outputs['out_bam']
-        args['recal_data'].value = recal_task.outputs['recal_data']
-        args['trim_soft_clip'].value = True
-        args['call_conf'].value = 20
-        args['emit_conf'].value = 20
+            # haplotyper
+            hap_task, args = wf.add_task(Haplotyper(sample), name=f'haplotyper-{sample}', depends=[recal_task.task_id])
+            args['ref'].value = wf.topvars['genome_fa']
+            args['bam'].value = split_task.outputs['out_bam']
+            args['recal_data'].value = recal_task.outputs['recal_data']
+            args['trim_soft_clip'].value = True
+            args['call_conf'].value = 20
+            args['emit_conf'].value = 20
+            hap_task.outputs['out_vcf'].report = True
+            hap_task.outputs['out_vcf_idx'].report = True
 
     # merge transcript/gene TPM/Count
     depends = [k for k, v in wf.tasks.items() if v.name.startswith('salmon')]
@@ -392,9 +450,9 @@ def pipeline():
     # merger result
     if wf.success:
         print('Merging Results......')
-        merge_metrics(wf.args.outdir, filter_ref='', outdir=os.path.join(wf.args.outdir, 'merge_qc'))
-        merge_arcasHLA_genetype(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_HLA'))
-        merge_star_fusion(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'merge_starfusion'))
+        merge_metrics(wf.args.outdir, filter_ref='', outdir=os.path.join(wf.args.outdir, 'Report', 'merge_qc'))
+        merge_arcasHLA_genetype(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'Report', 'merge_HLA'))
+        merge_star_fusion(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'Report', 'merge_starfusion'))
         print('...end...')
 
 
