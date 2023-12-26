@@ -242,7 +242,11 @@ class Command:
                             else:
                                 value_dict[k] = v.value.value
                         # 当前设计中可以用’~{other_arg_name}‘或者‘{other_arg_name}’引用其他参数形成outputs的值
-                        arg_value[ind] = each.value.replace('~', '').format(**value_dict)
+                        try:
+                            arg_value[ind] = each.value.replace('~', '').format(**value_dict)
+                        except KeyError as e:
+                            print(self.meta.name, arg_name, each.value)
+                            print('Missed key', e)
                     elif type(each) == TopVar or type(each) == TmpVar:
                         arg_value[ind] = each.value
                 arg_value = [x for x in arg_value if x is not None]
