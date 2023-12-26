@@ -555,7 +555,7 @@ class Workflow:
                 rerun_steps=rerun_steps
             )
             self.success = wf.failed == 0
-
+            self.generate_docs(os.path.join(outdir, f'{self.meta.name}.ReadMe.md'))
             # 汇总流程的outputs
             if (parameters.report == "success" and self.success) or (parameters.report == 'any'):
                 print('Organizing workflow outputs: hard-link output files or soft-link output directories to "Report"')
@@ -1020,16 +1020,16 @@ class Workflow:
         contents += [f'* {self.meta.name}']
         contents += ['### 系统说明']
         contents += [f'* 系统版本号：{self.meta.version}']
-        contents += [f'* 适用范围：{self.meta.source}']
-        contents += [f'* 参考来源：{self.meta.source}']
+        contents += [f'* 适用范围：{self.meta.function}']
+        # contents += [f'* 参考来源：{self.meta.source}']
         contents += ['### 系统主要功能']
         contents += [f'{self.meta.desc}']
         contents += ['## 系统总体结构']
         contents += ['### 模块列表']
-        contents += ["| name | desc | source | vesion |"]
+        contents += ["| name | function | source | vesion |"]
         contents += ["| :--- | :---: | :---: | :---: |"]
         for cmd in tools:
-            contents += [f"|{cmd.meta.name}|{cmd.meta.desc}|{cmd.meta.source}|{cmd.meta.version}|"]
+            contents += [f"|{cmd.meta.name}|{cmd.meta.function.strip()}|{cmd.meta.source}|{cmd.meta.version}|"]
         contents += ['### 系统总体结构图']
         contents += ["本系统为数据分析流程，流程结构图可能随参数有所变化，下图仅为一个典型示例图"]
         contents += [f'![分析流程的有向无循环(DAG)图](./state.svg "{self.meta.name}")']
@@ -1064,13 +1064,21 @@ class Workflow:
                     contents += [f'#### {name}']
                     contents += [f'+ 类型: {arg.type}']
                     contents += [f'+ 默认值: {arg.default}']
+                    contents += [f'+ 输入举例: {arg.value}']
                     contents += [f'+ 描述: {arg.desc}']
             contents += [f'### 模块输出']
             for key, output in tool.outputs.items():
                 contents += [f'#### {key}']
-                contents += [f'+ *type*: {output.type}']
-                contents += [f'+ *value example*: {output.value}']
-                contents += [f'+ *description*: {output.desc}']
+                contents += [f'+ *类型*: {output.type}']
+                output_value = output.value
+                if output.type in ['outfile', 'outdir']:
+                    if '/' in output.value:
+                        output_value = output.value.split('/')
+                        if output_value[1] == 'home':
+                            output_value[2] = 'User'
+                        output_value = '/'.join(output_value)
+                contents += [f'+ *输出举例*: {output_value}']
+                contents += [f'+ *描述*: {output.desc}']
 
         with open(out, 'w') as f:
             for each in contents:
