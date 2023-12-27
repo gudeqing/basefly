@@ -23,10 +23,11 @@ def fastp(sample):
     * It provides comprehensive quality control reports, including information on sequence quality, GC content, sequence length distribution, and more.
     """
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
+    cmd.runtime.cpu = 4
     cmd.runtime.tool = 'fastp'
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', desc='read2 fastq file')
-    cmd.args['threads'] = Argument(prefix='-w ', default=5, desc='thread number')
+    cmd.args['threads'] = Argument(prefix='-w ', default=cmd.runtime.cpu, desc='thread number')
     cmd.args['other_args'] = Argument(prefix='', default='', desc="other arguments you want to use, such as '-x val'")
     cmd.args['out1'] = Argument(prefix='-o ', value=f'{sample}.clean.R1.fq.gz', type='str', desc='clean read1 output fastq file')
     cmd.args['out2'] = Argument(prefix='-O ', value=f'{sample}.clean.R2.fq.gz', type='str', desc='clean read2 output fastq file')
@@ -58,9 +59,9 @@ def star(sample, platform='illumina', sentieon=False):
     """
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 30*1024**3
-    cmd.runtime.cpu = 2
+    cmd.runtime.cpu = 4
     cmd.runtime.tool = 'sentieon STAR' if sentieon else 'STAR'
-    cmd.args['threads'] = Argument(prefix='--runThreadN ', default=4, desc='threads to use')
+    cmd.args['threads'] = Argument(prefix='--runThreadN ', default=cmd.runtime.cpu, desc='threads to use')
     cmd.args['genomeDir'] = Argument(prefix='--genomeDir ', type='indir', desc='genome index directory')
     cmd.args['read1'] = Argument(prefix='--readFilesIn ', type='infile', array=True, desc='input read1 fastq file list', delimiter=',')
     cmd.args['read2'] = Argument(prefix=' ', type='infile', array=True, level='optional', desc='input read2 fastq file list', delimiter=',')
@@ -131,9 +132,9 @@ def salmon():
     cmd.meta.desc = 'Perform dual-phase, selective-alignment-based estimation of transcript abundance from RNA-seq reads'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 2*1024**3
-    cmd.runtime.cpu = 2
+    cmd.runtime.cpu = 4
     cmd.runtime.tool = 'salmon quant'
-    cmd.args['threads'] = Argument(prefix='--threads ', default=4, desc='The number of threads that will be used for quasi-mapping, quantification, and bootstrapping / posterior sampling (if enabled).')
+    cmd.args['threads'] = Argument(prefix='--threads ', default=cmd.runtime.cpu, desc='The number of threads that will be used for quasi-mapping, quantification, and bootstrapping / posterior sampling (if enabled).')
     cmd.args['libType'] = Argument(prefix='--libType ', default='A', desc="Salmon also has the ability to automatically infer (i.e. guess) the library type based on how the first few thousand reads map to the transcriptome. ")
     cmd.args['transcripts'] = Argument(prefix='-t ', type='infile', desc='transcript fasta file')
     cmd.args['geneMap'] = Argument(prefix='-g ', type='infile', desc="The transcript to gene mapping should be provided as either a GTF file, or a in a simple tab-delimited format where each line contains the name of a transcript and the gene to which it belongs separated by a tab.")
@@ -170,9 +171,9 @@ def star_fusion():
     """
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 10*1024**3
-    cmd.runtime.cpu = 2
+    cmd.runtime.cpu = 4
     cmd.runtime.tool = ' STAR-Fusion'
-    cmd.args['threads'] = Argument(prefix='--CPU ', default=4, desc='The number of threads')
+    cmd.args['threads'] = Argument(prefix='--CPU ', default=cmd.runtime.cpu, desc='The number of threads')
     cmd.args['read1'] = Argument(prefix='--left_fq ', level='optional', type='infile', array=True, delimiter=',', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='--right_fq ', level='optional', type='infile',  array=True, delimiter=',', desc='read2 fastq file')
     cmd.args['chimeric_junction'] = Argument(prefix='-J ', type='infile', desc="generated file called 'Chimeric.out.junction' by STAR alignment")
@@ -207,7 +208,7 @@ def collect_metrics(sample):
     """
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.memory = 10*1024**3
-    cmd.runtime.cpu = 2
+    cmd.runtime.cpu = 4
     cmd.runtime.tool = 'java -jar /usr/local/src/picard.jar CollectRnaSeqMetrics'
     cmd.args['bam'] = Argument(prefix='I=', type='infile', desc='input bam file')
     cmd.args['out_metrics'] = Argument(prefix='O=', value=f'{sample}.RnaSeqMetrics.txt', desc='output metric file')
@@ -304,6 +305,8 @@ def Haplotyper(normal_sample):
     cmd.meta.desc = 'Call germline SNPs and indels via local re-assembly of haplotypes'
     cmd.runtime.image = 'gudeqing/rnaseq_envs:1.4'
     cmd.runtime.tool = 'sentieon driver'
+    cmd.runtime.cpu = 4
+    cmd.runtime.memory = 8 * 1024 ** 3
     cmd.args['intervals'] = Argument(prefix='--interval ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
     cmd.args['bam'] = Argument(prefix='-i ', type='infile', desc='reccaled tumor and normal bam list')
     cmd.args['recal_data'] = Argument(prefix='-q ', type='infile', desc='tumor and normal recal data list')
@@ -464,6 +467,7 @@ def pipeline():
         merge_metrics(wf.args.outdir, filter_ref='', outdir=os.path.join(wf.args.outdir, 'Report', 'merge_qc'))
         merge_arcasHLA_genetype(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'Report', 'merge_HLA'))
         merge_star_fusion(wf.args.outdir, outdir=os.path.join(wf.args.outdir, 'Report', 'merge_starfusion'))
+        os.system(f'cp {wf.topvars["fusionIndex"].value}/ref_annot.gtf.gene_spans {os.path.join(wf.args.outdir, "Report", "gene.info.txt")}')
         print('...end...')
 
 
