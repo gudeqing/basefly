@@ -19,7 +19,15 @@ def fastp():
     cmd = Command()
     cmd.meta.version = '0.23.2'
     cmd.meta.name = 'fastp'
-    cmd.meta.desc = '一款超快速全功能的FASTQ文件自动化质控+过滤+校正+预处理软件'
+    cmd.meta.function = 'fastq QC, adapter trimming'
+    cmd.meta.desc = """
+    fastp is a tool used in bioinformatics for the quality control and preprocessing of raw sequence data. 
+    fastp is known for its speed and efficiency, and it can process data in parallel, making it suitable for large datasets.
+    fastp provides several key functions:
+    * It can filter out low-quality reads, which are sequences that have a high probability of containing errors. This is done based on quality scores that are assigned to each base in a read.
+    * It can trim adapter sequences, which are artificial sequences added during the preparation of sequencing libraries and are not part of the actual sample's genome.
+    * It provides comprehensive quality control reports, including information on sequence quality, GC content, sequence length distribution, and more.
+    """
     cmd.meta.source = 'https://github.com/OpenGene/fastp'
     cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 8 * 1024 ** 3
@@ -64,6 +72,9 @@ def BedToIntervalList():
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'BedToIntervalList'
+    cmd.meta.function = 'A gatk tool to create interval file from bed file'
+    cmd.meta.desc = 'A gatk tool to create interval file from bed file'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360036726611-BedToIntervalList-Picard-'
     cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.runtime.tool = 'gatk --java-options -Xmx15g BedToIntervalList'
@@ -77,7 +88,9 @@ def BedToIntervalList():
 def build_bwa_index():
     cmd = Command()
     cmd.meta.name = 'buildBwaIndex'
+    cmd.meta.function = 'build bwa-mem2 index'
     cmd.meta.desc = 'bwa index and create sequence dictionary and fasta fai file'
+    cmd.meta.source = 'https://github.com/bwa-mem2/bwa-mem2'
     cmd.meta.version = '0.7.17'
     cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 30 * 1024 ** 3
@@ -100,7 +113,9 @@ def FastqToSam(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'FastqToSam'
-    cmd.meta.desc = 'convert fastq to sam'
+    cmd.meta.function = 'Converts a FASTQ file to an unaligned BAM or SAM file'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5257906838811-FastqToSam-Picard-'
+    cmd.meta.desc = 'Converts a FASTQ file to an unaligned BAM or SAM file. Output read records will contain the original base calls and quality scores will be translated depending on the base quality score encoding: FastqSanger, FastqSolexa and FastqIllumina.'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.tool = 'gatk --java-options -Xmx12g FastqToSam'
@@ -120,7 +135,9 @@ def uBam2FastqBwaMem(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'uBam2FastqBwaMem'
-    cmd.meta.desc = 'ubam to fastq and then mapping'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4409897234331-SamToFastq-Picard-'
+    cmd.meta.function = 'ubam to fastq and then mapping'
+    cmd.meta.desc = 'convert ubam to fastq and then mapping to genome'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 15*1024**3
     cmd.runtime.cpu = 4
@@ -143,7 +160,13 @@ def MergeBamAlignment(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MergeBamAlignment'
-    cmd.meta.desc = 'merge bam alignment'
+    cmd.meta.function = 'merge bam alignment'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5257880651931-MergeBamAlignment-Picard-'
+    cmd.meta.desc = """
+    A command-line tool for merging BAM/SAM alignment info from a third-party aligner with the data in an unmapped BAM file, 
+    producing a third BAM file that has alignment data (from the aligner) and all the remaining data from the unmapped BAM. 
+    Quick note: this is not a tool for taking multiple sam files and creating a bigger file by merging them. 
+    """
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.tool = 'gatk --java-options -Xmx15g MergeBamAlignment'
@@ -175,7 +198,13 @@ def MarkDuplicates(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MarkDuplicates'
-    cmd.meta.desc = 'merge bam alignment'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5358880192027-MarkDuplicates-Picard-'
+    cmd.meta.function = 'locates and tags duplicate reads in a BAM or SAM file'
+    cmd.meta.desc = """
+    This tool locates and tags duplicate reads in a BAM or SAM file, where duplicate reads are defined as originating from a single fragment of DNA. Duplicates can arise during sample preparation e.g. library construction using PCR. See also EstimateLibraryComplexity for additional notes on PCR duplication artifacts. Duplicate reads can also result from a single amplification cluster, incorrectly detected as multiple clusters by the optical sensor of the sequencing instrument. These duplication artifacts are referred to as optical duplicates.
+    The MarkDuplicates tool works by comparing sequences in the 5 prime positions of both reads and read-pairs in a SAM/BAM file. An BARCODE_TAG option is available to facilitate duplicate marking using molecular barcodes. After duplicate reads are collected, the tool differentiates the primary and duplicate reads using an algorithm that ranks reads by the sums of their base-quality scores (default method).
+    The tool's main output is a new SAM or BAM file, in which duplicates have been identified in the SAM flags field for each read. Duplicates are marked with the hexadecimal value of 0x0400, which corresponds to a decimal value of 1024. If you are not familiar with this type of annotation, please see the following blog post for additional information.
+    """
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.runtime.tool = 'gatk --java-options -Xmx15g MarkDuplicates'
@@ -194,7 +223,13 @@ def SortAndFixTags(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'SortAndFixTags'
-    cmd.meta.desc = 'sort bam and fix tags'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5257874207131-SetNmMdAndUqTags-Picard-'
+    cmd.meta.function = 'sort bam and fix tags'
+    cmd.meta.desc = """
+    This tool takes in a coordinate-sorted SAM or BAM and calculatesthe NM, MD, and UQ tags by comparing with the reference.
+    This may be needed when MergeBamAlignment was run with SORT_ORDER other than 'coordinate' and thuscould not fix these tags then.
+    The input must be coordinate sorted in order to run. If specified,the MD and NM tags can be ignored and only the UQ tag be set.
+    """
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5 * 1024 ** 3
     cmd.args['_sort_sam'] = Argument(type='fix', value='set -o pipefail; gatk --java-options -Xmx15g SortSam')
@@ -249,6 +284,11 @@ def BaseRecalibrator(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'BaseRecalibrator'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5358896138011-BaseRecalibrator'
+    cmd.meta.function = 'Generates recalibration table for Base Quality Score Recalibration (BQSR)'
+    cmd.meta.desc = """"
+    This walker generates tables based on specified covariates. It does a by-locus traversal operating only at sites that are in the known sites VCF. ExAc, gnomAD, or dbSNP resources can be used as known sites of variation. We assume that all reference mismatches we see are therefore errors and indicative of poor base quality. Since there is a large amount of data one can then calculate an empirical probability of error given the particular covariates seen at this site, where p(error) = num mismatches / num observations. The output file is a table (of the several covariate values, num observations, num mismatches, empirical quality score).
+    """
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 5*1024**3
     cmd.runtime.tool = 'gatk --java-options -Xmx15g BaseRecalibrator'
@@ -266,7 +306,11 @@ def GatherBQSRReports(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GatherBQSRReports'
-    cmd.meta.desc = 'Gathers scattered BQSR recalibration reports into a single file'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4413072344731-GatherBQSRReports'
+    cmd.meta.function = 'Gathers scattered BQSR recalibration reports into a single file'
+    cmd.meta.desc = """
+    Gathers scattered BQSR recalibration reports into a single file
+    """
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3*1024**3
     cmd.runtime.tool = 'gatk --java-options -Xmx15g GatherBQSRReports'
@@ -280,6 +324,8 @@ def ApplyBQSR(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'ApplyBQSR'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/9570337264923-ApplyBQSR'
+    cmd.meta.function = 'Apply Base Quality Score Recalibration (BQSR) model'
     cmd.meta.desc = 'Apply Base Quality Score Recalibration (BQSR) model'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3 * 1024 ** 3
@@ -299,8 +345,12 @@ def ApplyBQSR(sample):
 def GatherBamFiles(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5358848717595-GatherBamFiles-Picard-'
     cmd.meta.name = 'GatherBamFiles'
-    cmd.meta.desc = 'Concatenate efficiently BAM files that resulted from a scattered parallel analysis.'
+    cmd.meta.function = 'Concatenate efficiently BAM files that resulted from a scattered parallel analysis.'
+    cmd.meta.desc = """
+    This tool performs a rapid "gather" or concatenation on BAM files. This is often needed in operations that have been run in parallel across genomics regions by scattering their execution across computing nodes and cores thus resulting in smaller BAM files.
+    """
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.memory = 3 * 1024 ** 3
     cmd.runtime.tool = 'gatk --java-options -Xmx15g GatherBamFiles'
@@ -317,6 +367,8 @@ def SplitIntervals(scatter_number=10):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'SplitIntervals'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4418054374939-SplitIntervals'
+    cmd.meta.function = 'Split intervals into sub-interval files.'
     cmd.meta.desc = 'This tool takes in intervals via the standard arguments of IntervalArgumentCollection and splits them into interval files for scattering. The resulting files contain equal number of bases.'
     cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.memory = 3 * 1024 ** 3
@@ -336,6 +388,7 @@ def Mutect2(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'Mutect2'
+    cmd.meta.function = 'Call somatic short mutations'
     cmd.meta.desc = 'Call somatic short mutations via local assembly of haplotypes. Short mutations include single nucleotide (SNA) and insertion and deletion (indel) alterations.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360037593851-Mutect2'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
@@ -367,7 +420,9 @@ def bcftools_norm():
     cmd = Command()
     cmd.meta.version = '1.13'
     cmd.meta.name = 'VcfLeftNorm'
-    cmd.meta.desc = " Left-align and normalize indels; check if REF alleles match the reference; split multiallelic sites into multiple rows; recover multiallelics from multiple rows"
+    cmd.meta.source = 'https://samtools.github.io/bcftools/bcftools.html'
+    cmd.meta.function = 'Left-align and normalize indels'
+    cmd.meta.desc = "Left-align and normalize indels; check if REF alleles match the reference; split multiallelic sites into multiple rows; recover multiallelics from multiple rows"
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.tool = "bcftools norm"
     cmd.args['fasta-ref'] = Argument(prefix='-f ', type='infile', desc='reference fasta file')
@@ -384,9 +439,10 @@ def GetPileupSummaries(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GetPileupSummaries'
-    cmd.runtime.image = "gudeqing/dnaseq:1.0"
+    cmd.meta.function = 'Tabulates pileup metrics for inferring contamination'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5358860217115-GetPileupSummaries'
     cmd.meta.desc = 'Summarizes counts of reads that support reference, alternate and other alleles for given sites. Results can be used with CalculateContamination'
-    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360037593451-GetPileupSummaries'
+    cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.tool = 'gatk --java-options -Xmx15g GetPileupSummaries'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['bam'] = Argument(prefix='-I ', type='infile', desc='BAM/SAM/CRAM file containing reads')
@@ -402,6 +458,8 @@ def MergeVcfs(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MergeVcfs'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5358883370011-MergeVcfs-Picard-'
+    cmd.meta.function = 'Combines multiple variant files into a single variant file.'
     cmd.meta.desc = 'Combines multiple variant files into a single variant file.'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360056969852-MergeVcfs-Picard-'
@@ -416,6 +474,8 @@ def SortBam():
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'SortBam'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5358884334747-SortSam-Picard-'
+    cmd.meta.function = 'sorts the input SAM or BAM file'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.desc = 'This tool sorts the input SAM or BAM file by coordinate, queryname (QNAME), or some other property of the SAM record. The SortOrder of a SAM/BAM file is found in the SAM file header tag @HD in the field labeled SO.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360036366932-SortSam-Picard-'
@@ -433,6 +493,8 @@ def MergeMutectStats(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MergeMutectStats'
+    cmd.meta.function = 'Merge Mutect2 Stats file'
+    cmd.meta.desc = 'Merge Mutect2 Stats file'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.tool = 'gatk --java-options -Xmx15g MergeMutectStats'
     cmd.args['stats'] = Argument(prefix='-stats ', type='infile', multi_times=True)
@@ -445,6 +507,9 @@ def GatherPileupSummaries(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GatherPileupSummaries'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360035894731-Somatic-short-variant-discovery-SNVs-Indels-'
+    cmd.meta.function = 'Gather Pileup Summaries'
+    cmd.meta.desc = 'Gather Pileup Summaries'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.tool = 'gatk --java-options -Xmx15g GatherPileupSummaries'
     cmd.args['sequence-dictionary'] = Argument(prefix='--sequence-dictionary ', type='infile')
@@ -457,6 +522,8 @@ def GatherPileupSummaries(sample):
 def LearnReadOrientationModel(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
+    cmd.meta.function = 'Learn Read Orientation Model'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360035894731-Somatic-short-variant-discovery-SNVs-Indels-'
     cmd.meta.name = 'LearnReadOrientationModel'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.meta.desc = 'Learn the prior probability of read orientation artifact from the output of CollectF1R2Counts of Mutect2'
@@ -471,6 +538,8 @@ def CalculateContamination(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'CalculateContamination'
+    cmd.meta.function = 'Calculate Contamination'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360035894731-Somatic-short-variant-discovery-SNVs-Indels-'
     cmd.meta.desc = 'Calculates the fraction of reads coming from cross-sample contamination, given results from GetPileupSummaries. The resulting contamination table is used with FilterMutectCalls.'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g CalculateContamination'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
@@ -487,6 +556,8 @@ def FilterMutectCalls(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'FilterMutectCalls'
+    cmd.meta.function = 'FilterMutect Calls'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360035894731-Somatic-short-variant-discovery-SNVs-Indels-'
     cmd.meta.desc = 'FilterMutectCalls applies filters to the raw output of Mutect2'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g FilterMutectCalls'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
@@ -507,6 +578,7 @@ def FilterAlignmentArtifacts(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'FilterAlignmentArtifacts'
+    cmd.meta.function = 'Filter Alignment Artifacts'
     cmd.meta.desc = 'Alignment artifacts can occur whenever there is sufficient sequence similarity between two or more regions in the genome to confuse the alignment algorithm. This can occur when the aligner for whatever reason overestimate how uniquely a read maps, thereby assigning it too high of a mapping quality. It can also occur through no fault of the aligner due to gaps in the reference, which can also hide the true position to which a read should map. By using a good alignment algorithm (the GATK wrapper of BWA-MEM), giving it sensitive settings (which may have been impractically slow for the original bam alignment) and mapping to the best available reference we can avoid these pitfalls. The last point is especially important: one can (and should) use a BWA-MEM index image corresponding to the best reference, regardless of the reference to which the bam was aligned.'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4418051467035-FilterAlignmentArtifacts-EXPERIMENTAL-'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g FilterAlignmentArtifacts'
@@ -522,8 +594,19 @@ def FilterAlignmentArtifacts(sample):
 
 def vep(sample):
     cmd = Command()
-    cmd.meta.version = 'GATK v4.2.6.1'
+    cmd.meta.version = 'vep104.3'
     cmd.meta.name = 'VEP'
+    cmd.meta.function = 'vcf annotation'
+    cmd.meta.desc = """
+    VEP determines the effect of your variants (SNPs, insertions, deletions, CNVs or structural variants) on genes, transcripts, and protein sequence, as well as regulatory regions.
+    Simply input the coordinates of your variants and the nucleotide changes to find out the:
+    * Genes and Transcripts affected by the variants
+    * Location of the variants (e.g. upstream of a transcript, in coding sequence, in non-coding RNA, in regulatory regions)
+    * Consequence of your variants on the protein sequence (e.g. stop gained, missense, stop lost, frameshift), see variant consequences
+    * Known variants that match yours, and associated minor allele frequencies from the 1000 Genomes Project
+    * SIFT and PolyPhen-2 scores for changes to protein sequence
+    * more...
+    """
     cmd.runtime.image = 'gudeqing/dnaseq:1.0'
     cmd.runtime.tool = 'vep'
     cmd.args['input_file'] = Argument(prefix='-i ', type='infile', desc='input file')
@@ -577,6 +660,11 @@ def Haplotyper(sample):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'Haplotyper'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5257862382875-HaplotypeCaller'
+    cmd.meta.function = 'Call germline SNPs and indels via local re-assembly of haplotypes'
+    cmd.meta.desc = """
+    The HaplotypeCaller is capable of calling SNPs and indels simultaneously via local de-novo assembly of haplotypes in an active region. In other words, whenever the program encounters a region showing signs of variation, it discards the existing mapping information and completely reassembles the reads in that region. This allows the HaplotypeCaller to be more accurate when calling regions that are traditionally difficult to call, for example when they contain different types of variants close to each other. It also makes the HaplotypeCaller much better at calling indels than position-based callers like UnifiedGenotyper.
+    """
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
     cmd.runtime.tool = 'gatk --java-options -Xmx15g HaplotypeCaller'
     cmd.args['intervals'] = Argument(prefix='-L ', level='optional', type='infile', multi_times=True, desc="interval file, support bed file or picard interval or vcf format")
@@ -596,7 +684,9 @@ def Haplotyper(sample):
 def GenomicsDBImport():
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5358869876891-GenomicsDBImport'
     cmd.meta.name = 'GenomicsDBImport'
+    cmd.meta.function = 'Import single-sample GVCFs into GenomicsDB before joint genotyping.'
     cmd.meta.desc = 'The GATK4 Best Practice Workflow for SNP and Indel calling uses GenomicsDBImport to merge GVCFs from multiple samples.  In brief, GenomicsDB utilises a data storage system optimized for storing/querying sparse arrays. Genomics data is typically sparse in that each sample has few variants with respect to the entire reference genome. GenomicsDB contains specialized code for genomics applications, such as VCF parsing and INFO field annotation calculation.'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g GenomicsDBImport'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
@@ -616,8 +706,17 @@ def GenotypeGVCFs(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'GenotypeGVCFs'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5257900485659-GenotypeGVCFs'
+    cmd.meta.function = 'Perform joint genotyping on one or more samples pre-called with HaplotypeCaller'
+    cmd.meta.desc = """
+    Perform joint genotyping on one or more samples pre-called with HaplotypeCaller
+    This tool is designed to perform joint genotyping on a single input, which may contain one or many samples. In any case, the input samples must possess genotype likelihoods produced by HaplotypeCaller with `-ERC GVCF` or `-ERC BP_RESOLUTION`.
+    * Input:
+    The GATK4 GenotypeGVCFs tool can take only one input track. Options are 1) a single single-sample GVCF 2) a single multi-sample GVCF created by CombineGVCFs or 3) a GenomicsDB workspace created by GenomicsDBImport. A sample-level GVCF is produced by HaplotypeCaller with the `-ERC GVCF` setting.
+    * Output:
+    A final VCF in which all samples have been jointly genotyped.
+    """
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.desc = 'Perform joint genotyping on one or more samples pre-called with HaplotypeCaller'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g GenotypeGVCFs'
     cmd.args['REFERENCE_SEQUENCE'] = Argument(prefix='-R ', type='infile', desc='reference fasta file')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.genotyped.gvcf', desc='output vcf file name')
@@ -635,8 +734,10 @@ def VariantFiltration(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'VariantFiltration'
+    cmd.meta.function = 'Filter variant calls based on INFO and/or FORMAT annotations'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/5257863504923-VariantFiltration'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.desc = 'This tool is designed for hard-filtering variant calls based on certain criteria. Records are hard-filtered by changing the value in the FILTER field to something other than PASS. Filtered records will be preserved in the output unless their removal is requested in the command line.'
+    cmd.meta.desc = 'This tool is designed for hard-filtering variant calls based on certain criteria. Records are hard-filtered by changing the value in the FILTER field to something other than PASS. Filtered records will be preserved in the output unless their removal is requested in the command line.'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g VariantFiltration'
     cmd.args['filters'] = Argument(prefix='', default=['--filter-name ExcessHet --filter-expression "ExcessHet > 54.69"',], multi_times=True, desc='filtering expressions, such as "AB < 0.2"')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.hard_filtered.vcf.gz', desc='output vcf file')
@@ -649,8 +750,10 @@ def MakeSitesOnlyVcf(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'MakeSitesOnlyVcf'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360045799552-MakeSitesOnlyVcf-Picard-'
+    cmd.meta.function = 'Creates a VCF that contains all the site-level information for all records in the input VCF but no genotype information.'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.desc = 'This tool reads a VCF/VCF.gz/BCF and removes all genotype information from it while retaining all site level information, including annotations based on genotypes (e.g. AN, AF).'
+    cmd.meta.desc = 'This tool reads a VCF/VCF.gz/BCF and removes all genotype information from it while retaining all site level information, including annotations based on genotypes (e.g. AN, AF).'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g MakeSitesOnlyVcf'
     cmd.args['vcf'] = Argument(prefix='-I ', type='infile', desc='input vcf file')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.site_only.vcf.gz', desc='output vcf file')
@@ -662,8 +765,10 @@ def IndelsVariantRecalibrator(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
     cmd.meta.name = 'IndelsRecalibrator'
+    cmd.meta.function = 'Indels Recalibration'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4413056319131-VariantRecalibrator'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.desc = 'Build a recalibration model to score variant quality for filtering purposes'
+    cmd.meta.desc = 'Build a recalibration model to score variant quality for filtering purposes'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g VariantRecalibrator'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='site only variant filtered input vcf')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.indel.recal', desc='The output recal file used by ApplyVQSR')
@@ -685,9 +790,11 @@ def IndelsVariantRecalibrator(prefix):
 def SNPsVariantRecalibrator(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4413056319131-VariantRecalibrator'
     cmd.meta.name = 'SNPsRecalibrator'
+    cmd.meta.function = 'SNPs Recalibration'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.desc = 'Build a recalibration model to score variant quality for filtering purposes'
+    cmd.meta.desc = 'Build a recalibration model to score variant quality for filtering purposes'
     cmd.runtime.tool = 'gatk --java-options -Xmx15g VariantRecalibrator'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='site only variant filtered input vcf')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.snp.recal', desc='The output recal file used by ApplyVQSR')
@@ -712,9 +819,11 @@ def SNPsVariantRecalibrator(prefix):
 def ApplyVQSR(prefix):
     cmd = Command()
     cmd.meta.version = 'GATK v4.2.6.1'
+    cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/4414602412827-ApplyVQSR'
+    cmd.meta.function = 'Apply a score cutoff to filter variants based on a recalibration table'
     cmd.meta.name = 'ApplyVQSR'
     cmd.runtime.image = "gudeqing/dnaseq:1.0"
-    cmd.runtime.desc = "This tool performs the second pass in a two-stage process called Variant Quality Score Recalibration (VQSR). Specifically, it applies filtering to the input variants based on the recalibration table produced in the first step by VariantRecalibrator and a target sensitivity value, which the tool matches internally to a VQSLOD score cutoff based on the model's estimated sensitivity to a set of true variants."
+    cmd.meta.desc = "This tool performs the second pass in a two-stage process called Variant Quality Score Recalibration (VQSR). Specifically, it applies filtering to the input variants based on the recalibration table produced in the first step by VariantRecalibrator and a target sensitivity value, which the tool matches internally to a VQSLOD score cutoff based on the model's estimated sensitivity to a set of true variants."
     cmd.runtime.tool = 'gatk --java-options -Xmx15g ApplyVQSR'
     cmd.args['vcf'] = Argument(prefix='-V ', type='infile', desc='input vcf')
     cmd.args['out'] = Argument(prefix='-O ', default=f'{prefix}.filtered.vcf.gz', desc='The output vcf')
@@ -731,7 +840,7 @@ def ApplyVQSR(prefix):
 
 def pipeline():
     wf = Workflow()
-    wf.meta.version = "1.0"
+    wf.meta.version = "0.1"
     wf.meta.name = 'GATK-DNASeq-Workflow'
     wf.meta.source = """
     ## https://github.com/gatk-workflows/gatk4-data-processing/tree/2.1.1
@@ -740,14 +849,17 @@ def pipeline():
     ## https://github.com/broadinstitute/warp/blob/develop/tasks/broad/JointGenotypingTasks.wdl
     """
     wf.meta.desc = """
-    当前流程是参考博得研究所的GATK-Best-Practice流程构建的DNAseq突变检测分析流程改写而成
-    流程包含的主要功能：
+    主要功能：
+    当前流程是DNASeq分析流程，参考博得研究所的GATK-Best-Practice流程改写而成，主要用于SNP/Indel突变检测分析。流程包含的主要步骤如下：
     * 使用fastp进行测序接头自动去除
     * 使用BWA进行比对分析
     * 使用GATK检测small SNP/Indel, 同时支持tumor-only和tumor-normal配对模式
     * 使用GATK检测germline突变，如果输入多个normal样本，则会直接进行joint-calling
     * 基于VEP进行突变注释
-    # 输入文件准备,以hg38为例:
+    
+    使用示例：？
+    
+    主要输入说明（以hg38为例）:
     1. 下载aws提供的公开数据集: aws s3 ls --no-sign-request s3://broad-references/hg38/v0/
         期望得到如下文件:
         Homo_sapiens_assembly38.fasta, 作为"-ref"参数的值
