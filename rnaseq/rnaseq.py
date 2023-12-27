@@ -326,6 +326,7 @@ def pipeline():
     wf.meta.name = 'RnaSeqPipeline'
     wf.meta.function = '基于RNAseq数据进行转录本水平和基因水平的表达定量分析、融合基因鉴定等'
     wf.meta.desc = """
+    主要功能:
     本系统为RNA-Seq分析流程, 以转录本和基因表达定量及融合基因检测功能为主, 另外还可以进行HLA基因定型. 主要包含步骤如下:
     1. 原始测序数据质控,包括测序接头自动去除,使用工具为fastp
     2. 将测序reads和参考基因组进行比对,使用工具为STAR
@@ -336,9 +337,10 @@ def pipeline():
     
     使用示例:
     * 确认已经准备好输入文件或加载所需数据集（如流程文件数据集，样本数据集，参考文件数据集）
-    * 运行命令: python /enigma/datasets/*/scripts/rnaseq/rnaseq.py -fastq_info /enigma/datasets/*/your_testdata_dir -r1_name '(.*?)_S*.R2.fastq.gz' -r2_name '(.*?)_S*.R2.fastq.gz' -ref_dir /enigma/datasets/*/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/
+    * 运行命令: python /enigma/datasets/*/scripts/rnaseq/rnaseq.py -fastq_info /enigma/datasets/*/your_testdata_dir -r1_name '(.*?)_S*.R2.fastq.gz' -r2_name '(.*?)_S*.R2.fastq.gz' -ref_dir /enigma/datasets/*/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/ -outdir /enigma/local_storage/Result
+    * 分析结果：主要分析结果将汇总于输出目录如Result/Report
     
-    主要输入说明（具体说明1.4节）:
+    主要输入说明（具体说明参考1.4节）:
     fastq_info: 待分析fastq文件所在路径，默认数据所在路径为/enigma/datasets/
     r1_name: 使用python的正则表达式描述fastq文件名的全称，并使用一对小括号的方式去匹配样本名称，如'(.*).R1.fastq.gz'，这里小括号里匹配到的字符串将作为样本名称
     r2_name: 同上，使用python的正则表达式描述fastq文件名的全称，并使用一对小括号的方式去匹配样本名称，如'(.*).R1.fastq.gz'，这里小括号里匹配到的字符串将作为样本名称
