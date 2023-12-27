@@ -198,6 +198,7 @@ def collect_metrics(sample):
     """
     cmd = Command()
     cmd.meta.name = 'CollectRnaSeqMetrics'
+    cmd.meta.version = '2.20.3-SNAPSHOT'
     cmd.meta.source = 'https://gatk.broadinstitute.org/hc/en-us/articles/360037057492-CollectRnaSeqMetrics-Picard-'
     cmd.meta.function = 'Collect RnaSeq QC Metrics'
     cmd.meta.desc = """
