@@ -341,10 +341,10 @@ def pipeline():
     * 分析结果：主要分析结果将汇总于输出目录如Result/Report
     
     主要输入说明（具体说明参考1.4节）:
-    fastq_info: 待分析fastq文件所在路径，默认数据所在路径为/enigma/datasets/
+    fastq_info: 待分析fastq文件所在路径，默认数据所在路径为/enigma/datasets/，流程会遍历该目录的所有文件，找到能够被r1_name或r2_name匹配到的fastq文件作为输入
     r1_name: 使用python的正则表达式描述fastq文件名的全称，并使用一对小括号的方式去匹配样本名称，如'(.*).R1.fastq.gz'，这里小括号里匹配到的字符串将作为样本名称
     r2_name: 同上，使用python的正则表达式描述fastq文件名的全称，并使用一对小括号的方式去匹配样本名称，如'(.*).R1.fastq.gz'，这里小括号里匹配到的字符串将作为样本名称
-    ref_dir: 分析流程需要的参考文件如参考基因组索引等所在目录，该目录可以通过如下方式准备：
+    ref_dir: 分析流程需要的参考文件如参考基因组索引等所在目录，默认'/enigma/datasets/*/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play/'，该目录可以通过如下方式准备：
         1. 下载 https://data.broadinstitute.org/Trinity/CTAT_RESOURCE_LIB/__genome_libs_StarFv1.10/GRCh37_gencode_v19_CTAT_lib_Mar012021.plug-n-play.tar.gz
         2. 解压上述下载文件，
         3. 下载http://hgdownload.cse.ucsc.edu/goldenPath/hg19/database/refFlat.txt.gz，放置ref_dir目录下，通过ref_flat参数指定文件即可
