@@ -126,35 +126,6 @@ In [7]: set(target_popultation_ids ) & set(ae_pops)
 Out[7]: {'CDX', 'CHB', 'CHS', 'EAS', 'JPT', 'KHV'}
 @也就是说，只有千人基因组计划的人群包含了Ae信息
 """
-# 根据人群名称信息，筛选得到如下候选
-from pysam import FastaFile
-genome = FastaFile('/home/hxbio04/biosofts/MicroHapulator/microhapulator/data/hg38.fasta')
-target_popultation_ids = [
-    # 'JPT',  # 日本东京人，归为EAS
-    # 'KHV',  # 越南, 归为EAS
-    # 'CHB',  # 北京汉族, 归为EAS
-    # 'CHS',  # 南方汉族, 归为EAS
-    # 'CDX',  # 西双版纳傣族, 归为EAS
-    'EAS',  # 东亚
-    # 下面的都是人群相应marker的count信息一般不全，虽然都属东亚范畴，但无法和千人基因组的EAS合并计算，因此单独理出
-    # 'MHDBP-936bc36f79',  # 通过阅读原文献，发现其实际是：研究者从欧洲和非洲人群的基因组参考数据中选择了高度变异的微单倍型位点，但确实在亚洲人群上也有测试实验
-    'MHDBP-48c2cfb2aa',  # 汉族，至少可以确认在汉族人群上有测试
-    'MHDBP-63967b883e',  # 日本
-    'ChengduHan',  # 成都汉族？
-    'DujiangyanTibetan',  # 西藏？
-    'HainanHan',  # 海南汉族
-    'HainanLi',  # 海南黎族
-    'SA000010B',  # 日本
-    'SA000936S',  # 韩国
-    'SA004035M',  # 蒙古
-    'MuliTibetan',  # 西藏
-    'OrdosMongolian',  # 蒙古
-    'mMHseq-TWChinese',  # 中国
-    'WuzhongHui',  # 中国
-    'XichangYi',   # 中国
-    'ZunyiGelao'   # 中国
-]
-
 # 统计哪些目标群体没有AE信息可得
 # hit_pops = {x.split('+')[1] for x in marker_pop_ae_value_dict.keys()}
 # print('没有AE信息的群体有：', set(target_popultation_ids) - hit_pops)
@@ -170,145 +141,230 @@ target_popultation_ids = [
 # target_freq_df.to_csv('target.freq.txt', index=False)
 
 
-def genotypes_is_distinguishable(allele_lst):
-    # 检查基因型两两之间的差异
-    # 假设recipient基因型（A-T-C | A-T-T），而donar基因型（A-T-C | A-T-C)
-    # 由于C容易测序错误为T，最后得到的定量误差会增加，因此我们尽量避免选用此类marker
-    # 当前，我们选定比较松弛的限制即easy_mix_num>=2才考虑丢弃
-    good = True
-    easy_mix_num = 0
-    for each, other in combinations(allele_lst, 2):
-        diff_bases = [(x, y) for x, y in zip(each, other) if x != y]
-        if len(diff_bases) == 1:
-            if sorted(diff_bases[0]) in [['C', 'T'], ['A', 'G']]:
-                easy_mix_num += 1
-    if easy_mix_num >= 2:
-        good = False
-    return good
+def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/marker.csv',
+           genome_file='/home/hxbio04/biosofts/MicroHapulator/microhapulator/data/hg38.fasta'):
+    from pysam import FastaFile
+    genome = FastaFile(genome_file)
 
+    def genotypes_is_distinguishable(allele_lst):
+        # 检查基因型两两之间的差异
+        # 假设recipient基因型（A-T-C | A-T-T），而donar基因型（A-T-C | A-T-C)
+        # 由于C容易测序错误为T，最后得到的定量误差会增加，因此我们尽量避免选用此类marker
+        # 当前，我们选定比较松弛的限制即easy_mix_num>=2才考虑丢弃
+        good = True
+        easy_mix_num = 0
+        for each, other in combinations(allele_lst, 2):
+            diff_bases = [(x, y) for x, y in zip(each, other) if x != y]
+            if len(diff_bases) == 1:
+                if sorted(diff_bases[0]) in [['C', 'T'], ['A', 'G']]:
+                    easy_mix_num += 1
+        if easy_mix_num >= 2:
+            good = False
+        return good
 
-def near_very_short_tandem(row, repeat_len=3):
-    # 段串联重复区域容易测错，如AAAT有可能测成AAAA, 因此我们也希望能避免此类marker
-    NumVars, Extent, Chrom, Start, End, Positions, Positions37, RSIDs, Source, *_ = row
-    positions = [int(x) for x in Positions.split(';')]
-    discard = False
-    for pos in positions:
-        up_3bases = genome.fetch(Chrom, pos - repeat_len - 1, pos - 1)
-        down_3bases = genome.fetch(Chrom, pos, pos + repeat_len)
-        # 如果参考序列有小写的，则认为处于低复杂度区域
-        in_low_complex_region = any([x.islower() for x in up_3bases + down_3bases])
-        if len(set(up_3bases)) == 1 or len(set(down_3bases)) == 1 or in_low_complex_region:
-            discard = True
-    return discard
+    def near_very_short_tandem(row, repeat_len=3):
+        # 段串联重复区域容易测错，如AAAT有可能测成AAAA, 因此我们也希望能避免此类marker
+        NumVars, Extent, Chrom, Start, End, Positions, Positions37, RSIDs, Source, *_ = row
+        positions = [int(x) for x in Positions.split(';')]
+        discard = False
+        for pos in positions:
+            up_3bases = genome.fetch(Chrom, pos - repeat_len - 1, pos - 1)
+            down_3bases = genome.fetch(Chrom, pos, pos + repeat_len)
+            # 如果参考序列有小写的，则认为处于低复杂度区域
+            in_low_complex_region = any([x.islower() for x in up_3bases + down_3bases])
+            if len(set(up_3bases)) == 1 or len(set(down_3bases)) == 1 or in_low_complex_region:
+                discard = True
+        return discard
 
+    def get_snp_context(row, extend=10):
+        NumVars, Extent, Chrom, Start, End, Positions, Positions37, RSIDs, Source, *_ = row
+        positions = [int(x) for x in Positions.split(';')]
+        contexts = []
+        for pos in positions:
+            up_3bases = genome.fetch(Chrom, pos - extend - 1, pos - 1)
+            current_base = genome.fetch(Chrom, pos - 1, pos)
+            down_3bases = genome.fetch(Chrom, pos, pos + 10)
+            contexts.append(up_3bases + f'({current_base})' + down_3bases)
+        return ";".join(contexts)
 
-def get_snp_context(row, extend=10):
-    NumVars, Extent, Chrom, Start, End, Positions, Positions37, RSIDs, Source, *_ = row
-    positions = [int(x) for x in Positions.split(';')]
-    contexts = []
-    for pos in positions:
-        up_3bases = genome.fetch(Chrom, pos - extend - 1, pos - 1)
-        current_base = genome.fetch(Chrom, pos-1, pos)
-        down_3bases = genome.fetch(Chrom, pos, pos + 10)
-        contexts.append(up_3bases + f'({current_base})' + down_3bases)
-    return ";".join(contexts)
+    # 实际上，根据频率表可以计算出每一个marker的AE信息, 经验算，marker-aes.csv这张表是可以根据这个频率计算表获得
+    freq = pd.read_csv(freq_file, header=0)
 
+    # 提取marker的在1KGP中的基因型信息
+    marker_1KGP_info = freq.loc[freq['Population'] == '1KGP']
+    distinguishable_info = marker_1KGP_info.groupby(['Marker', 'Population'])['Allele'].apply(genotypes_is_distinguishable).reset_index()
+    marker_genotype_distinguishable = dict(zip(distinguishable_info['Marker'], distinguishable_info['Allele']))
 
-# 实际上，根据频率表可以计算出每一个marker的AE信息
-# 经验算，marker-aes.csv这张表是可以根据这个频率计算表获得，如下：
-freq = pd.read_csv('microhapdb/frequency.csv.gz', header=0)
+    # 提取目标人群的信息，并计算有效等位基因数量Ae
+    target_popultation_ids = [
+        # 'JPT',  # 日本东京人，归为EAS
+        # 'KHV',  # 越南, 归为EAS
+        # 'CHB',  # 北京汉族, 归为EAS
+        # 'CHS',  # 南方汉族, 归为EAS
+        # 'CDX',  # 西双版纳傣族, 归为EAS
+        'EAS',  # 东亚
+        # 下面的都是人群相应marker的count信息一般不全，虽然都属东亚范畴，但无法和千人基因组的EAS合并计算，因此单独理出
+        # 'MHDBP-936bc36f79',  # 通过阅读原文献，发现其实际是：研究者从欧洲和非洲人群的基因组参考数据中选择了高度变异的微单倍型位点，但确实在亚洲人群上也有测试实验
+        'MHDBP-48c2cfb2aa',  # 汉族，至少可以确认在汉族人群上有测试
+        'MHDBP-63967b883e',  # 日本
+        'ChengduHan',  # 成都汉族？
+        'DujiangyanTibetan',  # 西藏？
+        'HainanHan',  # 海南汉族
+        'HainanLi',  # 海南黎族
+        'SA000010B',  # 日本
+        'SA000936S',  # 韩国
+        'SA004035M',  # 蒙古
+        'MuliTibetan',  # 西藏
+        'OrdosMongolian',  # 蒙古
+        'mMHseq-TWChinese',  # 中国
+        'WuzhongHui',  # 中国
+        'XichangYi',  # 中国
+        'ZunyiGelao'  # 中国
+    ]
+    freq = freq.loc[[x in target_popultation_ids for x in freq['Population']]]
+    ae_df = freq.groupby(['Marker', 'Population', 'Source'])['Frequency'].apply(lambda freqs: 1/sum(x**2 for x in freqs))
+    ae_df.name = 'Ae'
+    ae_df = ae_df.sort_index()
+    ae_df.round(3).to_csv('target_marker_Ae_byFrequency.txt', sep='\t')
 
-# 提取marker的在1KGP中的基因型信息
-marker_1KGP_info = freq.loc[freq['Population'] == '1KGP']
-distinguishable_info = marker_1KGP_info.groupby(['Marker', 'Population'])['Allele'].apply(genotypes_is_distinguishable).reset_index()
-marker_genotype_distinguishable = dict(zip(distinguishable_info['Marker'], distinguishable_info['Allele']))
+    # 提取目标marker的信息
+    target_markers = ae_df.reset_index()['Marker'].unique()
+    marker_df = pd.read_csv(marker_file, header=0, index_col=0)
+    # 有些marker居然不在marker信息表
+    missed_markers = [x for x in target_markers if x not in marker_df.index]
+    print(f'frequency中有些marker居然不在marker信息表, {missed_markers}')
+    target_markers = [x for x in target_markers if x in marker_df.index]
+    target_marker_df = marker_df.loc[list(target_markers)]
 
-# 提取目标人群的信息，并计算有效等位基因数量Ae
-freq = freq.loc[[x in target_popultation_ids for x in freq['Population']]]
-ae_df = freq.groupby(['Marker', 'Population', 'Source'])['Frequency'].apply(lambda freqs: 1/sum(x**2 for x in freqs))
-ae_df.name = 'Ae'
-ae_df = ae_df.sort_index()
-ae_df.round(3).to_csv('target_marker_Ae_byFrequency.txt', sep='\t')
+    # 计算Ae平均值, 即计算千人基因组中的EAS人群，然后加15个文献来源的其他人群信息
+    mean_ae_df = ae_df.reset_index().groupby('Marker')['Ae'].mean().round(3)
+    max_ae_df = ae_df.reset_index().groupby('Marker')['Ae'].max().round(3)
+    min_ae_df = ae_df.reset_index().groupby('Marker')['Ae'].min().round(3)
+    target_marker_df['meanAe'] = mean_ae_df.loc[target_marker_df.index]
+    target_marker_df['maxAe'] = max_ae_df.loc[target_marker_df.index]
+    target_marker_df['minAe'] = min_ae_df.loc[target_marker_df.index]
+    target_marker_df = target_marker_df.sort_values(by='maxAe', ascending=False)
 
+    # 过滤只包含一个snp的marker
+    idx = target_marker_df['NumVars'] == 1
+    print(f'过滤掉{sum(idx)}个只包含一个snp的marker, 他们是 {list(target_marker_df.loc[idx].index)}')
+    # target_marker_df = target_marker_df.loc[~idx]
+    # target_marker_df.to_csv('target_markers.csv')
+    min_len = 25
+    max_len = 200
+    min_ae = 2
+    min_NumVars = 2
+    max_NumVars = 7
+    filter_criterion = [min_len, max_len, min_NumVars, max_NumVars]
 
-# 提取目标marker的信息
-target_markers = ae_df.reset_index()['Marker'].unique()
-marker_df = pd.read_csv('microhapdb/marker.csv', header=0, index_col=0)
-# 有些marker居然不在marker信息表
-missed_markers = [x for x in target_markers if x not in marker_df.index]
-print(f'frequency中有些marker居然不在marker信息表, {missed_markers}')
-target_markers = [x for x in target_markers if x in marker_df.index]
-target_marker_df = marker_df.loc[list(target_markers)]
+    init_marker_num = target_marker_df.shape[0]
+    print('起始marker数量', init_marker_num)
+    target_marker_df = target_marker_df.loc[target_marker_df['Extent'] <= max_len]
+    target_marker_df = target_marker_df.loc[target_marker_df['Extent'] >= min_len]
+    len_filtered_num = init_marker_num - target_marker_df.shape[0]
+    print('进一步根据长度过滤掉的marker数量:', len_filtered_num)
 
-# 计算Ae平均值, 即计算千人基因组中的EAS人群，然后加15个文献来源的其他人群信息
-mean_ae_df = ae_df.reset_index().groupby('Marker')['Ae'].mean().round(3)
-max_ae_df = ae_df.reset_index().groupby('Marker')['Ae'].max().round(3)
-min_ae_df = ae_df.reset_index().groupby('Marker')['Ae'].min().round(3)
-target_marker_df['meanAe'] = mean_ae_df.loc[target_marker_df.index]
-target_marker_df['maxAe'] = max_ae_df.loc[target_marker_df.index]
-target_marker_df['minAe'] = min_ae_df.loc[target_marker_df.index]
-target_marker_df = target_marker_df.sort_values(by='maxAe', ascending=False)
+    target_marker_df = target_marker_df.loc[target_marker_df['maxAe'] >= min_ae]
+    ae_filtered_num = init_marker_num - len_filtered_num - target_marker_df.shape[0]
+    print('进一步根据minAe过滤掉的marker数量:', ae_filtered_num)
 
-# 过滤只包含一个snp的marker
-idx = target_marker_df['NumVars'] == 1
-print(f'过滤掉{sum(idx)}个只包含一个snp的marker, 他们是 {list(target_marker_df.loc[idx].index)}')
-# target_marker_df = target_marker_df.loc[~idx]
-# target_marker_df.to_csv('target_markers.csv')
-min_len = 25
-max_len = 200
-min_ae = 2
-min_NumVars = 2
-max_NumVars = 7
-filter_criterion = [min_len, max_len, min_NumVars, max_NumVars]
+    target_marker_df = target_marker_df.loc[target_marker_df['NumVars'] >= min_NumVars]
+    target_marker_df = target_marker_df.loc[target_marker_df['NumVars'] <= max_NumVars]
+    numvars_filtered_num = init_marker_num - len_filtered_num - ae_filtered_num - target_marker_df.shape[0]
+    print('进一步根据SNP数量过滤掉的marker数量:', numvars_filtered_num)
 
-init_marker_num = target_marker_df.shape[0]
-print('起始marker数量', init_marker_num)
-target_marker_df = target_marker_df.loc[target_marker_df['Extent'] <= max_len]
-target_marker_df = target_marker_df.loc[target_marker_df['Extent'] >= min_len]
-len_filtered_num = init_marker_num - target_marker_df.shape[0]
-print('进一步根据长度过滤掉的marker数量:', len_filtered_num)
+    # 根据marker的序列特征过滤
+    target_marker_df = target_marker_df.loc[~target_marker_df.apply(near_very_short_tandem, axis=1)]
+    complex_filtered_num = init_marker_num - len_filtered_num - ae_filtered_num - numvars_filtered_num - target_marker_df.shape[0]
+    print('进一步根据SNP位点前后特征过滤掉的marker数量', complex_filtered_num)
 
-target_marker_df = target_marker_df.loc[target_marker_df['maxAe'] >= min_ae]
-ae_filtered_num = init_marker_num - len_filtered_num - target_marker_df.shape[0]
-print('进一步根据minAe过滤掉的marker数量:', ae_filtered_num)
+    target_marker_df = target_marker_df.loc[[marker_genotype_distinguishable[x] for x in target_marker_df.index]]
+    genotype_filtered_num = init_marker_num - len_filtered_num - ae_filtered_num - numvars_filtered_num - complex_filtered_num - target_marker_df.shape[0]
+    print('进一步根据基因型之间是否容易因为测序错误易混淆而过滤掉的marker数量', genotype_filtered_num)
 
-target_marker_df = target_marker_df.loc[target_marker_df['NumVars'] >= min_NumVars]
-target_marker_df = target_marker_df.loc[target_marker_df['NumVars'] <= max_NumVars]
-numvars_filtered_num = init_marker_num - len_filtered_num - ae_filtered_num - target_marker_df.shape[0]
-print('进一步根据SNP数量过滤掉的marker数量:', numvars_filtered_num)
+    # 增加每个marker的snp的前后碱基信息
+    target_marker_df['SnpContext'] = target_marker_df.apply(get_snp_context, axis=1)
 
-# 根据marker的序列特征过滤
-target_marker_df = target_marker_df.loc[~target_marker_df.apply(near_very_short_tandem, axis=1)]
-complex_filtered_num = init_marker_num - len_filtered_num - ae_filtered_num - numvars_filtered_num - target_marker_df.shape[0]
-print('进一步根据SNP位点前后特征过滤掉的marker数量', complex_filtered_num)
+    # 总结
+    print(f'Total {target_marker_df.shape[0]} markers left')
+    print(target_marker_df.describe())
+    target_marker_df.to_csv(f'target.markers.csv')
+    print('marker snp 数量分布统计：')
+    print(target_marker_df['NumVars'].value_counts())
+    print('marker chrome 数量分布统计')
+    print(target_marker_df['Chrom'].value_counts())
+    print('marker source 来源分布统计')
+    print(target_marker_df['Source'].value_counts())
 
-target_marker_df = target_marker_df.loc[[marker_genotype_distinguishable[x] for x in target_marker_df.index]]
-genotype_filtered_num = init_marker_num - len_filtered_num - ae_filtered_num - numvars_filtered_num - complex_filtered_num - target_marker_df.shape[0]
-print('进一步根据基因型之间是否容易因为测序错误易混淆而过滤掉的marker数量', genotype_filtered_num)
+    # 提取通过筛选的marker的人群Ae信息
+    target_marker_freq = freq.loc[[x in target_marker_df.index for x in freq['Marker']]]
+    target_marker_freq.to_csv('target.marker.freq.txt', sep='\t', index=False)
 
-# 增加每个marker的snp的前后碱基信息
-target_marker_df['SnpContext'] = target_marker_df.apply(get_snp_context, axis=1)
+    # 生成bed格式的坐标文件，用于注释基因
+    target_df = target_marker_df.reset_index()[['Chrom', 'Start', 'End', 'Name', 'meanAe', 'Extent', 'NumVars', 'Positions', 'RSIDs', 'Source']]
+    target_df['Start'] = target_df['Start'] - 1
+    target_df.to_csv('target.marker.zero-based.txt', sep='\t', index=False)
 
-# 总结
-print(f'Total {target_marker_df.shape[0]} markers left')
-print(target_marker_df.describe())
-target_marker_df.to_csv(f'target.markers.csv')
-print('marker snp 数量分布统计：')
-print(target_marker_df['NumVars'].value_counts())
-print('marker chrome 数量分布统计')
-print(target_marker_df['Chrom'].value_counts())
-print('marker source 来源分布统计')
-print(target_marker_df['Source'].value_counts())
-
-# 提取通过筛选的marker的人群Ae信息
-target_marker_freq = freq.loc[[x in target_marker_df.index for x in freq['Marker']]]
-target_marker_freq.to_csv('target.marker.freq.txt', sep='\t', index=False)
-
-# 生成bed格式的坐标文件，用于注释基因
-target_df = target_marker_df.reset_index()[['Chrom', 'Start', 'End', 'Name', 'meanAe', 'Extent', 'NumVars', 'Positions', 'RSIDs', 'Source']]
-target_df['Start'] = target_df['Start'] - 1
-target_df.to_csv('target.marker.zero-based.txt', sep='\t', index=False)
 
 # 其次想到的数据库是国内的女娲基因组资源, 我们依据这个资源可以对这些marker进行验算和重新排序，得到中国更准确的中国人群信息
 # http://bigdata.ibp.ac.cn/NyuWa_variants/search.php
 # NGS数据模拟
+# 输入microhapdb工具提供的fasta文件和freq文件，生成vcf，再将vcf给varsim进行数据模拟
+# 百分50%的micorhap是纯合，百分50%的是杂合，给出2个人的vcf，基因型随机
+
+
+def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid'):
+    from Bio import SeqIO
+    from Bio.SeqRecord import SeqRecord
+    import random
+    microhap_seq = dict()
+    microhap_snp_dict = dict()
+    for record in SeqIO.parse(fasta_file, format='fasta'):
+        name, snp_pos = record.description.split()[-1].split('=')
+        snp_pos = [int(x) for x in snp_pos.split(',')]
+        ref_bases = [record.seq[x] for x in snp_pos]
+        microhap_snp_dict[name] = [snp_pos, ref_bases]
+        microhap_seq[name] = record.seq.__str__()
+
+    microhap_genotypes = dict()
+    with open(freq_file) as f:
+        _header = f.readline()
+        for line in f:
+            lst = line.strip().split()
+            microhap_genotypes.setdefault(lst[0], []).append(lst[1].split('|'))
+
+    random.seed(11)
+    chrom = dict()
+    chrom2 = dict()
+    for marker, genotypes in microhap_genotypes.items():
+        select_idx = random.randint(0, len(genotypes)-1)
+        select_idx2 = random.randint(0, len(genotypes)-1)
+        # print(genotypes, select_idx)
+        genotype = genotypes[select_idx]
+        positions, ref_bases = microhap_snp_dict[marker]
+        marker_name = f'>{marker} genotype={"|".join(genotype)} snps={",".join((str(x) for x in positions))}'
+        marker_seq_lst = list(microhap_seq[marker])
+        for p, b in zip(positions, genotype):
+            marker_seq_lst[p] = b
+        chrom[marker_name] = ''.join(marker_seq_lst)
+        is_homo = random.randint(0, 1)
+        if is_homo:
+            chrom2[marker_name] = ''.join(marker_seq_lst)
+        else:
+            genotype = genotypes[select_idx2]
+            marker_name = f'>{marker} genotype={"|".join(genotype)} snps={",".join((str(x) for x in positions))}'
+            for p, b in zip(positions, genotype):
+                marker_seq_lst[p] = b
+            chrom2[marker_name] = ''.join(marker_seq_lst)
+    with open(f'{out_prefix}.chrom1.fa', 'w') as f1, open(f'{out_prefix}.chrom2.fa', 'w') as f2:
+        for name, seq in chrom.items():
+            f1.write(name+'\n')
+            f1.write(seq+'\n')
+        for name, seq in chrom2.items():
+            f2.write(name+'\n')
+            f2.write(seq+'\n')
+
+
+if __name__ == '__main__':
+    from xcmds import xcmds
+    xcmds.xcmds(locals())
