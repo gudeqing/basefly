@@ -295,8 +295,8 @@ def pipeline():
     wf.add_argument('-recipient_name', required=False, help='recipient sample name, if recipient profile not provided, we wil start from fastq file to get the profile')
     wf.add_argument('-donor_profile', required=False, help='donor micro-hap typing result')
     wf.add_argument('-recipient_profile', required=False, help='recipient micro-hap typing result')
-    wf.add_argument('-forward_primer', required=True, help="read1 5'end primer")
-    wf.add_argument('-reverse_primer', required=True, help="read2 5'end primer")
+    wf.add_argument('-forward_primer', required=False, help="read1 5'end primer")
+    wf.add_argument('-reverse_primer', required=False, help="read2 5'end primer")
     # 收集参数
     wf.parse_args()
     top_vars = dict(
@@ -367,31 +367,33 @@ def pipeline():
         bwa_tasks = []
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
             uniq_tag = f'{sample}-{ind}' if len(r1s) > 1 else sample
-            # cutdapter去除primer
-            cutadapter_task, args = wf.add_task(Cutadapter(), tag=uniq_tag)
-            args['adapter5_r1'].value = wf.topvars['forward_primer']
-            args['adapter5_r2'].value = wf.topvars['reverse_primer']
-            args['pair-adapters'].value = True
-            args['error-rate'].value = 0.25
-            args['overlap'].value = 5
-            # 丢掉不包含primer的
-            args['discard-untrimmed'].value = True
-            args['length-tag'].value = "length="
-            args['read1'].value = r1
-            args['read2'].value = r2
-            args['info-file'].value = uniq_tag + '.primer.cutInfo.txt'
-            args['out1'].value = uniq_tag + '.noPrimer.R1.fq.gz'
-            args['out2'].value = uniq_tag + '.noPrimer.R2.fq.gz'
+            cutadapter_task = None
+            if 'Cutadapter' not in wf.args.skip:
+                # cutdapter去除primer
+                cutadapter_task, args = wf.add_task(Cutadapter(), tag=uniq_tag)
+                args['adapter5_r1'].value = wf.topvars['forward_primer']
+                args['adapter5_r2'].value = wf.topvars['reverse_primer']
+                args['pair-adapters'].value = True
+                args['error-rate'].value = 0.25
+                args['overlap'].value = 5
+                # 丢掉不包含primer的
+                args['discard-untrimmed'].value = True
+                args['length-tag'].value = "length="
+                args['read1'].value = r1
+                args['read2'].value = r2
+                args['info-file'].value = uniq_tag + '.primer.cutInfo.txt'
+                args['out1'].value = uniq_tag + '.noPrimer.R1.fq.gz'
+                args['out2'].value = uniq_tag + '.noPrimer.R2.fq.gz'
 
             # fastp QC
             fastp_task, args = wf.add_task(Fastp(), tag=uniq_tag)
             args['correction'].value = True
             args['disable_quality_filtering'].value = True
             args['disable_adapter_trimming'].value = True
-            args['read1'].value = cutadapter_task.outputs['out1']
+            args['read1'].value = cutadapter_task.outputs['out1'] if cutadapter_task else r1
             args['out1'].value = f'{sample}.clean.R1.fq.gz'
             if r2 is not None:
-                args['read2'].value = cutadapter_task.outputs['out2']
+                args['read2'].value = cutadapter_task.outputs['out2'] if cutadapter_task else r2
                 args['out2'].value = f'{sample}.clean.R2.fq.gz'
             args['html'].value = f'{sample}.fastp.html'
             args['json'].value = f'{sample}.fastp.json'
