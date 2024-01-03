@@ -1039,7 +1039,8 @@ class ValidateMutationByBam(object):
             bases = [x.upper() for x in bases]
             base_dict = Counter(bases)
             depth = col.get_num_aligned()
-            alt, freq = base_dict.most_common(1)
+            alt, freq = base_dict.most_common(1)[0]
+        # print(base_dict.most_common(3))
         return alt, freq, depth
 
 
