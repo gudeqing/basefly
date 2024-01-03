@@ -497,7 +497,7 @@ def get_marker_chemerism(donor_count: dict, recipient_count: dict):
         recipient_is_homo = True
     else:
         recipient_is_homo = False
-    total_count = sum(dict(donor_count, **recipient_count).values())
+    total_count = sum(dict(donor_count, **recipient_count).values()) or 1
     # 针对不同情形计算
     comm = donor_count.keys() & recipient_count.keys()
     if len(comm) == 0:
