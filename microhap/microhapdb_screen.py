@@ -1,3 +1,6 @@
+import json
+import os
+
 import pandas as pd
 import gzip
 from collections import Counter
@@ -289,11 +292,11 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
     print(f'Total {target_marker_df.shape[0]} markers left')
     print(target_marker_df.describe())
     target_marker_df.to_csv(f'target.markers.csv')
-    print('marker snp 数量分布统计：')
+    print('marker 包含的snp数量分布统计：')
     print(target_marker_df['NumVars'].value_counts())
-    print('marker chrome 数量分布统计')
+    print('marker 在染色体上的分布统计')
     print(target_marker_df['Chrom'].value_counts())
-    print('marker source 来源分布统计')
+    print('marker 文献来源分布统计')
     print(target_marker_df['Source'].value_counts())
 
     # 提取通过筛选的marker的人群Ae信息
@@ -301,7 +304,7 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
     target_marker_freq.to_csv('target.marker.freq.txt', sep='\t', index=False)
 
     # 生成bed格式的坐标文件，用于注释基因
-    target_df = target_marker_df.reset_index()[['Chrom', 'Start', 'End', 'Name', 'meanAe', 'Extent', 'NumVars', 'Positions', 'RSIDs', 'Source']]
+    target_df = target_marker_df.reset_index()[['#Chrom', 'Start', 'End', 'Name', 'meanAe', 'Extent', 'NumVars', 'Positions', 'RSIDs', 'Source']]
     target_df['Start'] = target_df['Start'] - 1
     target_df.to_csv('target.marker.zero-based.txt', sep='\t', index=False)
 
@@ -313,7 +316,7 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
 # 百分50%的micorhap是纯合，百分50%的是杂合，给出2个人的vcf，基因型随机
 
 
-def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid'):
+def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid', seed=11):
     from Bio import SeqIO
     from Bio.SeqRecord import SeqRecord
     import random
@@ -331,38 +334,83 @@ def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid')
         _header = f.readline()
         for line in f:
             lst = line.strip().split()
-            microhap_genotypes.setdefault(lst[0], []).append(lst[1].split('|'))
+            microhap_genotypes.setdefault(lst[0], []).append(lst[1])
 
-    random.seed(11)
+    random.seed(seed)
     chrom = dict()
     chrom2 = dict()
+    marker_info = dict()
     for marker, genotypes in microhap_genotypes.items():
+        marker_info.setdefault(marker, [])
         select_idx = random.randint(0, len(genotypes)-1)
-        select_idx2 = random.randint(0, len(genotypes)-1)
         # print(genotypes, select_idx)
         genotype = genotypes[select_idx]
         positions, ref_bases = microhap_snp_dict[marker]
-        marker_name = f'>{marker} genotype={"|".join(genotype)} snps={",".join((str(x) for x in positions))}'
+        marker_name = f'>{marker} genotype={genotype} snps={",".join((str(x) for x in positions))}'
         marker_seq_lst = list(microhap_seq[marker])
-        for p, b in zip(positions, genotype):
+        for p, b in zip(positions, genotype.split('|')):
             marker_seq_lst[p] = b
         chrom[marker_name] = ''.join(marker_seq_lst)
         is_homo = random.randint(0, 1)
         if is_homo:
             chrom2[marker_name] = ''.join(marker_seq_lst)
+            marker_info[marker].append([genotype])
         else:
-            genotype = genotypes[select_idx2]
-            marker_name = f'>{marker} genotype={"|".join(genotype)} snps={",".join((str(x) for x in positions))}'
-            for p, b in zip(positions, genotype):
+            genotypes = sorted(set(genotypes) - {genotype})
+            select_idx2 = random.randint(0, len(genotypes) - 1)
+            genotype2 = genotypes[select_idx2]
+            marker_info[marker].append([genotype, genotype2])
+            marker_name = f'>{marker} genotype={genotype2} snps={",".join((str(x) for x in positions))}'
+            for p, b in zip(positions, genotype2.split('|')):
                 marker_seq_lst[p] = b
             chrom2[marker_name] = ''.join(marker_seq_lst)
-    with open(f'{out_prefix}.chrom1.fa', 'w') as f1, open(f'{out_prefix}.chrom2.fa', 'w') as f2:
+    out_name = f'{out_prefix}.chrom1.fa'
+    out_name2 = f'{out_prefix}.chrom2.fa'
+    out_name3 = f'{out_prefix}.genotype.json'
+    with open(out_name, 'w') as f1, open(out_name2, 'w') as f2, open(out_name3, 'w') as f3:
         for name, seq in chrom.items():
             f1.write(name+'\n')
             f1.write(seq+'\n')
         for name, seq in chrom2.items():
             f2.write(name+'\n')
             f2.write(seq+'\n')
+        json.dump(marker_info, f3, indent=2)
+    return out_name, out_name2
+
+
+def simulate_data(fasta_file, freq_file, sample, seed=11, depth=600, simulator='/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/art_illumina'):
+    chrom1, chrom2 = prepare_simulation_reference(fasta_file, freq_file, out_prefix=sample, seed=seed)
+    insert_size = 350
+    insert_size_sd = 50
+    cmd1 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom1} --id {sample}c1 -o {sample}_1.'
+    cmd2 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom2} --id {sample}c2 -o {sample}_2.'
+    os.system(cmd1)
+    os.system(cmd2)
+    fq1 = f'{sample}.R1.fastq'
+    fq2 = f'{sample}.R2.fastq'
+    os.system(f'cat {sample}*.1.fq > {fq1}')
+    os.system(f'cat {sample}*.2.fq > {fq2}')
+    os.system(f'rm {sample}*.1.fq {sample}*.2.fq')
+    return fq1, fq2
+
+
+def batch_simulation(fasta_file, freq_file, ratios=(0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 0.995, 0.999)):
+    donor_name = 'Donor'
+    recipient_name = 'Recipient'
+    mix_name_pattern = 'Mix-12-{d}v{v}'
+    simulate_data(fasta_file, freq_file, donor_name, seed=11, depth=300)
+    simulate_data(fasta_file, freq_file, recipient_name, seed=12, depth=300)
+    depth = 1000
+    for ratio in ratios:
+        recipient_depth = int(depth * ratio)
+        donor_depth = int(depth * (1 - ratio))
+        donor_fq1, donor_fq2 = simulate_data(fasta_file, freq_file, donor_name+'-tmp', seed=11, depth=donor_depth)
+        recept_fq1, recept_fq2 = simulate_data(fasta_file, freq_file, recipient_name+'-tmp', seed=12, depth=recipient_depth)
+        mix_name = mix_name_pattern.format(d=donor_depth, v=recipient_depth)
+        os.system(f'cat {donor_fq1} {recept_fq1} > {mix_name}.R1.fastq')
+        os.system(f'cat {donor_fq2} {recept_fq2} > {mix_name}.R2.fastq')
+        os.system(f'rm {donor_fq1} {recept_fq1} {donor_fq2} {recept_fq2}')
+    print('simulation success')
 
 
 if __name__ == '__main__':
