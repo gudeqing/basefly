@@ -267,7 +267,7 @@ def Chimerism():
 
 def pipeline():
     wf = Workflow()
-    wf.meta.name = 'ctDNA'
+    wf.meta.name = 'MicroHaplotype'
     wf.meta.source = ""
     wf.meta.desc = \
     """
