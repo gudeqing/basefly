@@ -452,8 +452,9 @@ def pipeline():
         result = dict()
         for task in chimerism_tasks:
             chimer_json = os.path.join(task.wkdir, task.outputs['out'].value)
-            with open(chimer_json) as f:
-                result[task.tag] = json.load(f)
+            if '-' in os.path.basename(chimer_json):
+                with open(chimer_json) as f:
+                    result[task.tag] = json.load(f)
         df = pd.DataFrame(result)
         exp_chimerism = []
         for each in df.columns:
@@ -475,7 +476,11 @@ def pipeline():
         hap_count_df_lst = []
         marker_depth_df_lst = []
         for task in typing_tasks:
-            typing_table_file = os.path.join(task.wkdir, task.outputs['out'].value)
+            if '${{mode:outdir}}' in task.outputs['out'].value:
+                table_file_path = task.outputs['out'].value.replace('${{mode:outdir}}', wf.wkdir)
+            else:
+                table_file_path = task.outputs['out'].value
+            typing_table_file = os.path.join(task.wkdir, table_file_path)
             typing_df = pd.read_csv(typing_table_file, header=0)
             typing_df = typing_df[typing_df['Pass']]
             hap_count_df = typing_df.set_index(['marker', 'haplotype'])[['count']]
