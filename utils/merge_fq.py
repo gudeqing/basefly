@@ -3,7 +3,7 @@ import os
 
 def merge_fq(fq_lst, outdir, group='tumor'):
     # 对输入的fq进行排序
-    fq_lst = sorted(fq_lst)
+    # fq_lst = sorted(fq_lst)
     # 准备输出目录
     r1_outdir = os.path.join(outdir, group + '_R1')
     r2_outdir = os.path.join(outdir, group + '_R2')
