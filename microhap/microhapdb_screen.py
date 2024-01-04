@@ -128,6 +128,12 @@ array(['1KGP', 'ACB', 'AFR', 'ASW', 'BEB', 'CDX', 'CEU', 'CHB', 'CHS',
 In [7]: set(target_popultation_ids ) & set(ae_pops)
 Out[7]: {'CDX', 'CHB', 'CHS', 'EAS', 'JPT', 'KHV'}
 @也就是说，只有千人基因组计划的人群包含了Ae信息
+
+# 其次想到的数据库是国内的女娲基因组资源, 我们依据这个资源可以对这些marker进行验算和重新排序，得到中国更准确的中国人群信息
+# http://bigdata.ibp.ac.cn/NyuWa_variants/search.php
+
+# NGS数据模拟,输入根据microhapdb工具生成的fasta文件和freq文件
+
 """
 # 统计哪些目标群体没有AE信息可得
 # hit_pops = {x.split('+')[1] for x in marker_pop_ae_value_dict.keys()}
@@ -307,13 +313,6 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
     target_df = target_marker_df.reset_index()[['#Chrom', 'Start', 'End', 'Name', 'meanAe', 'Extent', 'NumVars', 'Positions', 'RSIDs', 'Source']]
     target_df['Start'] = target_df['Start'] - 1
     target_df.to_csv('target.marker.zero-based.txt', sep='\t', index=False)
-
-
-# 其次想到的数据库是国内的女娲基因组资源, 我们依据这个资源可以对这些marker进行验算和重新排序，得到中国更准确的中国人群信息
-# http://bigdata.ibp.ac.cn/NyuWa_variants/search.php
-# NGS数据模拟
-# 输入microhapdb工具提供的fasta文件和freq文件，生成vcf，再将vcf给varsim进行数据模拟
-# 百分50%的micorhap是纯合，百分50%的是杂合，给出2个人的vcf，基因型随机
 
 
 def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid', seed=11):
