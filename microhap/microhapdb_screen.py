@@ -72,6 +72,7 @@ SAS (南亚人群)	GIH：印度古吉拉特邦人；PJL：巴基斯坦旁遮普�
     3. 为减少测序错误带来的定量偏差，每个snp前后不能出现超过3个及以上的碱基串联重复
     4. 每个microhap包含[2, 10]个变异位点
     6. 为减少测序错误带来的定量偏差，对于一个microhap，需要谨慎考虑基因型之间相差的碱基仅仅是{C>T} 或 {G>A}的情形
+    7. 去除有重叠序列的MHs并选择Ae最大的MHs 
 
 
 # 进一步了解microhapdb：
@@ -171,8 +172,8 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
             good = False
         return good
 
-    def near_very_short_tandem(row, repeat_len=3):
-        # 段串联重复区域容易测错，如AAAT有可能测成AAAA, 因此我们也希望能避免此类marker
+    def near_very_short_tandem(row, repeat_len=4):
+        # 串联重复区域容易测错，如AAAT有可能测成AAAA, 因此我们也希望能避免此类marker
         NumVars, Extent, Chrom, Start, End, Positions, Positions37, RSIDs, Source, *_ = row
         positions = [int(x) for x in Positions.split(';')]
         discard = False
@@ -260,7 +261,7 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
     # target_marker_df = target_marker_df.loc[~idx]
     # target_marker_df.to_csv('target_markers.csv')
     min_len = 25
-    max_len = 200
+    max_len = 300
     min_ae = 2
     min_NumVars = 2
     max_NumVars = 7
@@ -285,7 +286,7 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
     # 根据marker的序列特征过滤
     target_marker_df = target_marker_df.loc[~target_marker_df.apply(near_very_short_tandem, axis=1)]
     complex_filtered_num = init_marker_num - len_filtered_num - ae_filtered_num - numvars_filtered_num - target_marker_df.shape[0]
-    print('进一步根据SNP位点前后特征过滤掉的marker数量', complex_filtered_num)
+    print('进一步根据SNP位点前后特征（碱基串联重复）过滤掉的marker数量', complex_filtered_num)
 
     target_marker_df = target_marker_df.loc[[marker_genotype_distinguishable[x] for x in target_marker_df.index]]
     genotype_filtered_num = init_marker_num - len_filtered_num - ae_filtered_num - numvars_filtered_num - complex_filtered_num - target_marker_df.shape[0]
@@ -304,14 +305,33 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
     print(target_marker_df['Chrom'].value_counts())
     print('marker 文献来源分布统计')
     print(target_marker_df['Source'].value_counts())
+    print('相同染色体上marker之间的距离信息统计,仅显示距离最小的前5名, 单位为Mb')
+    target_marker_df['center_pos'] = [int(x) for x in (target_marker_df['Start'] + target_marker_df['End'])/2]
+
+    def compute_differences(lst, top=5):
+        n = len(lst)
+        if n <= 1:
+            return []
+        # 创建一个列表来存储差值
+        differences = set()
+        # 遍历列表中的每对元素
+        for i in range(n):
+            for j in range(i + 1, n):
+                # 计算差值并添加到结果列表中
+                dist = abs(lst[j] - lst[i])
+                differences.add(round(dist*1e-6, 2))
+        return sorted(differences)[:top]
+
+    print(target_marker_df.groupby('Chrom')['center_pos'].apply(compute_differences))
 
     # 提取通过筛选的marker的人群Ae信息
     target_marker_freq = freq.loc[[x in target_marker_df.index for x in freq['Marker']]]
     target_marker_freq.to_csv('target.marker.freq.txt', sep='\t', index=False)
 
     # 生成bed格式的坐标文件，用于注释基因
-    target_df = target_marker_df.reset_index()[['#Chrom', 'Start', 'End', 'Name', 'meanAe', 'Extent', 'NumVars', 'Positions', 'RSIDs', 'Source']]
+    target_df = target_marker_df.reset_index()[['Chrom', 'Start', 'End', 'Name', 'meanAe', 'Extent', 'NumVars', 'Positions', 'RSIDs', 'Source']]
     target_df['Start'] = target_df['Start'] - 1
+    target_df.columns = ['#Chrom', 'Start', 'End', 'Name', 'meanAe', 'Extent', 'NumVars', 'Positions', 'RSIDs', 'Source']
     target_df.to_csv('target.marker.zero-based.txt', sep='\t', index=False)
 
 
