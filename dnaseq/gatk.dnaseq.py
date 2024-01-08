@@ -886,6 +886,8 @@ def pipeline():
         wgs_calling_regions.hg38.interval_list, 如果是WGS测序,可以作为-intervals参数的输入
     2. 使用bwamem2进行索引构建, 如进入容器gudeqing/dnaseq:1.0的容器: 执行/opt/bwa-mem2-2.2.1_x64-linux/bwa-mem2 index your_fasta_file
     3. fastq文件, 可以提供一个fastq所在目录,然后通过参数'-r1_name'和'-r2_name'提供fastq的文件名的正则表达式, 我们依据正则表达式提取样本路径和样本名称
+    4. 输入参数call_mode决定分析模式，支持somatic，germline和mix三种模式，mix模式是对肿瘤样本进行somatic突变分析，并基于对照样本进行germline突变分析
+    5. 输入参数interval提供捕获区域文件，可以提供bed文件格式或interval文件格式
     """
     # 定义流程输入参数
     wf.init_argparser()
