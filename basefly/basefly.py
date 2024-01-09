@@ -330,6 +330,7 @@ class Command:
             for each in mount_vols:
                 docker_cmd += f' -v {each}:{each} '
             docker_cmd += f'-w {wkdir} {self.runtime.image} cmd.sh'
+            print(docker_cmd)
             subprocess.check_call(docker_cmd, cwd=wkdir, shell=True)
         else:
             subprocess.check_call(self.format_cmd(wf_tasks), cwd=wkdir, shell=True, executable='/bin/bash')
@@ -361,7 +362,7 @@ class Command:
                 continue
             arg_id += 1
             dest_name = f'Arg{arg_id}'
-            if arg.prefix.strip() and ('{' not in arg.prefix):
+            if arg.prefix.strip().replace('-', '') and ('{' not in arg.prefix):
                 prefix_name = arg.prefix.strip()
             else:
                 prefix_name = name
@@ -369,12 +370,19 @@ class Command:
                 prefix_name = '-' + name
             if arg.type == 'bool':
                 parser.add_argument(prefix_name, default=arg.default, action=f"store_{str(not arg.default).lower()}", help=arg.desc, dest=dest_name)
-            elif arg.array:
-                parser.add_argument(prefix_name, default=arg.default, required=arg.level == 'required', nargs='+', help=arg.desc, dest=dest_name)
             else:
-                parser.add_argument(prefix_name, default=arg.default, required=arg.level == 'required', help=arg.desc, dest=dest_name)
-            name_map[name] = prefix_name.strip('-').replace('-', '_')
-            # name_map[name] = dest_name
+                if arg.default is None and arg.level == 'required':
+                    required = True
+                elif arg.default is not None and arg.level == 'required':
+                    required = False
+                else:
+                    required = False
+                if arg.array:
+                    parser.add_argument(prefix_name, default=arg.default, required=required, nargs='+', help=arg.desc, dest=dest_name)
+                else:
+                    parser.add_argument(prefix_name, default=arg.default, required=required, help=arg.desc, dest=dest_name)
+                # name_map[name] = prefix_name.strip('-').replace('-', '_')
+            name_map[name] = dest_name
 
         args = parser.parse_args()
         arg_value_dict = dict(args._get_kwargs())

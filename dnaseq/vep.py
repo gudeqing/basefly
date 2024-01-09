@@ -23,9 +23,11 @@ def vep(sample='sample'):
     * more...
     """
     cmd.runtime.image = 'gudeqing/dnaseq:1.0'
+    cmd.runtime.image = 'ensemblorg/ensembl-vep:release_110.1'
     cmd.runtime.tool = 'vep'
+    cmd.runtime.docker_cmd_prefix = cmd.runtime.docker_cmd_prefix2
     cmd.args['input_file'] = Argument(prefix='-i ', type='infile', desc='input file')
-    cmd.args['fasta'] = Argument(prefix='--fasta ', type='infile',
+    cmd.args['fasta'] = Argument(prefix='--fasta ', type='infile', default='/home/hxbio04/hg19/genome.fa',
                                  desc="Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache).")
     cmd.args['output_file'] = Argument(prefix='-o ', default=f'{sample}.vep.vcf.gz', desc='output file')
     cmd.args['output_format'] = Argument(prefix='--', range={'vcf', 'json', 'tab'}, default='vcf',
@@ -40,7 +42,7 @@ def vep(sample='sample'):
                                    desc='Species for your data. This can be the latin name e.g. homo_sapiens or any Ensembl alias e.g. mouse.')
     cmd.args['assembly_version'] = Argument(prefix='--assembly ', default='GRCh38',
                                             desc='Select the assembly version to use if more than one available.')
-    cmd.args['dir_cache'] = Argument(prefix='--dir_cache ', type='indir', desc='Specify the cache directory to use')
+    cmd.args['dir_cache'] = Argument(prefix='--dir_cache ', type='indir', default='/home/hxbio04/dbs/vep', desc='Specify the cache directory to use')
     cmd.args['dir_plugins'] = Argument(prefix='--dir_plugins ', type='indir', level='optional',
                                        desc='Specify the plugin directory to use')
     cmd.args['merged'] = Argument(prefix='--merged ', type='bool', default=False,
@@ -99,7 +101,7 @@ def vep(sample='sample'):
     cmd.args['flag_pick'] = Argument(prefix='--flag_pick ', type='bool', default=True,
                                      desc="As per --pick, but adds the PICK flag to the chosen block of consequence data and retains others.")
     cmd.args['filter_common'] = Argument(prefix='--filter_common ', type='bool', default=False,
-                                         desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01 (1%). May be modified using any of the following freq_* filters.")
+                                         desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01. May be modified using any of the following freq_* filters.")
     cmd.args['other_args'] = Argument(default='', desc='specify other arguments that you want to append to the command')
     cmd.args['_create_index'] = Argument(value='&& tabix *vcf.gz', type='fix')
     cmd.outputs['out_vcf'] = Output(value='{output_file}')
