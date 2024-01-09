@@ -193,7 +193,7 @@ def screen(freq_file='microhapdb/frequency.csv.gz', marker_file='microhapdb/mark
         for pos in positions:
             up_3bases = genome.fetch(Chrom, pos - extend - 1, pos - 1)
             current_base = genome.fetch(Chrom, pos - 1, pos)
-            down_3bases = genome.fetch(Chrom, pos, pos + 10)
+            down_3bases = genome.fetch(Chrom, pos, pos + extend)
             contexts.append(up_3bases + f'({current_base})' + down_3bases)
         return ";".join(contexts)
 
@@ -430,6 +430,28 @@ def batch_simulation(fasta_file, freq_file, ratios=(0.001, 0.005, 0.01, 0.02, 0.
         os.system(f'cat {donor_fq2} {recept_fq2} > {mix_name}.R2.fastq')
         os.system(f'rm {donor_fq1} {recept_fq1} {donor_fq2} {recept_fq2}')
     print('simulation success')
+
+
+def y_snps(y_snp_file='YSNPs.txt', genome_file='/home/hxbio04/biosofts/MicroHapulator/microhapulator/data/hg38.fasta'):
+    from pysam import FastaFile
+    genome = FastaFile(genome_file)
+    extend = 10
+    with open(y_snp_file) as f, open('YSNPs.anno.txt', 'w') as fw:
+        header = f.readline().strip().split('\t')
+        header.append('SeqContext')
+        fw.write('\t'.join(header)+'\n')
+        for line in f:
+            lst = line.strip().split('\t')
+            YDNA_haplogroup, YSNP, Chrom, pos, *_ = lst
+            Chrom = 'chrY'
+            pos = int(pos)
+            up_3bases = genome.fetch(Chrom, pos - extend - 1, pos - 1)
+            current_base = genome.fetch(Chrom, pos - 1, pos)
+            down_3bases = genome.fetch(Chrom, pos, pos + extend)
+            context = up_3bases + f'({current_base})' + down_3bases
+            lst[2] = Chrom
+            lst.append(context)
+            fw.write('\t'.join(lst)+'\n')
 
 
 if __name__ == '__main__':
