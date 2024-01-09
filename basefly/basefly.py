@@ -300,6 +300,7 @@ class Command:
         import subprocess
         print(f'Running {self.meta.name} ...')
         os.makedirs(wkdir, exist_ok=True)
+        wkdir = os.path.abspath(wkdir)
         if self.runtime.image and docker:
             # get mount volumes
             mount_vols = {wkdir}

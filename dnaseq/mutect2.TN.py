@@ -841,7 +841,8 @@ def ApplyVQSR(prefix):
 def pipeline():
     wf = Workflow()
     wf.meta.version = "0.1"
-    wf.meta.name = 'GATK-DNASeq-Workflow'
+    wf.meta.name = 'Mutect2-Tumor-Normal-Workflow'
+    wf.meta.function = '本流程适用于对配对的肿瘤样本进行体细胞突变检测分析'
     wf.meta.source = """
     ## https://github.com/gatk-workflows/gatk4-data-processing/tree/2.1.1
     ## https://github.com/gatk-workflows/gatk4-germline-snps-indels
@@ -853,12 +854,14 @@ def pipeline():
     当前流程是DNASeq分析流程，参考博得研究所的GATK-Best-Practice流程改写而成，主要用于SNP/Indel突变检测分析。流程包含的主要步骤如下：
     * 使用fastp进行测序接头自动去除
     * 使用BWA进行比对分析
-    * 使用GATK检测small SNP/Indel, 同时支持tumor-only和tumor-normal配对模式
-    * 使用GATK检测germline突变，如果输入多个normal样本，则会直接进行joint-calling
-    * 基于VEP进行突变注释
+    * 使用GATK检测small SNP/Indel, 仅支持tumor-normal配对模式
+    * 可选项: 基于VEP进行突变注释
     
-    使用示例：？
-    
+    使用示例：
+    * 确认已经准备好输入文件或加载所需数据集（如流程文件数据集，样本数据集，参考文件数据集）
+    * 运行命令: python /enigma/datasets/*/scripts/mutect2_TN/mutect2.TN.py -fastq_info /enigma/datasets/*/your_testdata_dir -r1_name "(.*)_1.fq.gz" -r2_name "(.*)_2.fq.gz" -ref_dir /enigma/datasets/*/hg38/ -outdir /enigma/local_storage/Result -intervals /home/hxbio04/dbs/gatk_ref/hg38/wes.agilent_region.B37_V6.toHg38.bed --plot --docker --run -tumor_sample_name P68_tumor
+    * 分析结果：主要分析结果将汇总于输出目录如Result/Report
+
     主要输入说明（以hg38为例）:
     1. 下载aws提供的公开数据集: aws s3 ls --no-sign-request s3://broad-references/hg38/v0/
         期望得到如下文件:
@@ -867,27 +870,20 @@ def pipeline():
         Homo_sapiens_assembly38.fasta.fai
         dbsnp_146.hg38.vcf.gz, 作为参数'-dbsnp'的值
         dbsnp_146.hg38.vcf.gz.tbi
-        Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz, 作为参数'-axiomPoly'的值
-        Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz.tbi
         Mills_and_1000G_gold_standard.indels.hg38.vcf.gz, 作为参数'-mills'的输入
         Mills_and_1000G_gold_standard.indels.hg38.vcf.gz.tbi
-        hapmap_3.3.hg38.vcf.gz, 作为参数'-hapmap'的输入
-        hapmap_3.3.hg38.vcf.gz.tbi
-        1000G_omni2.5.hg38.vcf.gz, 作为参数'-omni'的输入
-        1000G_omni2.5.hg38.vcf.gz.tbi
-        1000G_phase1.snps.high_confidence.hg38.vcf.gz, 作为参数'-G1000'的输入
-        1000G_phase1.snps.high_confidence.hg38.vcf.gz.tbi
+        Homo_sapiens_assembly38.known_indels.vcf.gz, 作为参数"--known_indels"的输入
+        Homo_sapiens_assembly38.known_indels.vcf.gz.tbi
         M2PoN_4.0_WGS_for_public.vcf, 作为参数"-pon"的输入
         M2PoN_4.0_WGS_for_public.vcf.idx
         af-only-gnomad.hg38.vcf.gz, 作为参数'-germline_vcf'的输入
         af-only-gnomad.hg38.vcf.gz.tbi
         small_exac_common_3.hg38.vcf.gz, 作为参数'-contamination_vcf'的输入
         small_exac_common_3.hg38.vcf.gz.tbi
-        wgs_calling_regions.hg38.interval_list, 如果是WGS测序,可以作为-intervals参数的输入
+        wes.agilent_region.B37_V6.toHg38.bed, 如果是WES测序,可以作为-intervals参数的输入,不同的外显子组捕获区域可能不一样，请根据实际情况输入
     2. 使用bwamem2进行索引构建, 如进入容器gudeqing/dnaseq:1.0的容器: 执行/opt/bwa-mem2-2.2.1_x64-linux/bwa-mem2 index your_fasta_file
     3. fastq文件, 可以提供一个fastq所在目录,然后通过参数'-r1_name'和'-r2_name'提供fastq的文件名的正则表达式, 我们依据正则表达式提取样本路径和样本名称
-    4. 输入参数call_mode决定分析模式，支持somatic，germline和mix三种模式，mix模式是对肿瘤样本进行somatic突变分析，并基于对照样本进行germline突变分析
-    5. 输入参数interval提供捕获区域文件，可以提供bed文件格式或interval文件格式
+    4. 输入参数interval提供捕获区域文件，可以提供bed文件格式或interval文件格式
     """
     # 定义流程输入参数
     wf.init_argparser()
@@ -895,7 +891,6 @@ def pipeline():
     wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
     wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
-    wf.add_argument('-call_mode', default='somatic', help='somatic: somatic variant calling for tumor samples; germline: germline variant calling for all input samples, this mode is suitable for WES and WGS; mix: somatic variant calling for tumor samples and germline variant calling for paired normal samples')
     wf.add_argument('-pair_info', required=False, help='File containing tumor normal pair info, two-column txt file, first column is tumor sample name. sample not in pair info will be skipped. In "germline" mode, this input is ignored')
     wf.add_argument('-tumor_sample_name', required=False, help='If you only input two paired samples, for convenient, you may use this argument instead of "pair_info" to specify tumor sample. For multiple samples, you should provide sample pairing info file by "pair_info')
     wf.add_argument('-scatter', default=10, help='Scatter number used for interval splitting of variant calling steps')
@@ -905,26 +900,21 @@ def pipeline():
     wf.add_argument('-ref_dir', default='/enigma/datasets/*/hg38/', help='The directory containing all reference files for gatk input. The following input files need to be in this file')
     wf.add_argument('--ref', default='Homo_sapiens_assembly38.fasta', help='reference fasta file. It should be in "ref_dir"')
     wf.add_argument('--dbsnp', default='dbsnp_146.hg38.vcf.gz', help='dbsnp vcf file')
-    wf.add_argument('--axiomPoly', default='Axiom_Exome_Plus.genotypes.all_populations.poly.hg38.vcf.gz', help='high confidence known indel vcf file, such as Axiom_Exome_Plus.genotypes.all_populations.poly.vcf.gz. 1,249 individuals are included, drawn from the International HapMap Project and 1000 Genomes Project sample collection. https://www.thermofisher.cn/cn/zh/home/life-science/microarray-analysis/microarray-data-analysis/microarray-analysis-sample-data/axiom-exome-sample-data-set.html')
+    wf.add_argument('--known_indels', default='Homo_sapiens_assembly38.known_indels.vcf.gz', help='known indel vcf file')
     wf.add_argument('--mills', default="Mills_and_1000G_gold_standard.indels.hg38.vcf.gz", help='high confidence known indel vcf file. such as Mills_and_1000G_gold_standard.indels.hg38.vcf')
-    wf.add_argument('--hapmap', default="hapmap_3.3.hg38.vcf.gz", help='high confidence known snp vcf file. 来自国际人类单倍体型图计划, 这个数据集包含了大量家系数据，并且有非常严格的质控和严密的实验验证，因此它的准确性是目前公认最高的')
-    wf.add_argument('--omni', default="1000G_omni2.5.hg38.vcf.gz", help='high confidence known snp vcf file. 这个数据源自Illumina的Omni基因型芯片，大概2.5百万个位点，它的验证结果常常作为基因型的金标准')
-    wf.add_argument('--G1000', default="1000G_phase1.snps.high_confidence.hg38.vcf.gz", help='high confidence known snp vcf file. source from 1000 genomes project')
     wf.add_argument('--germline_vcf', default='af-only-gnomad.hg38.vcf.gz', help='germline vcf, will be used for germline variant filtering')
     wf.add_argument('--contamination_vcf', default='small_exac_common_3.hg38.vcf.gz', help='germline vcf such as small_exac_common_3_b37.vcf, will be used for contamination analysis')
     wf.add_argument('--bwaMemIndexImage', required=False, help='bwa-mem-index-mage for artifact alignment filtering. you may created it with tool BwaMemIndexImageCreator with only fasta as input')
     wf.add_argument('-vep_cache_dir', required=False, help='VEP cache directory')
     wf.add_argument('-vep_plugin_dir', required=False, help='VEP plugin directory')
     wf.parse_args()
+    wf.args.call_mode = 'somatic'
 
     top_vars = dict(
         ref=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.ref), type='infile'),
         dbsnp=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.dbsnp), type='infile'),
-        axiomPoly=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.axiomPoly), type='infile'),
+        known_indels=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.known_indels), type='infile'),
         mills=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.mills), type='infile'),
-        hapmap=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.hapmap), type='infile'),
-        omni=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.omni), type='infile'),
-        G1000=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.G1000), type='infile'),
         germline_vcf=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.germline_vcf), type='infile'),
         contamination_vcf=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.contamination_vcf), type='infile'),
         bwaMemIndexImage=TopVar(value=os.path.join(wf.args.ref_dir, wf.args.bwaMemIndexImage) if wf.args.bwaMemIndexImage else None, type='infile'),
@@ -933,7 +923,6 @@ def pipeline():
         vep_plugin_dir=TopVar(value=wf.args.vep_plugin_dir, type='indir'),
         intervals=TopVar(value=wf.args.intervals, type='infile'),
         alleles=TopVar(value=wf.args.alleles, type='infile'),
-        # hisatgenotype_db=TopVar(value=wf.args.hisatgenotype_db, type='infile')
     )
     wf.add_topvars(top_vars)
 
@@ -1005,7 +994,7 @@ def pipeline():
         bed2interval_task.args['bed'].value = input_interval
         bed2interval_task.args['ref_dict'].value = wf.topvars['ref_dict'].value
         bed2interval_task.args['out'].value = os.path.basename(input_interval) + '.interval_list'
-        bed2interval_task.run_now(wkdir=os.path.join(wf.args.outdir, "PreparedInputs"), docker=wf.args.docker)
+        bed2interval_task.run_now(wkdir=os.path.abspath(os.path.join(wf.args.outdir, "PreparedInputs")), docker=wf.args.docker)
         wf.topvars['intervals'].value = bed2interval_task.outputs['out'].value
 
     # 建bwa索引
@@ -1090,7 +1079,7 @@ def pipeline():
             bqsr_tasks.append(bsqr_task)
             args['INPUT'].value = sort_task.outputs['out']
             args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-            args['known-sites'].value = [top_vars['dbsnp'], top_vars['mills'], top_vars['hapmap']]
+            args['known-sites'].value = [top_vars['dbsnp'], top_vars['mills'], top_vars['known_indels']]
             args['intervals'].value = each
 
         #  Merge the recalibration reports resulting from by-interval recalibration
@@ -1124,8 +1113,6 @@ def pipeline():
     # print(interval_files)
 
     # 变异检测分析
-    germline_merge_vcf_tasks = []
-    already_exist = set()
     for tumor_sample, normal_sample in pair_list:
         if tumor_sample not in bam_dict and tumor_sample.lower() != 'none':
             print(f'Warning: skip tumor sample {tumor_sample} since it is not in target list: {list(bam_dict.keys())}')
@@ -1234,181 +1221,6 @@ def pipeline():
                 args['dir_plugins'].value = top_vars['vep_plugin_dir']
                 vep_task.outputs['out_vcf'].report = True
                 vep_task.outputs['out_vcf_idx'].report = True
-
-        # tumor only analysis
-        if normal_sample.lower() == 'none' and tumor_sample.lower() != 'none':
-            print(f'# performing tumor-only mode analysis for sample: {tumor_sample}')
-            mutect_tasks = []
-            for ind, interval_file in enumerate(interval_files):
-                mutect_task, args = wf.add_task(Mutect2(f'{tumor_sample}-{ind}'), tag=f'{tumor_sample}-{ind}')
-                mutect_tasks.append(mutect_task)
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-                args['tumor_bam'].value = bam_dict[tumor_sample].outputs['out']
-                args['tumor_name'].value = tumor_sample
-                args['germline-resource'].value = wf.topvars['germline_vcf']
-                args['intervals'].value = [interval_file]
-                args['pon'].value = wf.topvars['pon']
-                args['alleles'].value = wf.topvars['alleles']
-
-            # LearnReadOrientationModel
-            lrom_task, args = wf.add_task(LearnReadOrientationModel(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
-            args['inputs'].value = [x.outputs['f1r2'] for x in mutect_tasks]
-
-            # merge vcf
-            merge_vcf_task, args = wf.add_task(MergeVcfs(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
-            args['inputs'].value = [x.outputs['out'] for x in mutect_tasks]
-
-            # merge stats
-            merge_stat_task, args = wf.add_task(MergeMutectStats(tumor_sample), tag=tumor_sample, depends=mutect_tasks)
-            args['stats'].value = [x.outputs['stats'] for x in mutect_tasks]
-
-            # filter
-            filter_task, args = wf.add_task(FilterMutectCalls(tumor_sample), tag=tumor_sample)
-            args['vcf'].value = merge_vcf_task.outputs['out']
-            args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-            args['ob-priors'].value = lrom_task.outputs['out']
-            args['stats'].value = merge_stat_task.outputs['out']
-            # filter_task.outputs['out'].report = True
-
-            # filter alignment artifact
-            filter_align_task = None
-            if wf.topvars['bwaMemIndexImage'].value is not None:
-                filter_align_task, args = wf.add_task(FilterAlignmentArtifacts(tumor_sample), tag=tumor_sample, depends=[filter_task])
-                args['vcf'].value = filter_task.outputs['out']
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-                args['bam'].value = bam_dict[tumor_sample].outputs['out']
-                args['bwa-mem-index-image'].value = wf.topvars['bwaMemIndexImage']
-
-            # normalize vcf
-            depend_task = filter_align_task or filter_task
-            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag=tumor_sample)
-            args['vcf'].value = depend_task.outputs['out']
-            args['fasta-ref'].value = wf.topvars['ref']
-            args['out'].value = tumor_sample + '.somatic.vcf'
-            norm_vcf_task.outputs['out'].report = True
-
-            if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-                vep_task, args = wf.add_task(vep(tumor_sample), tag=tumor_sample)
-                args['input_file'].value = norm_vcf_task.outputs['out']
-                args['fasta'].value = wf.topvars['ref']
-                args['dir_cache'].value = top_vars['vep_cache_dir']
-                args['dir_plugins'].value = top_vars['vep_plugin_dir']
-                vep_task.outputs['out_vcf'].report = True
-                vep_task.outputs['out_vcf_idx'].report = True
-
-        # germline variant calling
-        if normal_sample.lower() != 'none' and (normal_sample not in already_exist) and (wf.args.call_mode in ['mix', 'germline']):
-            already_exist.add(normal_sample)
-            hap_tasks = []
-            for ind, interval_file in enumerate(interval_files):
-                hap_task, args = wf.add_task(Haplotyper(f'{normal_sample}-{ind}'), tag=f'{normal_sample}-{ind}', parent_wkdir='Haplotyper')
-                hap_tasks.append(hap_task)
-                args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-                args['bam'].value = bam_dict[normal_sample].outputs['out']
-                args['intervals'].value = [interval_file]
-
-            # merge gvcf
-            merge_vcf_task, args = wf.add_task(MergeVcfs(normal_sample), tag=normal_sample, depends=hap_tasks)
-            args['inputs'].value = [x.outputs['out'] for x in hap_tasks]
-            args['out'].value = f'{normal_sample}.gvcf.gz'
-            germline_merge_vcf_tasks.append(merge_vcf_task)
-            merge_vcf_task.outputs['out'].report = True
-
-    # perform joint calling based on germline variants
-    interval_files = []
-    if germline_merge_vcf_tasks:
-        # split intervals, 立即运算，获得结果
-        split_task = SplitIntervals(scatter_number=int(wf.args.scatter))
-        split_task.task_id = None
-        args = split_task.args
-        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-        args['intervals'].value = [wf.topvars['intervals']]
-        args['mode'].value = "BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW"
-        args['outdir'].value = 'SplitIntervals-ForJointCalling'
-        split_task.run_now(wkdir=wf.args.outdir, wf_tasks=wf.tasks, docker=wf.args.docker)
-        interval_files = [x.value for x in split_task.outputs.values()]
-        # print(interval_files)
-
-        # split intervals，当实际生成的interval_files数量和指定的数量不一致时就会导致错误，因此采用上面立即运行的方式
-        # split_task, args = wf.add_task(SplitIntervals(scatter_number=int(wf.args.scatter)), tag='ForJoint')
-        # args['REFERENCE_SEQUENCE'].value = wf.topvars['ref'] if not make_index else index_task.outputs['ref_genome']
-        # args['intervals'].value = [wf.topvars['intervals']]
-        # args['mode'].value = "BALANCING_WITHOUT_INTERVAL_SUBDIVISION_WITH_OVERFLOW"
-        # args['outdir'].value = '.'
-        # interval_files = [split_task.outputs[f'out{i}'] for i in range(10)]
-
-    scattered_tasks = []
-    for ind, interval_file in enumerate(interval_files):
-        import_vcf_task, args = wf.add_task(GenomicsDBImport(), tag=f'{ind}', parent_wkdir='GenomicsDBImport')
-        args['gvcfs'].value = [x.outputs['out'] for x in germline_merge_vcf_tasks]
-        args['interval'].value = interval_file
-
-        genotype_task, args = wf.add_task(GenotypeGVCFs(ind), tag=f'{ind}', parent_wkdir='GenotypeGVCFs')
-        args['REFERENCE_SEQUENCE'].value = wf.topvars['ref']
-        args['dbsnp'].value = wf.topvars['dbsnp']
-        args['gendb'].value = import_vcf_task.outputs['out']
-        args['interval'].value = interval_file
-
-        hard_filter_task, args = wf.add_task(VariantFiltration(f'scatter{ind}'), tag=f'{ind}', parent_wkdir='VariantHardFiltration')
-        args['vcf'].value = genotype_task.outputs['out']
-
-        make_site_only_task, args = wf.add_task(MakeSitesOnlyVcf(f'scatter{ind}'), tag=f'{ind}', parent_wkdir='MakeSitesOnlyVcf')
-        args['vcf'].value = hard_filter_task.outputs['out']
-        scattered_tasks.append(make_site_only_task)
-
-    if scattered_tasks:
-        gather_vcf_task, args = wf.add_task(MergeVcfs('Joint.SiteOnly'), tag='Joint', depends=scattered_tasks)
-        args['inputs'].value = [x.outputs['out'] for x in scattered_tasks]
-
-        indel_recal_task, args = wf.add_task(IndelsVariantRecalibrator('Joint'), tag='Joint', depends=[gather_vcf_task])
-        args['vcf'].value = gather_vcf_task.outputs['out']
-        args['mills'].value = wf.topvars['mills']
-        args['axiomPloly'].value = wf.topvars['axiomPoly']
-        args['dbsnp'].value = wf.topvars['dbsnp']
-
-        snp_recal_task, args = wf.add_task(SNPsVariantRecalibrator('Joint'), tag='Joint', depends=[gather_vcf_task])
-        args['vcf'].value = gather_vcf_task.outputs['out']
-        args['hapmap'].value = wf.topvars['hapmap']
-        args['omni'].value = wf.topvars['omni']
-        args['dbsnp'].value = wf.topvars['dbsnp']
-        args['1000G'].value = wf.topvars['G1000']
-
-        final_recal_tasks = []
-        for idx, task in enumerate(scattered_tasks):
-            apply_indel_task, args = wf.add_task(ApplyVQSR(f'joint.{idx}.indel'), tag=f'Indel{idx}', parent_wkdir='ApplyIndelRecalibration')
-            args['vcf'].value = task.outputs['out']
-            args['recal-file'].value = indel_recal_task.outputs['out']
-            args['tranches-file'].value = indel_recal_task.outputs['tranches']
-            args['mode'].value = 'INDEL'
-
-            apply_snp_task, args = wf.add_task(ApplyVQSR(f'joint.{idx}.snp'), tag=f'SNP{idx}', parent_wkdir='ApplySnpRecalibration')
-            args['vcf'].value = apply_indel_task.outputs['out']
-            args['recal-file'].value = snp_recal_task.outputs['out']
-            args['tranches-file'].value = snp_recal_task.outputs['tranches']
-            args['mode'].value = 'SNP'
-            final_recal_tasks.append(apply_snp_task)
-
-        if final_recal_tasks:
-            gather_final_vcf_task, args = wf.add_task(MergeVcfs('Joint.final'), tag='Final', depends=final_recal_tasks)
-            args['inputs'].value = [x.outputs['out'] for x in final_recal_tasks]
-
-            # normalize vcf
-            norm_vcf_task, args = wf.add_task(bcftools_norm(), tag='JointGermline', depends=[gather_final_vcf_task])
-            args['vcf'].value = gather_final_vcf_task.outputs['out']
-            args['fasta-ref'].value = wf.topvars['ref']
-            args['out'].value = 'Germline.Joint.LeftNormalized.vcf'
-            norm_vcf_task.outputs['out'].report = True
-
-            if wf.args.vep_cache_dir and wf.args.vep_plugin_dir:
-                depend_task = norm_vcf_task
-                vep_task, args = wf.add_task(vep('Joint'), tag='JointGermline', depends=[depend_task])
-                args['input_file'].value = depend_task.outputs['out']
-                args['fasta'].value = wf.topvars['ref']
-                args['dir_cache'].value = top_vars['vep_cache_dir']
-                args['dir_plugins'].value = top_vars['vep_plugin_dir']
-                vep_task.outputs['out_vcf'].report = True
-                vep_task.outputs['out_vcf_idx'].report = True
-
     wf.run()
 
 
