@@ -349,6 +349,39 @@ class Command:
             # print('drop invalid outputs of', self.meta.name, self.outputs[each].value)
             self.outputs.pop(each)
 
+    def run_on_terminal(self):
+        parser = argparse.ArgumentParser(
+            formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+            description=self.meta.desc
+        )
+        name_map = dict()
+        arg_id = 0
+        for name, arg in self.args.items():
+            if name.startswith('_') or arg.type == 'fix':
+                continue
+            arg_id += 1
+            dest_name = f'Arg{arg_id}'
+            if arg.prefix.strip() and ('{' not in arg.prefix):
+                prefix_name = arg.prefix.strip()
+            else:
+                prefix_name = name
+            if not prefix_name.startswith('-'):
+                prefix_name = '-' + name
+            if arg.type == 'bool':
+                parser.add_argument(prefix_name, default=arg.default, action=f"store_{str(not arg.default).lower()}", help=arg.desc, dest=dest_name)
+            elif arg.array:
+                parser.add_argument(prefix_name, default=arg.default, required=arg.level == 'required', nargs='+', help=arg.desc, dest=dest_name)
+            else:
+                parser.add_argument(prefix_name, default=arg.default, required=arg.level == 'required', help=arg.desc, dest=dest_name)
+            name_map[name] = prefix_name.strip('-').replace('-', '_')
+            # name_map[name] = dest_name
+
+        args = parser.parse_args()
+        arg_value_dict = dict(args._get_kwargs())
+        for k, v in name_map.items():
+            self.args[k].value = arg_value_dict[v]
+        self.run_now(wkdir=os.getcwd(), docker=bool(self.runtime.image))
+
 
 @dataclass()
 class Task:

@@ -738,7 +738,7 @@ def vep(sample):
                                      desc="Include allele frequency from Genome Aggregation Database (gnomAD) exome populations. Note only data from the gnomAD exomes are included")
     cmd.args['af_esp'] = Argument(prefix='--af_esp ', type='bool', default=False,
                                   desc="Include allele frequency from NHLBI-ESP populations.")
-    cmd.args['coding_only'] = Argument(prefix='--af_esp ', type='bool', default=False,
+    cmd.args['coding_only'] = Argument(prefix='--coding_only ', type='bool', default=False,
                                        desc="Only return consequences that fall in the coding regions of transcripts. Not used by default")
     cmd.args['pick'] = Argument(prefix='--pick', type='bool', default=False,
                                 desc="Pick one line or block of consequence data per variant, including transcript-specific columns. This is the best method to use if you are interested only in one consequence per variant")
