@@ -1,8 +1,6 @@
 import os
-script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-import sys; sys.path.append(script_path)
-from basefly.basefly import Argument, Output, Command, Workflow, TopVar
-from utils.get_fastq_info import get_fastq_info
+from basefly import Argument, Output, Command, Workflow, TopVar, get_fastq_info
+
 __author__ = 'gdq'
 
 """
@@ -116,6 +114,7 @@ def pipeline():
     wf.meta.name = 'RNASeqQuant'
     wf.meta.source = "basefly"
     wf.meta.version = "0.1"
+    wf.meta.function = 'Transcript expression Quantification'
     wf.meta.desc = """
     Fast transcript quantification using fastp and salmon
     you are required to input:

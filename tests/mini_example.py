@@ -1,7 +1,4 @@
-import os
-script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-import sys; sys.path.append(script_path)
-from basefly.basefly import Argument, Output, Command, Workflow, TopVar
+from basefly import Argument, Output, Command, Workflow, TopVar
 
 # 参考代码的注释信息，了解如何写basefly流程
 # 你只需要掌握最基本的python语法，不包括类的定义和使用

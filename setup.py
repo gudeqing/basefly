@@ -7,9 +7,9 @@ setup(
       license='MIT',
       author='gudeqing',
       author_email='822466659@qq.com',
-      description='building workflow for heavy computing',
-      packages=find_packages(exclude=['tests', 'docs']),
-      long_description=open('README.md').read(),
+      description='Easy to create workflow for heavy computing',
+      packages=find_packages(include=['basefly']),
+      long_description=open('README.md', encoding='utf-8').read(),
       zip_safe=False,
       classifiers=[
             "Development Status :: 1 - Alpha",
@@ -20,4 +20,7 @@ setup(
         ],
       install_requires=["argparse>=1.1"],
       setup_requires=[],
+      python_requires=">=3.7"
 )
+
+# python setup.py sdist bdist_wheel
