@@ -2,16 +2,17 @@ import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys;
 sys.path.append(script_path)
-from basefly.basefly import Argument, Output, Command
+from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 
 __author__ = 'gdq'
 
 
-def vep(sample='sample'):
+def vep():
     cmd = Command()
     cmd.meta.version = 'vep104.3'
     cmd.meta.name = 'VEP'
-    cmd.meta.function = 'vcf annotation'
+    cmd.meta.function = 'Variant Annotation'
+    cmd.meta.source = 'https://grch37.ensembl.org/info/docs/tools/vep/index.html'
     cmd.meta.desc = """
     VEP determines the effect of your variants (SNPs, insertions, deletions, CNVs or structural variants) on genes, transcripts, and protein sequence, as well as regulatory regions.
     Simply input the coordinates of your variants and the nucleotide changes to find out the:
@@ -29,8 +30,8 @@ def vep(sample='sample'):
     cmd.args['input_file'] = Argument(prefix='-i ', type='infile', desc='input file')
     cmd.args['fasta'] = Argument(prefix='--fasta ', type='infile', default='/home/hxbio04/hg19/genome.fa',
                                  desc="Specify a FASTA file or a directory containing FASTA files to use to look up reference sequence. The first time you run VEP with this parameter an index will be built which can take a few minutes. This is required if fetching HGVS annotations (--hgvs) or checking reference sequences (--check_ref) in offline mode (--offline), and optional with some performance increase in cache mode (--cache).")
-    cmd.args['output_file'] = Argument(prefix='-o ', default=f'{sample}.vep.vcf.gz', desc='output file')
-    cmd.args['output_format'] = Argument(prefix='--', range={'vcf', 'json', 'tab'}, default='vcf',
+    cmd.args['output_file'] = Argument(prefix='-o ', type='outstr', default='vep.vcf.gz', desc='output file')
+    cmd.args['output_format'] = Argument(prefix='--', type='outstr', range={'vcf', 'json', 'tab'}, default='vcf',
                                          desc="If we choose to write output in VCF format. Consequences are added in the INFO field of the VCF file, using the key 'CSQ'. Data fields are encoded separated by '|'; the order of fields is written in the VCF header. Output fields in the 'CSQ' INFO field can be selected by using --fields.")
     cmd.args['compress_output'] = Argument(prefix='--compress_output ', default='bgzip',
                                            desc="Writes output compressed using either gzip or bgzip")
@@ -49,7 +50,7 @@ def vep(sample='sample'):
                                   desc='Use the merged Ensembl and RefSeq cache. Consequences are flagged with the SOURCE of each transcript used.')
     cmd.args['refseq'] = Argument(prefix='--refseq ', type='bool', default=False,
                                   desc='Specify this option if you have installed the RefSeq cache in order for VEP to pick up the alternate cache directory. This cache contains transcript objects corresponding to RefSeq transcripts. Consequence output will be given relative to these transcripts in place of the default Ensembl transcripts')
-    cmd.args['stats_file'] = Argument(prefix='--stats_file ', default=f'{sample}.vep.summary.html',
+    cmd.args['stats_file'] = Argument(prefix='--stats_file ', type='outstr', default='vep.summary.html',
                                       desc='Summary stats file name. This is an HTML file containing a summary of the VEP run - the file name must end with <.html>.')
     cmd.args['cache'] = Argument(prefix='--cache ', type='bool', default=True, desc='Enables use of cache')
     cmd.args['offline'] = Argument(prefix='--offline ', type='bool', default=True,
@@ -103,11 +104,76 @@ def vep(sample='sample'):
     cmd.args['filter_common'] = Argument(prefix='--filter_common ', type='bool', default=False,
                                          desc="Shortcut flag for the filters below - this will exclude variants that have a co-located existing variant with global AF > 0.01. May be modified using any of the following freq_* filters.")
     cmd.args['other_args'] = Argument(default='', desc='specify other arguments that you want to append to the command')
-    cmd.args['_create_index'] = Argument(value='&& tabix *vcf.gz', type='fix')
-    cmd.outputs['out_vcf'] = Output(value='{output_file}')
-    cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi')
+    cmd.args['_create_index'] = Argument(value='&& if [ -f *.vcf.gz ]; then tabix *vcf.gz; fi', type='fix')
+    cmd.outputs['out_vcf'] = Output(value='{output_file}', report=True)
+    cmd.outputs['out_vcf_idx'] = Output(value='{output_file}.tbi', report=True)
+    cmd.outputs['out_stats'] = Output(value='{stats_file}', report=True)
     return cmd
 
 
+def pipeline():
+    wf = Workflow()
+    wf.meta.version = "vep104.3"
+    wf.meta.name = 'Variant-Annotation-Workflow'
+    wf.meta.source = 'https://grch37.ensembl.org/info/docs/tools/vep/index.html'
+    wf.meta.function = 'Variant Annotation'
+    wf.meta.desc = """
+    主要功能：
+    当前流程是突变注释分析流程，使用的工具是VEP（Variant Effect Predictor），其是一款强大的基因变异注释软件，由Ensembl开发。它支持多种基因组版本，可以识别和注释各种类型的变异，如单核苷酸变异、插入/删除、结构变异等。
+    使用VEP进行基因变异注释的步骤如下：
+    * 准备数据：首先需要准备基因组变异数据，可以是VCF格式或 Variant Call Format (VCF) 格式。
+    * 安装VEP：根据操作系统和所需的数据类型，从VEP官方网站下载并安装适合的软件版本。
+    * 运行VEP：使用命令行或脚本方式运行VEP，指定输入数据文件和参考基因组文件。
+    * 参数设置：根据需求选择所需的注释选项和参数，例如是否进行基因表达注释、甲基化注释等。参数说明可以参考页面：https://grch37.ensembl.org/info/docs/tools/vep/script/vep_options.html
+    * 结果输出：VEP将注释结果输出到标准输出或指定的结果文件中，包括变异的类型、位置、功能影响等信息。
+    通过使用VEP，研究人员可以更全面地了解变异的生物学意义，从而为疾病研究、药物研发等方面提供有力支持。
+
+    使用示例:
+    * 确认已经准备好输入文件或加载所需数据集（如流程文件数据集，样本数据集，参考文件数据集）
+    * 运行命令: python /enigma/datasets/*/scripts/vep/vep.py -i /enigma/datasets/*/your_testdata_dir/*vcf -dir_cache /enigma/datasets/*/vep -assembly GRCh38 --refseq --plot --run --docker -outdir /enigma/local_storage/Result
+    * 分析结果：主要分析结果将汇总于输出目录如Result/Report
+
+    主要输入说明（以hg38为例）:
+    当前支持的VEP版本为104.3，需要下载相应的注释数据库：
+    hg37版：https://ftp.ensembl.org/pub/grch37/release-104/variation/indexed_vep_cache/
+    如：wget http://ftp.ensembl.org/pub/release-104/variation/indexed_vep_cache/homo_sapiens_refseq_vep_104_GRCh37.tar.gz
+    hg38版：http://ftp.ensembl.org/pub/release-104/variation/indexed_vep_cache/
+    如：wget http://ftp.ensembl.org/pub/release-104/variation/indexed_vep_cache/homo_sapiens_vep_104_GRCh38.tar.gz
+    
+    关键参数说明：
+    1. 如果使用的数据库版本是refseq，需加参数--refseq，如果使用的是merged版本的，则需加参数--merged
+    2. assembly版本，默认是 --assembly GRCh38
+    3. 通过参数input_files指定输入1个或多个文件，需vcf格式
+    4. 通过output_format参数指定输出文件格式：{'vcf', 'json', 'tab'}，默认是vcf
+    """
+    wf.init_argparser()
+    wf.add_argument('-input_files', nargs='+', help='input vcf files. one or more files are supported, and separated by white space')
+    wf.add_argument('-output_format', default='vcf',  help="Output format, one of ['vcf', 'json', 'tab']")
+    wf.add_argument('-assembly', default='GRCh38', help='Select the assembly version to use if more than one available.')
+    wf.add_argument('-dir_cache', default='/enigma/datasets/*/vep/', help='Specify the cache directory to use')
+    wf.add_argument('--merged', action='store_true', default=False, help='Use the merged Ensembl and RefSeq cache. Consequences are flagged with the SOURCE of each transcript used.')
+    wf.add_argument('--refseq', action='store_true', default=False, help='Specify this option if you have installed the RefSeq cache in order for VEP to pick up the alternate cache directory. This cache contains; transcript objects corresponding to RefSeq transcripts. Consequence output will be given relative to these transcripts in place of the default Ensembl transcripts ')
+    wf.parse_args()
+    for each in wf.args.input_files:
+        base_name = os.path.basename(each).rsplit('.vcf', 1)[0]
+        if wf.args.output_format == 'vcf':
+            out_file = base_name + '.vep.vcf.gz'
+        elif wf.args.output_format == 'json':
+            out_file = base_name + '.json'
+        else:
+            out_file = base_name + '.txt'
+        vep_task, args = wf.add_task(vep(), tag=base_name)
+        args['input_file'].value = each
+        out_stat = os.path.basename(each).rsplit('.vcf', 1)[0] + '.vep.html'
+        args['output_file'].value = out_file
+        args['stats_file'].value = out_stat
+        args['output_format'].value = wf.args.output_format
+        args['assembly_version'].value = wf.args.assembly
+        args['dir_cache'].value = wf.args.dir_cache
+        args['merged'].value = wf.args.merged
+        args['refseq'].value = wf.args.refseq
+    wf.run()
+
+
 if __name__ == '__main__':
-    vep().run_on_terminal()
+    pipeline()
