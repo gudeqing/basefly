@@ -1,7 +1,7 @@
 import os
 script_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 import sys; sys.path.append(script_path)
-from basefly.basefly import Argument, Output, Command, Workflow, TopVar, ToWdlTask
+from basefly.basefly import Argument, Output, Command, Workflow, TopVar
 from utils.get_fastq_info import get_fastq_info
 __author__ = 'gdq'
 
@@ -9,8 +9,20 @@ __author__ = 'gdq'
 def fastp():
     cmd = Command()
     cmd.meta.name = 'fastp'
-    cmd.runtime.image = 'gudeqing/fastp:latest'
-    cmd.runtime.tool = 'fastp'
+    cmd.meta.version = '0.23.4'
+    cmd.meta.name = 'fastp'
+    cmd.meta.function = 'fastq QC, adapter trimming'
+    cmd.meta.desc = """
+    fastp is a tool used in bioinformatics for the quality control and preprocessing of raw sequence data. 
+    fastp is known for its speed and efficiency, and it can process data in parallel, making it suitable for large datasets.
+    fastp provides several key functions:
+    * It can filter out low-quality reads, which are sequences that have a high probability of containing errors. This is done based on quality scores that are assigned to each base in a read.
+    * It can trim adapter sequences, which are artificial sequences added during the preparation of sequencing libraries and are not part of the actual sample's genome.
+    * It provides comprehensive quality control reports, including information on sequence quality, GC content, sequence length distribution, and more.
+    """
+    cmd.meta.source = 'https://github.com/OpenGene/fastp'
+    cmd.runtime.image = 'gudeqing/bismark:0.24.2'
+    cmd.runtime.tool = '/opt/fastp'
     cmd.args['read1'] = Argument(prefix='-i ', type='infile', desc='read1 fastq file')
     cmd.args['read2'] = Argument(prefix='-I ', type='infile', level='optional', desc='read2 fastq file')
     cmd.args['threads'] = Argument(prefix='-w ', default=7, desc='thread number')
@@ -20,10 +32,10 @@ def fastp():
     cmd.args['html'] = Argument(prefix='-h ', type='str', desc='html report file')
     cmd.args['json'] = Argument(prefix='-j ', type='str', desc='json report file')
     # 定义输出
-    cmd.outputs['out1'] = Output(value="{out1}")  # 这里使用”{}“引用其他Argument对象作为输入
+    cmd.outputs['out1'] = Output(value="{out1}")
     cmd.outputs['out2'] = Output(value="{out2}")
-    cmd.outputs['html'] = Output(value="{html}")
-    cmd.outputs['json'] = Output(value="{json}")
+    cmd.outputs['html'] = Output(value="{html}", report=True)
+    cmd.outputs['json'] = Output(value="{json}", report=True)
     return cmd
 
 
@@ -31,7 +43,10 @@ def bismark_genome_preparation():
     cmd = Command()
     cmd.meta.name = 'GenomePreparation'
     cmd.meta.version = '0.23.1'
-    cmd.runtime.image = 'chgyi/meth:latest'
+    cmd.meta.function = 'prepare the genome of interest for bisulfite alignments'
+    cmd.meta.source = 'https://github.com/FelixKrueger/Bismark'
+    cmd.meta.desc = 'Generate Reference Genome Index'
+    cmd.runtime.image = 'gudeqing/bismark:0.24.2'
     cmd.runtime.tool = 'bismark_genome_preparation'
     cmd.args['aligner'] = Argument(prefix='--path_to_aligner ', level='optional', desc='The full path to the Bowtie 2 or HISAT2 installation folder on your system (depending on which aligner/indexer you intend to use; please note that this is the folder and not any executable). Unless this path is specified, it is assumed that the aligner in question (Bowtie 2/HISAT2) is in the PATH')
     cmd.args['index_type'] = Argument(prefix='--', default='bowtie2', range=['bowtie2', 'hisat2'], desc='Bowtie2 is recommended for most bisulfite sequencing applications. For hisat2, only recommended for specialist applications such as RNA-methylation analyses or SLAM-seq type applications')
@@ -45,8 +60,11 @@ def bismark_genome_preparation():
 def bismark_alignment():
     cmd = Command()
     cmd.meta.name = 'BismarkAlignment'
+    cmd.meta.source = 'https://github.com/FelixKrueger/Bismark'
     cmd.meta.version = '0.23.1'
-    cmd.runtime.image = 'chgyi/meth:latest'
+    cmd.meta.function = 'Align Reads'
+    cmd.meta.desc = 'bisulfite alignment and methylation calling'
+    cmd.runtime.image = 'gudeqing/bismark:0.24.2'
     cmd.runtime.tool = 'bismark'
     cmd.args['output_dir'] = Argument(prefix='-o ', default='.', desc='Write all output files into this directory')
     cmd.args['temp_dir'] = Argument(prefix='--temp_dir ', default='.', desc='Write temporary files to this directory instead of into the same directory as the input files')
@@ -56,9 +74,9 @@ def bismark_alignment():
     cmd.args['read1'] = Argument(prefix='-1 ', type='infile', level='optional', array=True, delimiter=',', desc='Comma-separated list of files containing the first sequencing read')
     cmd.args['read2'] = Argument(prefix='-2 ', type='infile', level='optional', array=True, delimiter=',', desc='Comma-separated list of files containing the second sequencing read')
     cmd.args['singles'] = Argument(prefix='', type='infile', level='optional', array=True, delimiter=',', desc='A comma-separated list of files containing the reads to be aligned')
-    cmd.outputs['bam'] = Output(value='*.bam')
-    cmd.outputs['report'] = Output(value='*_report.txt*')
-    cmd.outputs['nucleotide_stats'] = Output(value='*nucleotide_stats.txt*')
+    cmd.outputs['bam'] = Output(value='*.bam', report=True)
+    cmd.outputs['report'] = Output(value='*_report.txt*', report=True)
+    cmd.outputs['nucleotide_stats'] = Output(value='*nucleotide_stats.txt*', report=True)
     return cmd
 
 
@@ -72,8 +90,10 @@ def bismark_deduplicate():
     cmd = Command()
     cmd.meta.desc = desc
     cmd.meta.name = 'BismarkDeduplicate'
+    cmd.meta.source = 'https://github.com/FelixKrueger/Bismark'
     cmd.meta.version = '0.23.1'
-    cmd.runtime.image = 'chgyi/meth:latest'
+    cmd.meta.function = 'Deduplicate Alignments'
+    cmd.runtime.image = 'gudeqing/bismark:0.24.2'
     cmd.runtime.tool = 'deduplicate_bismark'
     cmd.args['prefix'] = Argument(prefix='-o ', level='optional', desc="The basename of a desired output file. This basename is modified to end in '.deduplicated.bam', or '.multiple.deduplicated.bam' in '--multiple' mode, for consistency reasons.")
     cmd.args['multiple'] = Argument(prefix='--multiple', type='bool', default=False, desc='All specified input files are treated as one sample and concatenated together for deduplication.')
@@ -87,8 +107,15 @@ def bismark_deduplicate():
 def bismark_methylation_extractor():
     cmd = Command()
     cmd.meta.name = 'MethylationExtractor'
+    cmd.meta.source = 'https://github.com/FelixKrueger/Bismark'
     cmd.meta.version = '0.23.1'
-    cmd.runtime.image = 'chgyi/meth:latest'
+    cmd.meta.function = 'Extract methylation calls'
+    cmd.meta.desc = """
+    extract the methylation information from the Bismark alignment output.
+    The position of every single C will be written out to a new output file, depending on its context (CpG, CHG or CHH), 
+    whereby methylated Cs will be labelled as forward reads (+), non-methylated Cs as reverse reads (-)."
+    """
+    cmd.runtime.image = 'gudeqing/bismark:0.24.2'
     cmd.runtime.tool = 'bismark_methylation_extractor'
     cmd.args['ignore'] = Argument(prefix='--ignore ', type='int', level='optional', desc="Ignore the first <int> bp from the 5' end of Read 1 (or single-end alignment; files) when processing the methylation call string. This can remove e.g. a restriction enzyme site at the start of each read or any other source of bias (such as PBAT-Seq data).")
     cmd.args['ignore_r2'] = Argument(prefix='--ignore_r2 ', type='int', level='optional', desc="Ignore the first <int> bp from the 5' end of Read 2 of paired-end sequencing results only. Since the first couple of bases in Read 2 of BS-Seq experiments show a severe bias towards non-methylation as a result of end-repairing sonicated fragments with unmethylated cytosines (see M-bias plot), it is recommended that the first couple of bp of Read 2 are removed before starting downstream analysis. Please see the section on M-bias plots in the Bismark User Guide for more details.")
@@ -104,16 +131,21 @@ def bismark_methylation_extractor():
     cmd.args['outdir'] = Argument(prefix='-o ', default='.', desc="Allows specification of a different output directory.If not specified explicitly, the output will be written to the current directory")
     cmd.args['bam'] = Argument(prefix='', type='infile', array=True, desc="A space-separated list of Bismark result files in SAM format from which methylation information is extracted for every cytosine in the reads.")
     cmd.outputs['outdir'] = Output(value='{outdir}', type='outdir')
-    cmd.outputs['report'] = Output(value='*_report.txt*')
-    cmd.outputs['mbias'] = Output(value='*.M-bias.txt*')
+    cmd.outputs['report'] = Output(value='*_report.txt*', report=True)
+    cmd.outputs['mbias'] = Output(value='*.M-bias.txt*', report=True)
     return cmd
 
 
 def bismark2report():
     cmd = Command()
     cmd.meta.name = 'bismark2report'
+    cmd.meta.source = 'https://github.com/FelixKrueger/Bismark'
     cmd.meta.version = '0.23.1'
-    cmd.runtime.image = 'chgyi/meth:latest'
+    cmd.meta.function = 'generate report for each sample'
+    cmd.meta.desc = """
+    This command attempts to find Bismark alignment, deduplication and methylation extraction (splitting) reports as well as M-bias files to generate a graphical HTML report for each sample in a directory.
+    """
+    cmd.runtime.image = 'gudeqing/bismark:0.24.2'
     cmd.runtime.tool = 'bismark2report'
     cmd.args['outdir'] = Argument(prefix='--dir ', default='.', desc="Output directory. Output is written to the current directory if not specified explicitly.")
     cmd.args['alignment_report'] = Argument(prefix='--alignment_report ', type='infile', desc="Bismark alignment report file")
@@ -121,53 +153,66 @@ def bismark2report():
     cmd.args['splitting_report'] = Argument(prefix="--splitting_report ", level='optional', type='infile', desc='splitting report file (generated by the Bismark methylation extractor)')
     cmd.args['mbias_report'] = Argument(prefix="--mbias_report ", level='optional', type='infile', desc='a single M-bias report file (generated by the Bismark methylation extractor)')
     cmd.args['nucleotide_report'] = Argument(prefix="--nucleotide_report ", level='optional', type='infile', desc="a single nucleotide coverage report file (generated by Bismark with the option '--nucleotide_coverage')")
-    cmd.outputs['report_html'] = Output(value='{outdir}/*_report.html')
+    cmd.outputs['report_html'] = Output(value='{outdir}/*_report.html', report=True)
     return cmd
 
 
 def bismark2summary():
     cmd = Command()
     cmd.meta.name = 'bismark2summary'
+    cmd.meta.source = 'https://github.com/FelixKrueger/Bismark'
+    cmd.meta.function = 'generate report for all samples'
+    cmd.meta.desc = """
+    This command scans the current working directory for different Bismark alignment, 
+    deduplication and methylation extraction (splitting) reports to produce a graphical summary HTML report, 
+    as well as a data table, for all files in a directory. Bismark summary report is meant to give you a quick visual overview of the alignment statistics for a large number of samples.
+    """
     cmd.meta.version = '0.23.1'
-    cmd.runtime.image = 'chgyi/meth:latest'
+    cmd.runtime.image = 'gudeqing/bismark:0.24.2'
     cmd.runtime.tool = 'bismark2summary'
     cmd.args['basename'] = Argument(prefix='-o ', default="bismark_summary_report", desc="Basename of the output file (optional)")
     cmd.args['bams'] = Argument(prefix="", array=True, type='infile', desc='Bismark alignment files')
     cmd.outputs['summary_txt'] = Output(value='{basename}.txt')
-    cmd.outputs['summary_html'] = Output(value='{basename}.html')
+    cmd.outputs['summary_html'] = Output(value='{basename}.html', report=True)
     return cmd
 
 
 def pipeline():
     wf = Workflow()
     wf.meta.name = 'Bismark'
-    wf.meta.source = "https://github.com/FelixKrueger/Bismark"
+    wf.meta.source = "https://github.com/FelixKrueger/Bismark | https://github.com/FelixKrueger/Bismark/tree/1675a9c07b49d51cbf9ae42e9f4bbbbde11f992f/Docs"
+    wf.meta.function = "基于Bisulfite-Seq(BS-Seq)进行DNA甲基化分析"
     wf.meta.desc = """
-    Bismark is a program to map bisulfite treated sequencing reads to a genome of interest and 
-    perform methylation calls in a single step. The output can be easily imported into a genome viewer, 
-    such as SeqMonk, and enables a researcher to analyse the methylation levels of their samples straight away. 
-    It's main features are:
-    * Bisulfite mapping and methylation calling in one single step
-    * Supports single-end and paired-end read alignments
-    * Supports ungapped, gapped or spliced alignments
-    * Alignment seed length, number of mismatches etc. are adjustable
-    * Output discriminates between cytosine methylation in CpG, CHG and CHH context
+    主要功能：
+    该流程是DNA甲基化分析流程，基于Bismark工具进行分析，可以将经过亚硫酸氢盐处理的测序读段比对到参考基因组，并识别甲基化水平。其输出可以轻松导入到基因组查看器（如SeqMonk）中，使研究人员能够直接分析其样本的甲基化水平。该流程主要步骤如下：
+    * 原始数据质控，包括接头去除
+    * 准备参考基因组
+    * 和参考基因组比对
+    * 测序读段去重
+    * 甲基化识别
+    * 汇总分析结果
+    
+    使用示例:
+    * 确认已经准备好输入文件或加载所需数据集（如流程文件数据集，样本数据集，参考文件数据集）
+    * 运行命令: python /enigma/datasets/*/scripts/wgbs/bismark.py -fastq test_files/ -r1_name "(.*)_R1.fastq.gz" -r2_name "(.*)_R2.fastq.gz" -genome test_files/  --plot --run --docker -outdir /enigma/local_storage/Result
+    * 分析结果：主要分析结果将汇总于输出目录如Result/Report
+
+    主要输入说明:
+    1. 参考基因组输入，将参考基因组fasta文件放入某个目录，该目录作为参数”genome_folder“的值，如果索引文件不存在，将在该目录创建索引，注意：如果该目录不具备可写权限，请务必提前创建索引
+    2. fastq文件, 可以提供一个fastq所在目录给参数"-fastq_info",然后通过参数'-r1_name'和'-r2_name'提供fastq的文件名的正则表达式, 我们依据正则表达式提取样本路径和样本名称
     """
-    wf.meta.version = "0.23.1"
+    wf.meta.version = "0.1"
 
     # 定义流程输入参数
     wf.init_argparser()
-    wf.add_argument('-fastq_info', nargs='+', required=True,
-                    help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
-    wf.add_argument('-r1_name', default='(.*).R1.fastq',
-                    help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
-    wf.add_argument('-r2_name', default='(.*).R2.fastq',
-                    help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
+    wf.add_argument('-fastq_info', nargs='+', required=True, help='A list with elements from [fastq file, fastq parent dir, fastq_info.txt, fastq_info.json]')
+    wf.add_argument('-r1_name', default='(.*).R1.fastq', help="python regExp that describes the full name of read1 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R1.fq.gz'")
+    wf.add_argument('-r2_name', default='(.*).R2.fastq', help="python regExp that describes the full name of read2 fastq file name. It requires at least one pair small brackets, and the string matched in the first pair brackets will be used as sample name. Example: '(.*).R2.fq.gz'")
     wf.add_argument('-exclude_samples', default=tuple(), nargs='+', help='samples to exclude from analysis')
     wf.add_argument('-genome_folder', help='The path to the folder containing the genome to be bisulfite converted.')
     wf.add_argument('--dedup', action='store_true', default=False, help='This step is recommended for whole-genome bisulfite samples, but should not be used for reduced representation libraries such as RRBS, amplicon or target enrichment libraries.')
     wf.parse_args()
-
+    wf.topvars['genome_folder'] = TopVar(value=wf.args.genome_folder, type='indir')
     # 串联任务
     # 提取fastq信息
     fastq_info = get_fastq_info(fastq_info=wf.args.fastq_info, r1_name=wf.args.r1_name, r2_name=wf.args.r2_name)
@@ -181,7 +226,7 @@ def pipeline():
         index_task_id = []
     else:
         index_task, args = wf.add_task(bismark_genome_preparation(), name='GenomePreparation')
-        args['genome_folder'].value = wf.args.genome_folder
+        args['genome_folder'].value = wf.topvars['genome_folder']
         index_task_id = [index_task.task_id]
 
     # fastq预处理和比对
@@ -190,13 +235,16 @@ def pipeline():
             continue
         if len(reads) == 2:
             r1s, r2s = reads
+            if not r2s:
+                r2s = [None]*len(r1s)
         else:
             r1s = reads[0]
             r2s = [None]*len(r1s)
         # fastq 处理
         fastp_tasks = []
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
-            fastp_task, args = wf.add_task(fastp(), name=f'fastp-{sample}-{ind}')
+            tag = sample if len(r1s) == 1 else f'{sample}-{ind}'
+            fastp_task, args = wf.add_task(fastp(), tag=tag)
             args['read1'].value = r1
             args['out1'].value = f'{sample}.clean.R1.fq.gz'
             if r2 is not None:
@@ -209,7 +257,7 @@ def pipeline():
         # alignment
         fastp_task_ids = [x.task_id for x in fastp_tasks]
         align_task, args = wf.add_task(bismark_alignment(), name='BismarkAlignment-' + sample, depends=fastp_task_ids + index_task_id)
-        args['genome_folder'].value = wf.args.genome_folder
+        args['genome_folder'].value = wf.topvars['genome_folder']
         if r2s[0] is not None:
             args['read1'].value = [x.outputs["out1"] for x in fastp_tasks]
             args['read2'].value = [x.outputs["out2"] for x in fastp_tasks]
