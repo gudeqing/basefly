@@ -1258,7 +1258,7 @@ class Workflow:
                     contents += ' ' * 6 + '- .sa?\n'
         return contents
 
-    def to_cwl_tool(self, cmd: Command, version='v1.2', image_map_dict=None):
+    def to_cwl_tool(self, cmd: Command, version='v1.2', image_map_dict=None, write_out=False):
         # 如果arg_prefix是纯数字，需要加引号, 因此为方便起见，统一加引号
         # prefix加引号后，不能存在空格，否则传cwltool在接受参数时会同时给prefix和value加上引号导致参数不可识别，如 gatk ’-a value'
         if 'bwamem' in cmd.meta.name.lower():
@@ -1478,6 +1478,10 @@ class Workflow:
             if out_name == '_wkdir_':
                 out_expr = '$(runtime.outdir)'
             contents += ' ' * 6 + f'glob: {out_expr}\n'
+
+        if write_out:
+            with open(cmd.meta.name + '.tool.cwl', 'w') as f:
+                f.write(contents)
 
         return contents
 
