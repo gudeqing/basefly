@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
       name='basefly',
-      version='1.0.0',
+      version='1.0.1',
       url='https://github.com/gudeqing/basefly',
       license='MIT',
       author='gudeqing',
@@ -20,7 +20,10 @@ setup(
         ],
       install_requires=["argparse>=1.1"],
       setup_requires=[],
-      python_requires=">=3.7"
+      python_requires=">=3.7",
+      update_info="""
+      增加to_cwl_tool的输出参数
+      """
 )
 
 # python setup.py sdist bdist_wheel
