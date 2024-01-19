@@ -368,7 +368,7 @@ def pipeline():
         for ind, (r1, r2) in enumerate(zip(r1s, r2s)):
             uniq_tag = f'{sample}-{ind}' if len(r1s) > 1 else sample
             cutadapter_task = None
-            if 'Cutadapter' not in wf.args.skip:
+            if 'Cutadapter' not in wf.args.skip and wf.topvars['forward_primer'].value:
                 # cutdapter去除primer
                 cutadapter_task, args = wf.add_task(Cutadapter(), tag=uniq_tag)
                 args['adapter5_r1'].value = wf.topvars['forward_primer']
