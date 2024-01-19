@@ -397,8 +397,9 @@ def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid',
     return out_name, out_name2
 
 
-def simulate_data(fasta_file, freq_file, sample, outdir='.', seed=11, depth=600, insert_size=350, insert_size_sd=50, simulator='/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/art_illumina'):
-    chrom1, chrom2 = prepare_simulation_reference(fasta_file, freq_file, out_prefix=os.path.join(outdir, sample), seed=seed)
+def simulate_data(chrom1=None, chrom2=None, fasta_file=None, freq_file=None, sample='SampleX', outdir='.', seed=11, depth=600, insert_size=350, insert_size_sd=50, simulator='/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/art_illumina'):
+    if not chrom1:
+        chrom1, chrom2 = prepare_simulation_reference(fasta_file, freq_file, out_prefix=os.path.join(outdir, sample), seed=seed)
     cmd1 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom1} --id {sample}c1 -o {sample}_1.'
     cmd2 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom2} --id {sample}c2 -o {sample}_2.'
     os.system(cmd1)
@@ -438,7 +439,7 @@ def batch_simulation(fasta_file, freq_file, depths=(300, 500, 700, 1000), insert
                 if recipient_depth >= 1 and donor_depth >= 1:
                     mix_name = 'Mix-12-{d}v{v}'.format(d=donor_depth, v=recipient_depth)
                     donor_fq1, donor_fq2 = simulate_data(fasta_file, freq_file, donor_name+f'-tmp-{mix_name}', outdir=outdir, seed=11, depth=donor_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
-                    recept_fq1, recept_fq2 = simulate_data(fasta_file, freq_file, recipient_name+'-tmp', outdir=outdir, seed=12, depth=recipient_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+                    recept_fq1, recept_fq2 = simulate_data(fasta_file, freq_file, recipient_name+f'-tmp-{mix_name}', outdir=outdir, seed=12, depth=recipient_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
                     os.system(f'cat {donor_fq1} {recept_fq1} > {outdir}/{mix_name}.dp{depth}.ins{insert_size}.R1.fastq')
                     os.system(f'cat {donor_fq2} {recept_fq2} > {outdir}/{mix_name}.dp{depth}.ins{insert_size}.R2.fastq')
                     os.system(f'rm {donor_fq1} {recept_fq1} {donor_fq2} {recept_fq2}')
