@@ -341,10 +341,10 @@ def pipeline():
     # 一些验证
     donor_name = wf.topvars['donor_name'].value
     if donor_name and (donor_name not in fastq_info):
-        raise Exception(f'{donor_name} is not found in samples')
+        raise Exception(f'{donor_name} is not found in samples: {fastq_info.keys()}')
     recipient_name = wf.topvars['recipient_name'].value
     if recipient_name and (recipient_name not in fastq_info):
-        raise Exception(f'{recipient_name} is not found in samples')
+        raise Exception(f'{recipient_name} is not found in samples: {fastq_info.keys()}')
 
     # 开始数据处理
     typing_tasks = []

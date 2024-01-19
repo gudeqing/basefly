@@ -397,38 +397,53 @@ def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid',
     return out_name, out_name2
 
 
-def simulate_data(fasta_file, freq_file, sample, seed=11, depth=600, simulator='/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/art_illumina'):
-    chrom1, chrom2 = prepare_simulation_reference(fasta_file, freq_file, out_prefix=sample, seed=seed)
-    insert_size = 350
-    insert_size_sd = 50
+def simulate_data(fasta_file, freq_file, sample, outdir='.', seed=11, depth=600, insert_size=350, insert_size_sd=50, simulator='/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/art_illumina'):
+    chrom1, chrom2 = prepare_simulation_reference(fasta_file, freq_file, out_prefix=os.path.join(outdir, sample), seed=seed)
     cmd1 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom1} --id {sample}c1 -o {sample}_1.'
     cmd2 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom2} --id {sample}c2 -o {sample}_2.'
     os.system(cmd1)
     os.system(cmd2)
-    fq1 = f'{sample}.R1.fastq'
-    fq2 = f'{sample}.R2.fastq'
+    fq1 = f'{outdir}/{sample}.R1.fastq'
+    fq2 = f'{outdir}/{sample}.R2.fastq'
     os.system(f'cat {sample}*.1.fq > {fq1}')
     os.system(f'cat {sample}*.2.fq > {fq2}')
     os.system(f'rm {sample}*.1.fq {sample}*.2.fq')
     return fq1, fq2
 
 
-def batch_simulation(fasta_file, freq_file, ratios=(0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 0.995, 0.999)):
+def batch_simulation(fasta_file, freq_file, depths=(300, 500, 700, 1000), insert_sizes=(200, 250, 300, 350), insert_size_sd=50, mix_ratios=(0.001, 0.005, 0.01, 0.02, 0.05, 0.1, 0.3, 0.5, 0.7, 0.9, 0.95, 0.99, 0.995, 0.999)):
+    """
+    供体和受体样本模拟及混合样本模拟
+    :param fasta_file: 参考基因组或marker序列，由microhapdb的工具生成
+    :param freq_file: marker的基因频率信息，有microhapdb的工具生成，模拟个人样本时，将从该基因型文件中随机挑选基因型进行模拟
+    :param depths: 模拟的总测序深度，如果提供多个值，则按此模拟不同测序深度批次的数据
+    :param insert_sizes: 平均插入片段长度, 如果提供多个值，则按此模拟不同批次的数据
+    :param insert_size_sd: 插入片段长度的sd值，默认50
+    :param mix_ratios: 指定要模拟的混合比例，如果depth*ratio < 1, 则放弃该比例的模拟
+    :return:
+    """
     donor_name = 'Donor'
     recipient_name = 'Recipient'
-    mix_name_pattern = 'Mix-12-{d}v{v}'
-    simulate_data(fasta_file, freq_file, donor_name, seed=11, depth=300)
-    simulate_data(fasta_file, freq_file, recipient_name, seed=12, depth=300)
-    depth = 1000
-    for ratio in ratios:
-        recipient_depth = int(depth * ratio)
-        donor_depth = int(depth * (1 - ratio))
-        donor_fq1, donor_fq2 = simulate_data(fasta_file, freq_file, donor_name+'-tmp', seed=11, depth=donor_depth)
-        recept_fq1, recept_fq2 = simulate_data(fasta_file, freq_file, recipient_name+'-tmp', seed=12, depth=recipient_depth)
-        mix_name = mix_name_pattern.format(d=donor_depth, v=recipient_depth)
-        os.system(f'cat {donor_fq1} {recept_fq1} > {mix_name}.R1.fastq')
-        os.system(f'cat {donor_fq2} {recept_fq2} > {mix_name}.R2.fastq')
-        os.system(f'rm {donor_fq1} {recept_fq1} {donor_fq2} {recept_fq2}')
+    for depth in depths:
+        for insert_size in insert_sizes:
+            outdir = f'fastq_dp{depth}_ins{insert_size}'
+            os.makedirs(outdir, exist_ok=True)
+            # 供体和受体样本模拟
+            simulate_data(fasta_file, freq_file, f'{donor_name}-{depth}v0.dp{depth}.ins{insert_size}', outdir=outdir, seed=11, depth=depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+            simulate_data(fasta_file, freq_file, f'{recipient_name}-0v{depth}.dp{depth}.ins{insert_size}', outdir=outdir, seed=12, depth=depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+            # 混合样本模拟
+            for ratio in mix_ratios:
+                recipient_depth = int(depth * ratio)
+                donor_depth = int(depth * (1 - ratio))
+                if recipient_depth >= 1 and donor_depth >= 1:
+                    mix_name = 'Mix-12-{d}v{v}'.format(d=donor_depth, v=recipient_depth)
+                    donor_fq1, donor_fq2 = simulate_data(fasta_file, freq_file, donor_name+f'-tmp-{mix_name}', outdir=outdir, seed=11, depth=donor_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+                    recept_fq1, recept_fq2 = simulate_data(fasta_file, freq_file, recipient_name+'-tmp', outdir=outdir, seed=12, depth=recipient_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+                    os.system(f'cat {donor_fq1} {recept_fq1} > {outdir}/{mix_name}.dp{depth}.ins{insert_size}.R1.fastq')
+                    os.system(f'cat {donor_fq2} {recept_fq2} > {outdir}/{mix_name}.dp{depth}.ins{insert_size}.R2.fastq')
+                    os.system(f'rm {donor_fq1} {recept_fq1} {donor_fq2} {recept_fq2}')
+                else:
+                    print(f"for depth={depth} and mix ratio={ratio}, we cannot simulate by assuming depth < 1: donor_depth={donor_depth}, recipient_depth={recipient_depth}")
     print('simulation success')
 
 
