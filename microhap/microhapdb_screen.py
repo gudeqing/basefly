@@ -425,27 +425,35 @@ def batch_simulation(fasta_file, freq_file, depths=(300, 500, 700, 1000), insert
     """
     donor_name = 'Donor'
     recipient_name = 'Recipient'
+    fastq_dirs = []
     for depth in depths:
         for insert_size in insert_sizes:
             outdir = f'fastq_dp{depth}_ins{insert_size}'
             os.makedirs(outdir, exist_ok=True)
-            # 供体和受体样本模拟
-            simulate_data(fasta_file, freq_file, f'{donor_name}-{depth}v0.dp{depth}.ins{insert_size}', outdir=outdir, seed=11, depth=depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
-            simulate_data(fasta_file, freq_file, f'{recipient_name}-0v{depth}.dp{depth}.ins{insert_size}', outdir=outdir, seed=12, depth=depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+            fastq_dirs.append(outdir)
+            # 供体和受体样本模拟, seed不一样体现区别
+            simulate_data(fasta_file=fasta_file, freq_file=freq_file, sample=f'{donor_name}-{depth}v0.dp{depth}.ins{insert_size}', outdir=outdir, seed=11, depth=depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+            simulate_data(fasta_file=fasta_file, freq_file=freq_file, sample=f'{recipient_name}-0v{depth}.dp{depth}.ins{insert_size}', outdir=outdir, seed=12, depth=depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
             # 混合样本模拟
             for ratio in mix_ratios:
                 recipient_depth = int(depth * ratio)
                 donor_depth = int(depth * (1 - ratio))
                 if recipient_depth >= 1 and donor_depth >= 1:
-                    mix_name = 'Mix-12-{d}v{v}'.format(d=donor_depth, v=recipient_depth)
-                    donor_fq1, donor_fq2 = simulate_data(fasta_file, freq_file, donor_name+f'-tmp-{mix_name}', outdir=outdir, seed=11, depth=donor_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
-                    recept_fq1, recept_fq2 = simulate_data(fasta_file, freq_file, recipient_name+f'-tmp-{mix_name}', outdir=outdir, seed=12, depth=recipient_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+                    mix_name = 'Mix-DR-{d}v{v}'.format(d=donor_depth, v=recipient_depth)
+                    donor_fq1, donor_fq2 = simulate_data(fasta_file=fasta_file, freq_file=freq_file, sample=donor_name+f'-tmp-{mix_name}', outdir=outdir, seed=11, depth=donor_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
+                    recept_fq1, recept_fq2 = simulate_data(fasta_file=fasta_file, freq_file=freq_file, sample=recipient_name+f'-tmp-{mix_name}', outdir=outdir, seed=12, depth=recipient_depth, insert_size=insert_size, insert_size_sd=insert_size_sd)
                     os.system(f'cat {donor_fq1} {recept_fq1} > {outdir}/{mix_name}.dp{depth}.ins{insert_size}.R1.fastq')
                     os.system(f'cat {donor_fq2} {recept_fq2} > {outdir}/{mix_name}.dp{depth}.ins{insert_size}.R2.fastq')
                     os.system(f'rm {donor_fq1} {recept_fq1} {donor_fq2} {recept_fq2}')
                 else:
                     print(f"for depth={depth} and mix ratio={ratio}, we cannot simulate by assuming depth < 1: donor_depth={donor_depth}, recipient_depth={recipient_depth}")
     print('simulation success')
+    print("begin to analysis")
+    for each in fastq_dirs:
+        depth = each.split("_")[1].replace("dp", '')
+        d_name = f'{donor_name}-{depth}v0'
+        r_name = f'{recipient_name}-0v{depth}'
+        os.system(f'python ../../microhap.py -fastq {each} -r1 "(.*?).dp.*R1.fastq" -r2 "(.*?).dp.*R2.fastq" -microhaps ../panel/mypanel-defn.tsv -donor_name {d_name} -recipient_name {r_name} -skip GetSeqErrorMetrics --run --plot --docker -outdir result_{each}')
 
 
 def y_snps(y_snp_file='YSNPs.txt', genome_file='/home/hxbio04/biosofts/MicroHapulator/microhapulator/data/hg38.fasta'):

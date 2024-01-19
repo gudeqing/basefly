@@ -411,11 +411,14 @@ def pipeline():
         args['OUTPUT'].value = sample + '.sorted.bam'
 
         # get seq error metrics
-        error_metrics_task, args = wf.add_task(CollectSequencingArtifactMetrics(), tag=sample)
-        args['INPUT'].value = merge_bam_task.outputs['out']
-        args['OUTPUT'].value = sample
-        args['ref'].value = wf.topvars['ref']
-        args['db_snp'].value = wf.topvars['db_snp']
+        if 'GetSeqErrorMetrics' not in wf.args.skip:
+            error_metrics_task, args = wf.add_task(CollectSequencingArtifactMetrics(), tag=sample)
+            args['INPUT'].value = merge_bam_task.outputs['out']
+            args['OUTPUT'].value = sample
+            args['ref'].value = wf.topvars['ref']
+            args['db_snp'].value = wf.topvars['db_snp']
+        else:
+            error_metrics_task = None
 
         # typing
         typing_task, args = wf.add_task(TypingMicroHap(), tag=sample)
@@ -423,7 +426,7 @@ def pipeline():
         args['bam'].value = merge_bam_task.outputs['out']
         args['micro_haps'].value = wf.topvars['microhaps']
         args['out_prefix'].value = sample + '.typing'
-        args['error_rate_file'].value = error_metrics_task.outputs['out']
+        args['error_rate_file'].value = error_metrics_task.outputs['out'] if error_metrics_task else None
         typing_tasks.append(typing_task)
 
         if wf.topvars['donor_profile'].value:
