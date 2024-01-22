@@ -400,6 +400,7 @@ def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid',
 def simulate_data(chrom1=None, chrom2=None, fasta_file=None, freq_file=None, sample='SampleX', outdir='.', seed=11, depth=600, insert_size=350, insert_size_sd=50, simulator='/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/art_illumina'):
     if not chrom1:
         chrom1, chrom2 = prepare_simulation_reference(fasta_file, freq_file, out_prefix=os.path.join(outdir, sample), seed=seed)
+    simulator = 'docker run --rm -i vlr37/art_illumina:latest art_illumina -ss HS25'
     cmd1 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom1} --id {sample}c1 -o {sample}_1.'
     cmd2 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom2} --id {sample}c2 -o {sample}_2.'
     os.system(cmd1)
@@ -454,6 +455,42 @@ def batch_simulation(fasta_file, freq_file, depths=(300, 500, 700, 1000), insert
         d_name = f'{donor_name}-{depth}v0'
         r_name = f'{recipient_name}-0v{depth}'
         os.system(f'python ../../microhap.py -fastq {each} -r1 "(.*?).dp.*R1.fastq" -r2 "(.*?).dp.*R2.fastq" -microhaps ../panel/mypanel-defn.tsv -donor_name {d_name} -recipient_name {r_name} -skip GetSeqErrorMetrics --run --plot --docker -outdir result_{each}')
+
+
+def analysis_batch(result_dirs: list, out='merged_prediction_evaluation.xlsx'):
+    # 分析同一测序深度，不同片段长度的情况
+    # 分析同一片段长度，不同测序深度的情况
+    # 每个marker的预测效果：统计每个marker得到的嵌合率和期望值的差异的绝对值的总和
+    # exclude_markers = ["mh05KK-120.v1", "mh16HYP-36", "mh11WL-039", "mh05WL-049"]
+    marker_effect = []
+    mh_count_dfs = []
+    mh_depth_dfs = []
+    mh_chimerism_dfs = []
+    for result_dir in result_dirs:
+        result_name = os.path.basename(result_dir)
+        depth = result_name.split("_")[2].replace("dp", '')
+        insert = result_name.split("_")[3].replace("ins", '')
+        a = pd.read_csv(os.path.join(result_dir, 'Report/all.chimerism.csv'), header=0, index_col=0)
+        mh_chimerism_dfs.append(a)
+        # 计算每个marker的在一组模拟数据中的整体效果
+        exp_diff = a.sub(a.loc['exp_chimerism'], axis='columns').abs().sum(axis=1)/a.shape[1]
+        exp_diff.name = (depth, insert)
+        marker_effect.append(exp_diff)
+        b = pd.read_csv(os.path.join(result_dir, 'Report/haplotype_count.merged.csv'), header=0, index_col=0)
+        mh_count_dfs.append(b)
+        c = pd.read_csv(os.path.join(result_dir, 'Report/marker_min_depth.merged.csv'), header=0, index_col=0)
+        mh_depth_dfs.append(c)
+
+    result = pd.DataFrame(marker_effect)
+    result.index.name = ('depth', 'insert_size')
+    result.to_excel(out)
+    chimerisms = pd.concat(mh_chimerism_dfs, axis=1)
+    chimerisms.to_excel('all.chimerism.xlsx')
+    counts = pd.concat(mh_count_dfs, axis=1)
+    depths = pd.concat(mh_depth_dfs, axis=1)
+    counts.to_excel('all.haplotype_count.merged.xlsx')
+    depths.to_excel('all.marker_min_depth.merged.xlsx')
+
 
 
 def y_snps(y_snp_file='YSNPs.txt', genome_file='/home/hxbio04/biosofts/MicroHapulator/microhapulator/data/hg38.fasta'):
