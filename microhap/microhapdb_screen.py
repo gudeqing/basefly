@@ -479,14 +479,17 @@ def analysis_batch(result_dirs: list, out='merged_prediction_evaluation.xlsx'):
         depth = result_name.split("_")[2].replace("dp", '')
         insert = result_name.split("_")[3].replace("ins", '')
         a = pd.read_csv(os.path.join(result_dir, 'Report/all.chimerism.csv'), header=0, index_col=0)
+        a.columns = [x+f'-dp{depth}-ins{insert}' for x in a.columns]
         mh_chimerism_dfs.append(a)
         # 计算每个marker的在一组模拟数据中的整体效果
         exp_diff = a.sub(a.loc['exp_chimerism'], axis='columns').abs().sum(axis=1)/a.shape[1]
         exp_diff.name = (depth, insert)
         marker_effect.append(exp_diff)
         b = pd.read_csv(os.path.join(result_dir, 'Report/haplotype_count.merged.csv'), header=0, index_col=0)
+        b.columns = [x + f'-dp{depth}-ins{insert}' for x in b.columns]
         mh_count_dfs.append(b)
         c = pd.read_csv(os.path.join(result_dir, 'Report/marker_min_depth.merged.csv'), header=0, index_col=0)
+        c.columns = [x + f'-dp{depth}-ins{insert}' for x in c.columns]
         mh_depth_dfs.append(c)
 
     result = pd.DataFrame(marker_effect)
