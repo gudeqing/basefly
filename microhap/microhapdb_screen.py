@@ -400,9 +400,11 @@ def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid',
 def simulate_data(chrom1=None, chrom2=None, fasta_file=None, freq_file=None, sample='SampleX', outdir='.', seed=11, depth=600, insert_size=350, insert_size_sd=50, simulator='/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/art_illumina'):
     if not chrom1:
         chrom1, chrom2 = prepare_simulation_reference(fasta_file, freq_file, out_prefix=os.path.join(outdir, sample), seed=seed)
-    simulator = 'docker run --rm -i vlr37/art_illumina:latest art_illumina -ss HS25'
+    # simulator = 'docker run --rm -i vlr37/art_illumina:latest art_illumina -ss HS25'
     cmd1 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom1} --id {sample}c1 -o {sample}_1.'
     cmd2 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom2} --id {sample}c2 -o {sample}_2.'
+    print(cmd1)
+    print(cmd2)
     os.system(cmd1)
     os.system(cmd2)
     fq1 = f'{outdir}/{sample}.R1.fastq'
