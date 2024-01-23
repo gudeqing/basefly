@@ -452,11 +452,17 @@ def batch_simulation(fasta_file, freq_file, depths=(300, 500, 700, 1000), insert
                     print(f"for depth={depth} and mix ratio={ratio}, we cannot simulate by assuming depth < 1: donor_depth={donor_depth}, recipient_depth={recipient_depth}")
     print('simulation success')
     print("begin to analysis")
+    result_dirs = []
     for each in fastq_dirs:
         depth = each.split("_")[1].replace("dp", '')
         d_name = f'{donor_name}-{depth}v0'
         r_name = f'{recipient_name}-0v{depth}'
-        os.system(f'python ../../microhap.py -fastq {each} -r1 "(.*?).dp.*R1.fastq" -r2 "(.*?).dp.*R2.fastq" -microhaps ../panel/mypanel-defn.tsv -donor_name {d_name} -recipient_name {r_name} -skip GetSeqErrorMetrics --run --plot --docker -outdir result_{each}')
+        outdir = f'result_{each}'
+        result_dirs.append(outdir)
+        os.system(f'python ../../microhap.py -fastq {each} -r1 "(.*?).dp.*R1.fastq" -r2 "(.*?).dp.*R2.fastq" -microhaps ../panel/mypanel-defn.tsv -donor_name {d_name} -recipient_name {r_name} -skip GetSeqErrorMetrics -threads 5 --run --plot --docker -outdir {outdir}')
+    # 合并分析结果
+    print('merge analysis result')
+    analysis_batch(result_dirs, out='merged_prediction_evaluation.xlsx')
 
 
 def analysis_batch(result_dirs: list, out='merged_prediction_evaluation.xlsx'):
@@ -492,7 +498,6 @@ def analysis_batch(result_dirs: list, out='merged_prediction_evaluation.xlsx'):
     depths = pd.concat(mh_depth_dfs, axis=1)
     counts.to_excel('all.haplotype_count.merged.xlsx')
     depths.to_excel('all.marker_min_depth.merged.xlsx')
-
 
 
 def y_snps(y_snp_file='YSNPs.txt', genome_file='/home/hxbio04/biosofts/MicroHapulator/microhapulator/data/hg38.fasta'):
