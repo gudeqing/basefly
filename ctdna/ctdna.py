@@ -1820,7 +1820,7 @@ def pipeline():
     wf.add_argument('-bed', help="bed file for target region")
     wf.add_argument('-bgzip_bed', required=False, help="The BED file must be bgzip-compressed and tabix-indexed, which is required by Manta")
     wf.add_argument('-pair', required=False, help='Optional. pair information file, no header, tab separated, first column is tumor while second one is normal. Normal sample named "None" means tumor-only.')
-    wf.add_argument('-umi', required=True, help='A string describes the read structural. Such as “1S3M3S143T,1S3M3S143T” denotes UMIs locate at 2-4bp of read1 and read2')
+    wf.add_argument('-umi', required=False, help='A string describes the read structural. Such as “1S3M3S143T,1S3M3S143T” denotes UMIs locate at 2-4bp of read1 and read2')
     wf.add_argument('--call_duplex', default=False, action='store_true', help='Calls duplex consensus sequences from reads generated from the same double-stranded source molecule.')
     wf.add_argument('--markdup', default=False, action='store_true', help='mark duplication reads, this option can only be used when FastqToSam is skipped, and enables non-umi based variant calling')
     wf.add_argument('-scatter', default=10, help='scatter number used for interval splitting of mutect2 variant calling steps')
