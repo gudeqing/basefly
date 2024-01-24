@@ -464,12 +464,12 @@ def gencore():
     cmd.args['bed'] = Argument(prefix='--bed ', type='infile', desc='bed file to specify the capturing region')
     cmd.args['duplex_only'] = Argument(prefix='--duplex_only', type='bool', default=False, desc='only output duplex consensus sequences, which means single stranded consensus sequences will be discarded')
     cmd.args['no_duplex'] = Argument(prefix='--no_duplex', type='bool', default=False, desc="don't merge single stranded consensus sequences to duplex consensus sequences.")
-    cmd.args['umi_prefix'] = Argument(prefix='--umi_prefix ', level='optional', desc='the prefix for UMI, if it has. None by default. Check the README for the defails of UMI formats. such as: "NB551106:8:H5Y57BGX2:1:13304:3538:1404:UMI_GAGCATAC", prefix = "UMI", umi = "GAGCATAC"')
+    cmd.args['umi_prefix'] = Argument(prefix='--umi_prefix ', level='optional', desc='the prefix for UMI, if it has. None by default. Check the README for the details of UMI formats. such as: "NB551106:8:H5Y57BGX2:1:13304:3538:1404:UMI_GAGCATAC", prefix = "UMI", umi = "GAGCATAC"')
     cmd.args['supporting_reads'] = Argument(prefix='--supporting_reads ', default=1, desc='only output consensus reads/pairs that merged by >= <supporting_reads> reads/pairs. The valud should be 1~10')
-    cmd.args['ratio_threshold'] = Argument(prefix='--ratio_threshold ', default=0.8, desc='if the ratio of the major base in a cluster is less than <ratio_threshold>, it will be further compared to the reference. The valud should be 0.5~1.0')
+    cmd.args['ratio_threshold'] = Argument(prefix='--ratio_threshold ', default=0.8, desc='if the ratio of the major base in a cluster is less than <ratio_threshold>, it will be further compared to the reference. The value should be 0.5~1.0')
     cmd.args['score_threshold'] = Argument(prefix='--score_threshold ', default=6, desc='if the score of the major base in a cluster is less than <score_threshold>, it will be further compared to the reference.')
     cmd.args['umi_diff_threshold'] = Argument(prefix='--umi_diff_threshold ',  level='optional', default=1, desc='if two reads with identical mapping position have UMI difference <= <umi_diff_threshold>, then they will be merged to generate a consensus read.')
-    cmd.args['duplex_diff_threshold'] = Argument(prefix='duplex_diff_threshold ', level='optional', default=2, desc='if the forward consensus and reverse consensus sequences have <= <duplex_diff_threshold> mismatches, then they will be merged to generatea duplex consensus sequence, otherwise will be discarded')
+    cmd.args['duplex_diff_threshold'] = Argument(prefix='--duplex_diff_threshold ', level='optional', default=2, desc='if the forward consensus and reverse consensus sequences have <= <duplex_diff_threshold> mismatches, then they will be merged to generate a duplex consensus sequence, otherwise will be discarded')
     cmd.args['coverage_sampling'] = Argument(prefix='--coverage_sampling ', default=10000, desc='the sampling rate for genome scale coverage statistics. Default 10000 means 1/10000.')
     cmd.args['json'] = Argument(prefix='--json ', type='outstr', default='gencore.json', desc='the json format report file name')
     cmd.args['html'] = Argument(prefix='--html ', type='outstr', default='gencore.html', desc='the html format report file name')
@@ -1728,7 +1728,7 @@ def pipeline():
     7. CallDuplexConsensusReads (如果不是双端UMI，则不建议使用该方法，而用CallMolecularConsensusReads）
     8. FilterConsensusReads
     9. bam2fastq and bwa-mem (使用samtools fastq命令，带入consensus相关tag，然后bwa-mem比对时，加上-C参数，相关tag带到bam文件中，方便后续的使用）
-    10. CollectHsMetrics或者bamdst
+    10. bamdst
     11. ClipBam(选择跳过，vardict call变异时可以通过参数指定不重复计数overlapped区域）
     12. filterbam:Supplementary aligned reads and not primary aligned reads were removed using samtools v1.5（可以用fgbio自带得filterbam）
     13. vardict
@@ -1738,10 +1738,10 @@ def pipeline():
     (1) CallDuplexConsensusReads vs CallMolecularConsensusReads
     预期CallDuplexConsensusReads效果大于CallMolecularConsensusReads
     （2）mutect2 vs vardict:
-    预期mutect2效果好于vardict，个人认为最大的理由是因为vardict近几年都停止更新，而mutect2还在积极的维护
+    预期mutect2效果好于vardict，个人认为最大的理由是因为vardict近几年都停止更新，而mutect2还在积极的维护. ucaler的demo数据表明，mutect2不适合于1%以下突变的检出
     (3) 检查每一个突变支持的read的UMI状态
     (4) 是否需要find_complex_variant, vardict似乎可以成功报出，mutect2呢？
-    * 由于分析结果中，很多的UMI family size==1, 可以考虑进一步使用gencore进行简单意义上的去重，进一步减少假阳性
+    * 由于分析结果中，很多的UMI family size==1, 可以考虑进一步使用gencore进行简单意义上的去重，进一步减少假阳性。这一步不是必须，何因的测序数据质量较差，这一步才有效。
     * 过滤时，对支持变异的read的family size进行检查，如果family size 小于3，考虑如何用一个更合适的背景测序错误率：
         可以考虑利用fgbio提供的cE信息，使用最后的3base context的策略统计背景噪音过滤
     
@@ -1753,7 +1753,7 @@ def pipeline():
     以上参数，目前的得到的结果是1%以下的突变都没有检测出来
     根据参考文献考虑调整参数 disable-read-filter MateOnSameContigOrNoMappedMateReadFilter （https://www.ncbi.nlm.nih.gov/pmc/articles/PMC9705725/）
     max_alt_alleles_in_normal_count max_alt_allele_in_normal_fraction	https://best-practices-for-processing-hts-data.readthedocs.io/en/latest/mutect2_pitfalls.html
-    以上参数的调整，没有达到预期效果
+    以上参数的调整，仍然没有达到预期效果
     vardict 过滤: https://github.com/LeiHaoa/DeepFilter： 
     
     根据mutscan的扫描结果，学习发现假阳性突变的特征，提出需要改进的filter：
@@ -1793,12 +1793,12 @@ def pipeline():
     
     加入abra2步骤后，vardict可以call出EGFR的复合突变，但是证据比较少，而且合并前的2个突变也会报告出
     
-    # 分析发现，manta和fgbio duplexconsenus不兼容，因为fgbio会引入过高的碱基质量值
+    # 分析发现，manta和fgbio duplexconsenus不兼容，因为fgbio会引入过高的碱基质量值，因此后续加入了ReformatBaseQual对碱基质量值进行了修改
     https://github.com/bcbio/bcbio-nextgen/issues/3662
     
     目前流程特性：
     注意：可能不适合WES和WGS数据，因为没有走GATK的best practice路线，不包含根据数据库进行BQSR等步骤
-    注意： 该流程适用panel somatic variant calling
+    注意：该流程适用小panel somatic variant calling
     0. 流程默认有两个普通变异caller，vardict和mutect2,可以选择性跳过，另外还有Manta，CNVkit
     1. 流程默认走路线：SamToFastq + MarkIlluminaAdapters + bwa + MergeBamAliganment + Fgbio(CallMolecularConsensusReads) + gencore + caller, 如果UMI数据质量较好，建议此时选择跳过Gencore
     2. 跳过FastqToSam步骤，可以走默认的fastp+bwa+gencore+caller路线，该路线可以适用于UMI和非UMI数据
