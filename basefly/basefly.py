@@ -357,6 +357,7 @@ class Command:
         )
         name_map = dict()
         arg_id = 0
+        used_prefix = []
         for name, arg in self.args.items():
             if name.startswith('_') or arg.type == 'fix':
                 continue
@@ -368,6 +369,11 @@ class Command:
                 prefix_name = name
             if not prefix_name.startswith('-'):
                 prefix_name = '-' + name
+            if prefix_name in used_prefix:
+                prefix_name = prefix_name + '2'
+                used_prefix.append(prefix_name)
+            else:
+                used_prefix.append(prefix_name)
             if arg.type == 'bool':
                 parser.add_argument(prefix_name, default=arg.default, action=f"store_{str(not arg.default).lower()}", help=arg.desc, dest=dest_name)
             else:
