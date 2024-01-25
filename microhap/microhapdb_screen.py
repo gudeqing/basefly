@@ -404,7 +404,7 @@ def simulate_data(chrom1=None, chrom2=None, fasta_file=None, freq_file=None, sam
     chrom_dir = os.path.abspath(os.path.dirname(chrom1))
     work_dir = os.getcwd()
     cmd1, cmd2 = '', ''
-    simulator = 'ngsngs'
+    # simulator = 'ngsngs'
     if simulator != 'ngsngs':
         # simulator = 'art_illumina -ss HS25 '
         # cmd_prefix = '/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/'
