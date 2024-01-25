@@ -5,6 +5,7 @@ import pandas as pd
 import gzip
 from collections import Counter
 from itertools import combinations
+from subprocess import check_call
 
 
 """
@@ -397,21 +398,39 @@ def prepare_simulation_reference(fasta_file, freq_file, out_prefix='SimDiploid',
     return out_name, out_name2
 
 
-def simulate_data(chrom1=None, chrom2=None, fasta_file=None, freq_file=None, sample='SampleX', outdir='.', seed=11, depth=600, insert_size=350, insert_size_sd=50, simulator='/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/art_illumina'):
+def simulate_data(chrom1=None, chrom2=None, fasta_file=None, freq_file=None, sample='SampleX', outdir='.', seed=11, depth=600, insert_size=350, insert_size_sd=50, simulator='art_illumina'):
     if not chrom1:
         chrom1, chrom2 = prepare_simulation_reference(fasta_file, freq_file, out_prefix=os.path.join(outdir, sample), seed=seed)
-    # simulator = 'docker run --rm -i vlr37/art_illumina:latest art_illumina -ss HS25'
-    cmd1 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom1} --id {sample}c1 -o {sample}_1.'
-    cmd2 = f'{simulator} --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom2} --id {sample}c2 -o {sample}_2.'
+    chrom_dir = os.path.abspath(os.path.dirname(chrom1))
+    work_dir = os.getcwd()
+    cmd1, cmd2 = '', ''
+    simulator = 'ngsngs'
+    if simulator != 'ngsngs':
+        # simulator = 'art_illumina -ss HS25 '
+        # cmd_prefix = '/home/hxbio04/biosofts/ART/art_bin_VanillaIceCream/'
+        cmd_prefix = f"docker run --rm -v {chrom_dir}:{chrom_dir} -v {work_dir}:{work_dir} -w {work_dir} -i gudeqing/art_illumina:2.5.8 "
+        cmd1 = cmd_prefix + f'{simulator} -ss HS25 --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom1} --id {sample}c1 -o {sample}_1.'
+        cmd2 = cmd_prefix + f'{simulator} -ss HS25 --noALN --paired -l 150 -rs {seed} -m {insert_size} -s {insert_size_sd} -f {depth/2} -i {chrom2} --id {sample}c2 -o {sample}_2.'
+    elif simulator == 'ngsngs':
+        # seed没有固定
+        # ngsngs -i Donor-1000v0.dp1000.ins200.chrom1.fa -c 300 -f fq -ld norm,300,30 -seq PE -q1 /NGSNGS-0.9.0/Test_Examples/AccFreqL150R2.txt -q2 /NGSNGS-0.9.0/Test_Examples/AccFreqL150R1.txt -o SX
+        cmd_prefix = f"docker run --rm -v {chrom_dir}:{chrom_dir} -v {work_dir}:{work_dir} -w {work_dir} -i gudeqing/ngsngs:0.9.0 "
+        cmd1 = cmd_prefix + f"ngsngs -i {chrom1} -c {depth/2} -f fq -l {insert_size} -seq PE -q1 /NGSNGS-0.9.0/Test_Examples/AccFreqL150R1.txt -q2 /NGSNGS-0.9.0/Test_Examples/AccFreqL150R2.txt -o {sample}_1"
+        cmd2 = cmd_prefix + f"ngsngs -i {chrom2} -c {depth/2} -f fq -l {insert_size} -seq PE -q1 /NGSNGS-0.9.0/Test_Examples/AccFreqL150R1.txt -q2 /NGSNGS-0.9.0/Test_Examples/AccFreqL150R2.txt -o {sample}_2"
     print(cmd1)
     print(cmd2)
-    os.system(cmd1)
-    os.system(cmd2)
+    check_call(cmd1, shell=True)
+    check_call(cmd2, shell=True)
     fq1 = f'{outdir}/{sample}.R1.fastq'
     fq2 = f'{outdir}/{sample}.R2.fastq'
-    os.system(f'cat {sample}*.1.fq > {fq1}')
-    os.system(f'cat {sample}*.2.fq > {fq2}')
-    os.system(f'rm {sample}*.1.fq {sample}*.2.fq')
+    if simulator != 'ngsngs':
+        os.system(f'cat {sample}*.1.fq > {fq1}')
+        os.system(f'cat {sample}*.2.fq > {fq2}')
+        os.system(f'rm -fr {sample}*.1.fq {sample}*.2.fq')
+    else:
+        os.system(f'cat {sample}*_R1.fq > {fq1}')
+        os.system(f'cat {sample}*_R2.fq > {fq2}')
+        os.system(f'rm -fr {sample}*_R1.fq {sample}*_R2.fq')
     return fq1, fq2
 
 

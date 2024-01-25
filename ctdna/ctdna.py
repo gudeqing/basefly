@@ -1867,7 +1867,12 @@ def pipeline():
         pairs = [x.strip().split('\t')[:2] for x in open(wf.topvars['pair_info'].value)]
     else:
         # 如果不提供配对信息，全部都当作无对照处理
-        pairs = zip(fastq_info.keys(), ['None']*len(fastq_info))
+        pairs = list(zip(fastq_info.keys(), ['None']*len(fastq_info)))
+    all_samples = [y for x in pairs for y in x]
+    target_samples =[]
+    for each in all_samples:
+        if each != 'None' and (each not in wf.args.exclude_samples):
+            target_samples.append(each)
 
     # 建bwa索引, 也会同时建fai和dict文件
     make_index = False
@@ -1944,12 +1949,10 @@ def pipeline():
 
     for sample, reads in fastq_info.items():
         # 跳过不需要分析的样本
-        if sample in wf.args.exclude_samples:
-            print(f'Skip {sample} for it is in excluded sample list')
+        if sample not in target_samples:
+            print(f'Skip {sample} for it is not in pair info or included in exclude_samples')
             continue
         # fastq预处理和比对 考虑一个样本存在多对fastq的处理
-        if sample in wf.args.exclude_samples:
-            continue
         if len(reads) == 2:
             r1s, r2s = reads
         else:
@@ -2003,7 +2006,7 @@ def pipeline():
             get_umi_task, args = wf.add_task(ExtractUmisFromBam(), tag=uniq_tag, depends=[fastq2sam_task])
             args['input'].value = fastq2sam_task.outputs['out']
             # args['read-structure'].value = ['1S3M3S144T', '1S3M3S144T']
-            args['read-structure'].value = wf.args.umi.split(',')
+            args['read-structure'].value = wf.args.umi.split(',') if wf.args.umi else None
             args['output'].value = f'{uniq_tag}.umi.ubam'
 
             # MarkIlluminaAdapters
