@@ -477,6 +477,50 @@ def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=2, min_depth
 def get_tmb(vcfs:tuple, out='TMB.txt', bed_size=59464418, tumor_index=None, min_af=0.05,
             min_alt_depth=3, min_depth=15, max_pop_freq=1e-3, pick=True,
             tsg_file=None, synonymous=False, tag='CSQ'):
+
+    """
+    https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6510391/
+    什么是 TMB？
+    TMB of a tumor sample is calculated by the number of non-synonymous somatic mutations (single nucleotide variants and small insertions/deletions) per mega-base in coding regions
+    TMB 是指特定基因组编码区域内非同义体细胞突变的个数，通常用每兆碱基多少个突变表示（mut/Mb），在早期研究中也直接以突变数量表示。TMB 可以间接反映肿瘤产生新抗原的能力和程度，预测多种肿瘤的免疫治疗疗效。
+
+    目前免疫治疗最为确定的 3 个标志物——TMB，MSI 和 PD-L1 表达常有不同：
+        同时具备3个标志物的患者比例仅为 0.6%。
+        MSI-H 和 TMB-H 似乎具有一定的相关性，83% 的 MSI-H 患者同时为 TMB-H，而只有 16% 的 TMB-H 是 MSI-H。
+        TMB 和 PD-L1 则相互独立，同时 TMB-H 和 PD-L1 阳性者对 ICI 反应最佳。
+
+    TMB 的检测受样本质量、检测方法和分析方法等多种因素影响，临床应用前应充分了解 TMB 检测的条件。
+    样本：肿瘤纯度要求 ≥ 20%，需要有正常对照为检测提供胚系变异信息。
+    方法：全外显子测序（WES）是 TMB 检测的金标准。但是 WES 价格昂贵，检测时间长，需要新鲜标本，因而应用受限。靶向测序 panel 已经成为 WES 的有效替代，为准确性考虑，其覆盖范围应 ≥ 1.0 Mb，测序深度 ≥ 500×。
+    分析：TMB 的中位值和分布范围在不同癌种中有所不同，因此，在各个癌种中分别确定界值十分重要。应使用相同的筛选策略，选择排序在 20% 以上的病例定义为 TMB-H，而前瞻性的临床疗效才是确定 TMB 界值的最佳标准。不同靶向测序 panel 的 TMB 不能通用。
+
+    小结:
+    对于无标准治疗的晚期肿瘤患者，TMB-H 提供了免疫治疗获益的可能。
+    某些情况下 TMB 可预测 ICI 治疗反应，但结论并不一致，特别是 TMB 预测长期结局以及免疫联合治疗的疗效时应慎重。
+    bTMB 和 tTMB 具有一致性，但临床应用还缺乏强证据。
+    使用 TMB 时，应结合瘤种、人口特征、基因特征和检测方法综合解读。联合使用 PD-L1 和 TMB 等多种生物标志物可能是筛选免疫获益人群的更好方法。
+
+    TMB calculation
+    TMB was defined as the number of somatic mutations in the coding region per megabase, including single nucleotide variants (SNVs) and small INDELs (insertions and deletions, usually less than 20 bases).
+    However, the means to determine reliable somatic coding mutations for TMB calculation was not trivial.
+    In the F1CDx approach, synonymous mutations were included. However, stop-gain mutations in tumor suppressor genes and hotspot driver mutations were not included in order to reduce bias due to enrichment of cancer-related genes in the F1CDx panel.
+    Here, we followed the F1CDx approach to calculate the TMB for our panel, defining the cutoff values as TMB-high (≥20 mutations/Mb), TMB-medium (<20 mutations/Mb ≥10 mutations/Mb) and TMB-low (<10 mutations/Mb).
+    Others filtering parameters of somatic mutations identified by WES for TMB calculation were a mutated allele frequency greater than 5% and a sequence depth greater than 20X in tumor samples greater or 10X in normal samples.
+
+    :param vcfs: 一个或多个VCF文件
+    :param out: 输出的csv文件名称
+    :param bed_size: panel的大小，这个大小是否要考虑内含子区域在内？
+    :param tumor_index: 从0开始计数，指示vcf中第几个样本是肿瘤样本，默认自己根据AF高低统计判断肿瘤样本
+    :param min_af: 如果某个突变的频率AF小于该值，则不纳入统计范围
+    :param min_alt_depth: 如果某个突变的支持reads数量小于该值，则不纳入统计范围
+    :param min_depth: 如果某个突变所在位置总测序深度小于该值，则不纳入统计范围
+    :param max_pop_freq: 如果某个突变的人群频率（vep给出的MAX_AF）大于该值，则不纳入统计范围
+    :param pick: 是否只选择vep给出的pick flag为1的突变进行分析。这关系到突变的意义解读。
+    :param tsg_file: 肿瘤抑制子基因文件https://bioinfo.uth.edu/TSGene/，默认选择Ensembl来源的基因作为候选。如果提供该文件，则针对这些基因进行判断，如果consequence为['stop_gained', 'start_lost']则不纳入TMB统计
+    :param synonymous: 如果为False，则TMB统计时，不会纳入同义突变，根据VEP给出的consequence判断
+    :param tag: 指示VCF文件中，哪个字段为VEP的注释结果，默认为CSQ
+    :return:
+    """
     # sample = os.path.basename(vcf).split('.')[0]
     tsg = get_tsg(tsg_file, value_type='Ensembl') if tsg_file else set()
     count_lst = []
