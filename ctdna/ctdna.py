@@ -1802,6 +1802,8 @@ def pipeline():
     0. 流程默认有两个普通变异caller，vardict和mutect2,可以选择性跳过，另外还有Manta，CNVkit
     1. 流程默认走路线：SamToFastq + MarkIlluminaAdapters + bwa + MergeBamAliganment + Fgbio(CallMolecularConsensusReads) + gencore + caller, 如果UMI数据质量较好，建议此时选择跳过Gencore
     2. 跳过FastqToSam步骤，可以走默认的fastp+bwa+gencore+caller路线，该路线可以适用于UMI和非UMI数据
+    如fastp+bwa+gencore+vardict处理UMI数据:python /home/hxbio04/basefly/ctdna/ctdna.py -fastq data/ -r1 "(.*?)-.*R1.fastq.gz" -r2 "(.*?)-.*R2.fastq.gz" -pair pair.info.old -bed data/uCaler_AML_Panel_v1.0.hg19.sorted.bed -umi 3M2S+,3M2S+ -min_af 0.0001 -skip FastqToSam Manta Gridss ETCHING CNVkitFlatRef CNVkitBatch --plot --docker --run
+    如处理非UMI数据，即不提供UMI信息：python /home/hxbio04/basefly/ctdna/ctdna.py -fastq /data/ShareData/ChenBaocai_data -r1 "(.*?)-G5.*S109_R1.fastq.gz" -r2 "(.*?)-G5.*S109_R2.fastq.gz" -bed /data/ShareData/ChenBaocai_data/MDS85_covered_by_probes.bed -ref /home/hxbio04/hg19/genome.fa -skip FastqToSam CNVkitFlatRef CNVkitBatch --plot --docker --run -outdir ChenBaoCai-MDS85
     3. 跳过FastqToSam步骤并且设置markdup流程参数，可以走默认的fastp+bwa+markdup+gencore+caller路线，该路线适用non-UMI数据, 但markdup步骤可能显得多余
     4. 跳过FastqToSam和Gencore步骤并且设置markdup流程参数，可以走默认的fastp+bwa+markdup+caller路线, 该路线适用普通non-UMI数据
     """
