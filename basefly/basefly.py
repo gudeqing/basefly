@@ -350,7 +350,7 @@ class Command:
             # print('drop invalid outputs of', self.meta.name, self.outputs[each].value)
             self.outputs.pop(each)
 
-    def run_on_terminal(self):
+    def run_on_terminal(self, to_cwl=False):
         parser = argparse.ArgumentParser(
             formatter_class=argparse.ArgumentDefaultsHelpFormatter,
             description=self.meta.desc
@@ -394,6 +394,8 @@ class Command:
         arg_value_dict = dict(args._get_kwargs())
         for k, v in name_map.items():
             self.args[k].value = arg_value_dict[v]
+        if to_cwl:
+            Workflow().to_cwl_tool(self, write_out=True)
         self.run_now(wkdir=os.getcwd(), docker=bool(self.runtime.image))
 
 
