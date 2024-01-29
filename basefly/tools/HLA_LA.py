@@ -42,15 +42,16 @@ def HLA_LA():
     cmd.runtime.cpu = 4
     cmd.runtime.memory = 10 * 1024 ** 3
     cmd.runtime.tool = 'HLA-LA.pl'
-    cmd.args['bam'] = Argument(prefix='--BAM ', type='infile', desc='input bam file')
+    cmd.args['bam'] = Argument(prefix='--BAM ', type='infile', format='bam', desc='input bam file')
     cmd.args['graph'] = Argument(prefix='--customGraphDir ', type='indir', default='/home/hxbio04/dbs/HLA-LA/graphs/PRG_MHC_GRCh38_withIMGT/', desc='graph indexed directory')
     cmd.args['sample_id'] = Argument(prefix='--sampleID ', type='outstr', desc='sample unique id')
     cmd.args['threads'] = Argument(prefix='--maxThreads ', type='int', default=7, desc='threads number')
     cmd.args['working_dir'] = Argument(prefix='--workingDir ', default='.', desc='working directory')
-    cmd.outputs['out_G'] = Output(value='{sample_id}/hla/R1_bestguess_G.txt')
+    cmd.outputs['out_bestguess_G'] = Output(value='{sample_id}/hla/R1_bestguess_G.txt', desc='Perfect translation from HLA*PRG:LA call to G grop resolution? (1 = Yes)')
+    cmd.outputs['out_summary'] = Output(value='{sample_id}/hla/summaryStatistics.txt')
+    cmd.outputs['out_bestguess'] = Output(value='{sample_id}/hla/R1_bestguess.txt', desc='contains the un-translated output from the internal model of the algorithm')
     return cmd
 
 
 if __name__ == '__main__':
-    Workflow().to_cwl_tool(cmd=HLA_LA(), write_out=True)
-    HLA_LA().run_on_terminal()
+    HLA_LA().run_on_terminal(to_cwl=True)
