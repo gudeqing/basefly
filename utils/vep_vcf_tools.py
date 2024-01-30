@@ -474,51 +474,158 @@ def merge_vcf_as_table(vcfs:tuple, out, min_af=0.001, min_alt_depth=2, min_depth
         plt.close()
 
 
-def get_tmb(vcfs:tuple, out='TMB.txt', bed_size=59464418, tumor_index=None, min_af=0.05,
-            min_alt_depth=3, min_depth=15, max_pop_freq=1e-3, pick=True,
-            tsg_file=None, synonymous=False, tag='CSQ'):
+def get_TMB(vcfs:tuple, out='TMB.txt', bed_size=59464418, tumor_index=None,
+            min_af=0.05, min_alt_depth=3, min_depth=25, max_pop_freq=0.01,
+            pick=True, tsg_file=None, include_synonymous=False, csq_tag='CSQ'):
 
     """
+    https://zhuanlan.zhihu.com/p/378646738
     https://www.ncbi.nlm.nih.gov/pmc/articles/PMC6510391/
-    什么是 TMB？
+
+    常见免疫治疗标志物：
+    目前免疫治疗最为确定的 3 个标志物——TMB，MSI 和 PD-L1 表达常有不同：
+    同时具备3个标志物的患者比例仅为 0.6%。
+    MSI-H 和 TMB-H 似乎具有一定的相关性，83% 的 MSI-H 患者同时为 TMB-H，而只有 16% 的 TMB-H 是 MSI-H。
+    TMB 和 PD-L1 则相互独立，同时 TMB-H 和 PD-L1 阳性者对 ICI 反应最佳。
+
+    TMB的定义：
     TMB of a tumor sample is calculated by the number of non-synonymous somatic mutations (single nucleotide variants and small insertions/deletions) per mega-base in coding regions
     TMB 是指特定基因组编码区域内非同义体细胞突变的个数，通常用每兆碱基多少个突变表示（mut/Mb），在早期研究中也直接以突变数量表示。TMB 可以间接反映肿瘤产生新抗原的能力和程度，预测多种肿瘤的免疫治疗疗效。
 
-    目前免疫治疗最为确定的 3 个标志物——TMB，MSI 和 PD-L1 表达常有不同：
-        同时具备3个标志物的患者比例仅为 0.6%。
-        MSI-H 和 TMB-H 似乎具有一定的相关性，83% 的 MSI-H 患者同时为 TMB-H，而只有 16% 的 TMB-H 是 MSI-H。
-        TMB 和 PD-L1 则相互独立，同时 TMB-H 和 PD-L1 阳性者对 ICI 反应最佳。
-
+    TMB的检测：
     TMB 的检测受样本质量、检测方法和分析方法等多种因素影响，临床应用前应充分了解 TMB 检测的条件。
     样本：肿瘤纯度要求 ≥ 20%，需要有正常对照为检测提供胚系变异信息。
     方法：全外显子测序（WES）是 TMB 检测的金标准。但是 WES 价格昂贵，检测时间长，需要新鲜标本，因而应用受限。靶向测序 panel 已经成为 WES 的有效替代，为准确性考虑，其覆盖范围应 ≥ 1.0 Mb，测序深度 ≥ 500×。
     分析：TMB 的中位值和分布范围在不同癌种中有所不同，因此，在各个癌种中分别确定界值十分重要。应使用相同的筛选策略，选择排序在 20% 以上的病例定义为 TMB-H，而前瞻性的临床疗效才是确定 TMB 界值的最佳标准。不同靶向测序 panel 的 TMB 不能通用。
 
-    小结:
-    对于无标准治疗的晚期肿瘤患者，TMB-H 提供了免疫治疗获益的可能。
-    某些情况下 TMB 可预测 ICI 治疗反应，但结论并不一致，特别是 TMB 预测长期结局以及免疫联合治疗的疗效时应慎重。
-    bTMB 和 tTMB 具有一致性，但临床应用还缺乏强证据。
-    使用 TMB 时，应结合瘤种、人口特征、基因特征和检测方法综合解读。联合使用 PD-L1 和 TMB 等多种生物标志物可能是筛选免疫获益人群的更好方法。
+    TMB的对于治疗的意义
+    对于无标准治疗的晚期肿瘤患者，TMB-H 提供了免疫治疗获益的可能。 某些情况下 TMB 可预测 ICI 治疗反应，但结论并不一致，特别是 TMB 预测长期结局以及免疫联合治疗的疗效时应慎重。
+    bTMB 和 tTMB 具有一致性，但临床应用还缺乏强证据。 使用 TMB 时，应结合瘤种、人口特征、基因特征和检测方法综合解读。联合使用 PD-L1 和 TMB 等多种生物标志物可能是筛选免疫获益人群的更好方法。
 
-    TMB calculation
+    胃癌高通量测序（NGS）临床应用中国专家共识（2023版）之 胃癌TMB-H的判定标准：
+    TMB-H也是ICIs治疗获益肿瘤患者的分子标志物，与MSI-H具有显著相关性[31]。与MSI状态鉴定不同，TMB检测的“金标准”是WES[32]。
+    胃癌患者中TMB值≤5 muts/Mb的约占66.2%，5～10 muts/Mb约11.3%，10～40 muts/Mb约19.5%，≥40 muts/Mb约3.0%[33]。
+    一项泛癌种研究发现，TMB前20%患者接受ICIs治疗的OS更长；采用“五分位法”定义TMB-H（>8.8 muts/Mb），其中126例食管胃腺癌患者未观察到生存获益[34]。
+    特瑞普利单抗临床试验发现，前20%的TMB-H（TMB≥12 muts/Mb）胃癌患者具有更优的客观缓解率和OS[35]。2022 V2版NCCN胃癌指南推荐使用帕博利珠单药治疗TMB截断值≥10 muts/Mb的患者[36]。
+    通常检测的基因数目越多，NGS panel拟合的TMB值与WES的一致性越好，使用超过300个基因的大panel（覆盖率≥0.8 Mb，最好≥1.0 Mb）即可较好地评估TMB值[37]。
+    选择合适的NGS方法（>300个基因的panel）判断TMB-H，有助于作为医生对胃癌患者采用ICIs治疗的参考（推荐等级：Ⅱ级）。
+
+    TMB 的计算
     TMB was defined as the number of somatic mutations in the coding region per megabase, including single nucleotide variants (SNVs) and small INDELs (insertions and deletions, usually less than 20 bases).
     However, the means to determine reliable somatic coding mutations for TMB calculation was not trivial.
     In the F1CDx approach, synonymous mutations were included. However, stop-gain mutations in tumor suppressor genes and hotspot driver mutations were not included in order to reduce bias due to enrichment of cancer-related genes in the F1CDx panel.
     Here, we followed the F1CDx approach to calculate the TMB for our panel, defining the cutoff values as TMB-high (≥20 mutations/Mb), TMB-medium (<20 mutations/Mb ≥10 mutations/Mb) and TMB-low (<10 mutations/Mb).
     Others filtering parameters of somatic mutations identified by WES for TMB calculation were a mutated allele frequency greater than 5% and a sequence depth greater than 20X in tumor samples greater or 10X in normal samples.
 
+    MAF文件中包含的突变类型，对于哪些突变应纳入计算目前似乎没有标准
+    The MAF file contains 16 types of somatic mutations (Missense_Mutation, Silent, Nonsense_Mutation, Intron, 3'UTR, 5'UTR, Splice_Site, RNA,
+    Frame_Shift_Ins, Frame_Shift_Del, In_Frame_Ins, Nonstop_Mutation, In_Frame_Del, 3'Flank, 5'Flank, Translation_Start_Site) flagged by variant calling software packages.
+    Since TMB is defined as the mutations in the coding region in most studies, four types of mutations (Intron, RNA, 3'Flank, 5'Flank) outside the coding region are excluded.
+    Considering the mutation types are different for the two FDA’s approval assays F1CDx (total point mutations in the coding region) and MSK-IMPACT (nonsynonymous mutations in the coding region), both of which are included in our study.
+
+    根据参考文献，看看TMB的具体计算细节：
+    一、根据文献，https://jitc.bmj.com/content/8/1/e000147（Establishing guidelines to harmonize tumor mutational burden (TMB):
+    in silico assessment of variation in TMB quantification across diagnostic platforms: phase I of the Friends of Cancer Research TMB Harmonization Project）
+    1. 分析区域选择：CCDS区域，计算区域大小时，记得去冗余
+    2. 质控标准： DP>=25, AD>=3, AF>=5%; 如果一个样本中的50%突变没有通过QC，则样本去掉
+    3. 保留以下6类型变异：
+        Frame_Shift_Del
+        Frame_Shift_Ins
+        In_Frame_Del
+        In_Frame_Ins
+        Missense_Mutation
+        Nonsense_Mutation
+
+    二、肿瘤突变负荷检测国家参考品（v2.0)
+    1. 分析区域选择：未详细说明
+    2. 质控标准： DP>=25, AD>=3, AF>=5%; 如果一个样本中的50%突变没有通过QC，则样本去掉
+    3. 对于WES，保留以下6类型变异：
+        Frame_Shift_Del
+        Frame_Shift_Ins
+        In_Frame_Del
+        In_Frame_Ins
+        Missense_Mutation
+        Splice_Site（注意，这里和上面的文章不一致）
+    4. 肿瘤突变负荷检测及临床应用中国专家共识（2020 年版）: WES的平均测序深度需要大于100x
+
+    其他文献：https://www.nature.com/articles/s41698-024-00504-1
+    Here we show that the panel sizes beyond 1.04Mb and 389 genes are necessary for the basic discrete accuracy, as determined by over 40,000 synthetic panels.
+    The somatic mutation detection should maintain a reciprocal gap of recall and precision less than 0.179 for reliable psTMB calculation results.
+    The inclusion of synonymous, nonsense and hotspot mutations could enhance the accuracy of panel-based TMB assay.
+    A 5% variant allele frequency cut-off is suitable for TMB assays using tumor samples with at least 20% tumor purity.
+    该文章中的WES参考的是上述第一种计算方式：
+
+    看看VEP给出的突变类型（对应的其实是consequence）https://grch37.ensembl.org/info/genome/variation/prediction/predicted_data.html
+    SO term	SO description	SO accession	Display term	IMPACT
+    transcript_ablation	A feature ablation whereby the deleted region includes a transcript feature	SO:0001893	Transcript ablation	HIGH
+    splice_acceptor_variant	A splice variant that changes the 2 base region at the 3' end of an intron	SO:0001574	Splice acceptor variant	HIGH
+    splice_donor_variant	A splice variant that changes the 2 base region at the 5' end of an intron	SO:0001575	Splice donor variant	HIGH
+    stop_gained	A sequence variant whereby at least one base of a codon is changed, resulting in a premature stop codon, leading to a shortened transcript	SO:0001587	Stop gained	HIGH
+    frameshift_variant	A sequence variant which causes a disruption of the translational reading frame, because the number of nucleotides inserted or deleted is not a multiple of three	SO:0001589	Frameshift variant	HIGH
+    stop_lost	A sequence variant where at least one base of the terminator codon (stop) is changed, resulting in an elongated transcript	SO:0001578	Stop lost	HIGH
+    start_lost	A codon variant that changes at least one base of the canonical start codon	SO:0002012	Start lost	HIGH
+    transcript_amplification	A feature amplification of a region containing a transcript	SO:0001889	Transcript amplification	HIGH
+    feature_elongation	A sequence variant that causes the extension of a genomic feature, with regard to the reference sequence	SO:0001907	Feature elongation	HIGH
+    feature_truncation	A sequence variant that causes the reduction of a genomic feature, with regard to the reference sequence	SO:0001906	Feature truncation	HIGH
+    inframe_insertion	An inframe non synonymous variant that inserts bases into in the coding sequence	SO:0001821	Inframe insertion	MODERATE
+    inframe_deletion	An inframe non synonymous variant that deletes bases from the coding sequence	SO:0001822	Inframe deletion	MODERATE
+    missense_variant	A sequence variant, that changes one or more bases, resulting in a different amino acid sequence but where the length is preserved	SO:0001583	Missense variant	MODERATE
+    protein_altering_variant	A sequence_variant which is predicted to change the protein encoded in the coding sequence	SO:0001818	Protein altering variant	MODERATE
+    splice_donor_5th_base_variant	A sequence variant that causes a change at the 5th base pair after the start of the intron in the orientation of the transcript	SO:0001787	Splice donor 5th base variant	LOW
+    splice_region_variant	A sequence variant in which a change has occurred within the region of the splice site, either within 1-3 bases of the exon or 3-8 bases of the intron	SO:0001630	Splice region variant	LOW
+    splice_donor_region_variant	A sequence variant that falls in the region between the 3rd and 6th base after splice junction (5' end of intron)	SO:0002170	Splice donor region variant	LOW
+    splice_polypyrimidine_tract_variant	A sequence variant that falls in the polypyrimidine tract at 3' end of intron between 17 and 3 bases from the end (acceptor -3 to acceptor -17)	SO:0002169	Splice polypyrimidine tract variant	LOW
+    incomplete_terminal_codon_variant	A sequence variant where at least one base of the final codon of an incompletely annotated transcript is changed	SO:0001626	Incomplete terminal codon variant	LOW
+    start_retained_variant	A sequence variant where at least one base in the start codon is changed, but the start remains	SO:0002019	Start retained variant	LOW
+    stop_retained_variant	A sequence variant where at least one base in the terminator codon is changed, but the terminator remains	SO:0001567	Stop retained variant	LOW
+    synonymous_variant	A sequence variant where there is no resulting change to the encoded amino acid	SO:0001819	Synonymous variant	LOW
+    coding_sequence_variant	A sequence variant that changes the coding sequence	SO:0001580	Coding sequence variant	MODIFIER
+    mature_miRNA_variant	A transcript variant located with the sequence of the mature miRNA	SO:0001620	Mature miRNA variant	MODIFIER
+    5_prime_UTR_variant	A UTR variant of the 5' UTR	SO:0001623	5 prime UTR variant	MODIFIER
+    3_prime_UTR_variant	A UTR variant of the 3' UTR	SO:0001624	3 prime UTR variant	MODIFIER
+    non_coding_transcript_exon_variant	A sequence variant that changes non-coding exon sequence in a non-coding transcript	SO:0001792	Non coding transcript exon variant	MODIFIER
+    intron_variant	A transcript variant occurring within an intron	SO:0001627	Intron variant	MODIFIER
+    NMD_transcript_variant	A variant in a transcript that is the target of NMD	SO:0001621	NMD transcript variant	MODIFIER
+    non_coding_transcript_variant	A transcript variant of a non coding RNA gene	SO:0001619	Non coding transcript variant	MODIFIER
+    coding_transcript_variant	A transcript variant of a protein coding gene	SO:0001968	Coding transcript variant	MODIFIER
+    upstream_gene_variant	A sequence variant located 5' of a gene	SO:0001631	Upstream gene variant	MODIFIER
+    downstream_gene_variant	A sequence variant located 3' of a gene	SO:0001632	Downstream gene variant	MODIFIER
+    TFBS_ablation	A feature ablation whereby the deleted region includes a transcription factor binding site	SO:0001895	TFBS ablation	MODIFIER
+    TFBS_amplification	A feature amplification of a region containing a transcription factor binding site	SO:0001892	TFBS amplification	MODIFIER
+    TF_binding_site_variant	A sequence variant located within a transcription factor binding site	SO:0001782	TF binding site variant	MODIFIER
+    regulatory_region_ablation	A feature ablation whereby the deleted region includes a regulatory region	SO:0001894	Regulatory region ablation	MODIFIER
+    regulatory_region_amplification	A feature amplification of a region containing a regulatory region	SO:0001891	Regulatory region amplification	MODIFIER
+    regulatory_region_variant	A sequence variant located within a regulatory region	SO:0001566	Regulatory region variant	MODIFIER
+    intergenic_variant	A sequence variant located in the intergenic region, between genes	SO:0001628	Intergenic variant	MODIFIER
+    sequence_variant	A sequence_variant is a non exact copy of a sequence_feature or genome exhibiting one or more sequence_alteration	SO:0001060	Sequence variant	MODIFIER
+
+    根据理解，依据VEP的注释，可以纳入以下consequence的突变用于WES的TMB计算：
+    frameshift_variant
+    missense_variant
+    stop_lost
+    start_lost
+    splice_acceptor_variant
+    splice_donor_variant
+    stop_gained
+    inframe_insertion
+    inframe_deletion
+
     :param vcfs: 一个或多个VCF文件
     :param out: 输出的csv文件名称
-    :param bed_size: panel的大小，这个大小是否要考虑内含子区域在内？
+    :param bed_size: panel的大小,单位是bp，这个大小是否要考虑内含子区域在内？
     :param tumor_index: 从0开始计数，指示vcf中第几个样本是肿瘤样本，默认自己根据AF高低统计判断肿瘤样本
     :param min_af: 如果某个突变的频率AF小于该值，则不纳入统计范围
     :param min_alt_depth: 如果某个突变的支持reads数量小于该值，则不纳入统计范围
     :param min_depth: 如果某个突变所在位置总测序深度小于该值，则不纳入统计范围
     :param max_pop_freq: 如果某个突变的人群频率（vep给出的MAX_AF）大于该值，则不纳入统计范围
     :param pick: 是否只选择vep给出的pick flag为1的突变进行分析。这关系到突变的意义解读。
+        VEP中“--pick” | “--flag_pick”的含义
+        Pick one line or block of consequence data per variant, including transcript-specific columns.
+        Consequences are chosen according to the criteria described here, and the order the criteria are applied may be customised with --pick_order.
+        This is the best method to use if you are interested only in one consequence per variant
     :param tsg_file: 肿瘤抑制子基因文件https://bioinfo.uth.edu/TSGene/，默认选择Ensembl来源的基因作为候选。如果提供该文件，则针对这些基因进行判断，如果consequence为['stop_gained', 'start_lost']则不纳入TMB统计
-    :param synonymous: 如果为False，则TMB统计时，不会纳入同义突变，根据VEP给出的consequence判断
-    :param tag: 指示VCF文件中，哪个字段为VEP的注释结果，默认为CSQ
+    :param include_synonymous: 如果为False，则TMB统计时，不会纳入同义突变，根据VEP给出的consequence判断
+    :param csq_tag: 指示VCF文件中，哪个字段为VEP的注释结果，默认为CSQ
     :return:
     """
     # sample = os.path.basename(vcf).split('.')[0]
@@ -526,6 +633,24 @@ def get_tmb(vcfs:tuple, out='TMB.txt', bed_size=59464418, tumor_index=None, min_
     count_lst = []
     tmb_lst = []
     sample_lst = []
+    target_consequences = [
+        "frameshift_variant",
+        "missense_variant",
+        "inframe_insertion",
+        "inframe_deletion",
+        "stop_lost",
+        "start_lost",
+        "stop_gained",
+        # "splice_acceptor_variant",
+        # "splice_donor_variant",
+    ]
+
+    synonymous_consequences = [
+        "synonymous_variant",
+        "start_retained_variant",
+        "stop_retained_variant"
+    ]
+
     for vcf in vcfs:
         count = 0
         tumor_idx = guess_tumor_idx(vcf) if tumor_index is None else tumor_index
@@ -540,34 +665,43 @@ def get_tmb(vcfs:tuple, out='TMB.txt', bed_size=59464418, tumor_index=None, min_
                 if list(r.filter)[0] != "PASS" or (dp < min_depth):
                     continue
                 include = False
-                for each in r.info[tag]:
+                for each in r.info[csq_tag]:
                     csq_dict = dict(zip(csq_format.split('|'), each.split('|')))
                     symbol = csq_dict['SYMBOL']
                     gene = csq_dict['Gene']
+
+                    # 仅仅选择一条注释进行解读
                     if pick and csq_dict['PICK'] != "1":
                         continue
+
+                    # population frequency filter
+                    if 'MAX_AF' in csq_dict:
+                        if csq_dict['MAX_AF'] and (float(csq_dict['MAX_AF']) >= max_pop_freq):
+                            # print('max pop af', csq_dict['MAX_AF'], csq_dict['MAX_AF_POPS'])
+                            continue
+
                     # ad and af
                     ad = alt_depth_dict[csq_dict['Allele']]
                     af = ad / dp
                     if (af < min_af) or (ad < min_alt_depth):
                         continue
-                    # ignore serious tumor suppressor gene mutation
-                    if symbol in tsg or gene in tsg:
+
+                    # if ignore serious tumor suppressor gene mutation
+                    if (symbol in tsg) or (gene in tsg):
                         if csq_dict['Consequence'] in ['stop_gained', 'start_lost']:
                             continue
-                    # ignore synonymous mutation
-                    if not synonymous:
-                        if csq_dict['Consequence'] in ['synonymous_variant']:
+
+                    # if include synonymous mutation
+                    if not include_synonymous:
+                        if csq_dict['Consequence'] not in target_consequences:
                             continue
-                    # population frequency filter
-                    if 'MAX_AF' in csq_dict:
-                        if csq_dict['MAX_AF'] and (float(csq_dict['MAX_AF']) > max_pop_freq):
-                            # print('max pop af', csq_dict['MAX_AF'], csq_dict['MAX_AF_POPS'])
+                    else:
+                        if csq_dict['Consequence'] not in target_consequences + synonymous_consequences:
                             continue
-                    if not csq_dict['EXON']:
-                        continue
-                    # skip out of loop once hit
+
+                    # pass all filter
                     include = True
+                    print(csq_dict)
                     break
 
                 if include:
