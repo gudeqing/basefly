@@ -30,6 +30,5 @@ def optitype():
 
 
 if __name__ == '__main__':
-    # Workflow().to_cwl_tool(cmd=hisat_genotype(), write_out=True)
-    optitype().run_on_terminal()
+    optitype().run_on_terminal(to_cwl=True)
 

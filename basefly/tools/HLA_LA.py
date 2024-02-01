@@ -3,7 +3,7 @@ from basefly import Argument, Output, Command, Workflow, TopVar
 """
 # Download the data package
 cd HLA-LA/graphs
-wget http://www.well.ox.ac.uk/downloads/PRG_MHC_GRCh38_withIMGT.tar.gz
+wget http://www.well.ox.ac.uk/downloads/PRG_MHC_GRCh38_withIMGT.tar.gz  （该软件会自动判断hg38还是hg19，因此该graph通用）
 tar -xvzf PRG_MHC_GRCh38_withIMGT.tar.gz
 
 # Index the graph

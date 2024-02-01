@@ -1,5 +1,8 @@
 # 简介
 Basefly的宗旨是简化基于python构建数据分析流程的过程，尤其是方便生信数据分析流程的构建。
+# 注意
+1. Basefly源码仅仅在basefly目录,其他目录包含的分析流程仅仅供参考，不保证可用性，不建议直接使用
+2. Basefly发布版在dist目录或查看release，建议安装最新版，如pip install basefly-1.0.1-py3-none-any.whl
 ## 特色
 1. 只需掌握基本的python语法就可以快速进行分析流程搭建
 2. 构建好的流程可以在本地服务器灵活运行：

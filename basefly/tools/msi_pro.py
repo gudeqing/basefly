@@ -41,4 +41,4 @@ def msi_pro():
 
 
 if __name__ == '__main__':
-    msi_pro().run_on_terminal()
+    msi_pro().run_on_terminal(to_cwl=True)

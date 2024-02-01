@@ -58,5 +58,5 @@ def msi_paired():
 
 
 if __name__ == '__main__':
-    msi_paired().run_on_terminal()
+    msi_paired().run_on_terminal(to_cwl=True)
 

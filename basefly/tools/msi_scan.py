@@ -28,7 +28,6 @@ def msi_scan():
 
 
 if __name__ == '__main__':
-    Workflow().to_cwl_tool(cmd=msi_scan(), write_out=True)
     msi_scan().run_on_terminal()
 
 
